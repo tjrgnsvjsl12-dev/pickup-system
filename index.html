@@ -121,6 +121,34 @@ function fmtDate(iso){
   catch(e){ return iso; }
 }
 
+const MODEL_OPTIONS = ['iPhone 18 Pro', 'iPhone 18 Pro Max'];
+const CAPACITY_OPTIONS = ['256GB', '512GB', '1TB', '2TB'];
+const COLOR_OPTIONS = ['Burgundy', 'Black', 'Silver', 'Glacier'];
+const CARD_COMPANY_OPTIONS = ['부강', 'CH'];
+
+function selectOf(options, placeholder){
+  const sel = h('select',{});
+  if(placeholder) sel.appendChild(h('option',{value:'',text:placeholder}));
+  options.forEach(o=>sel.appendChild(h('option',{value:o,text:o})));
+  return sel;
+}
+
+function chipGroup(options, initial){
+  let value = initial || '';
+  const wrap = h('div',{class:'chiprow'});
+  const buttons = options.map(opt=>{
+    const b = h('button',{type:'button', class:'chip-btn'+(opt===value?' selected':''), text:opt});
+    b.onclick = ()=>{ value = opt; buttons.forEach(x=>x.classList.remove('selected')); b.classList.add('selected'); };
+    wrap.appendChild(b);
+    return b;
+  });
+  return {
+    el: wrap,
+    get value(){ return value; },
+    set value(v){ value=v; buttons.forEach(b=>b.classList.toggle('selected', b.textContent===v)); }
+  };
+}
+
 // =====================================================================
 // ALBA (access-code) VIEW — no login
 // =====================================================================
@@ -199,35 +227,37 @@ function renderAlbaView(){
     // item entry card
     const itemCard = h('div',{class:'card'});
     itemCard.appendChild(h('label',{text:t.itemsTitle}));
-    const modelInput = h('input',{placeholder:t.model});
-    const capInput = h('input',{placeholder:t.capacity});
-    const colorInput = h('input',{placeholder:t.color});
-    let qty = 1;
-    const qtyLabel = h('span',{text:String(qty),style:'min-width:24px;text-align:center;font-weight:700'});
-    const qtyRow = h('div',{class:'qtybox'},[
-      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ if(qty>1) qty--; qtyLabel.textContent=String(qty); }}),
-      qtyLabel,
-      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ qty++; qtyLabel.textContent=String(qty); }})
-    ]);
-    itemCard.appendChild(h('div',{class:'row'},[modelInput, capInput]));
-    itemCard.appendChild(h('div',{class:'row',style:'align-items:center'},[colorInput]));
-    itemCard.appendChild(h('div',{class:'flexbetween',style:'margin-bottom:12px'},[
-      h('span',{class:'muted',text:t.qty}), qtyRow
+    const modelSel = chipGroup(MODEL_OPTIONS);
+    const capSel = chipGroup(CAPACITY_OPTIONS);
+    const colorSel = chipGroup(COLOR_OPTIONS);
+    itemCard.appendChild(h('label',{text:t.model})); itemCard.appendChild(modelSel.el);
+    itemCard.appendChild(h('label',{text:t.capacity})); itemCard.appendChild(capSel.el);
+    itemCard.appendChild(h('label',{text:t.color})); itemCard.appendChild(colorSel.el);
+
+    const qtyInput = h('input',{type:'number',min:'1',step:'1',value:'1'});
+    itemCard.appendChild(h('label',{text:t.qty}));
+    itemCard.appendChild(h('div',{class:'qtybox'},[
+      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ const v=Math.max(1,(parseInt(qtyInput.value)||1)-1); qtyInput.value=String(v); }}),
+      qtyInput,
+      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ const v=(parseInt(qtyInput.value)||0)+1; qtyInput.value=String(v); }})
     ]));
     const addErr = h('div',{class:'err hidden'});
     itemCard.appendChild(addErr);
     const addBtn = h('button',{class:'btn-primary',text:t.add});
     addBtn.onclick = async ()=>{
       addErr.className='err hidden'; addErr.textContent='';
-      if(!modelInput.value.trim()){ addErr.textContent = (lang==='ko'?'모델을 입력해주세요':'请输入型号'); addErr.className='err'; return; }
+      if(!modelSel.value){ addErr.textContent = (lang==='ko'?'모델을 선택해주세요':'请选择型号'); addErr.className='err'; return; }
+      if(!capSel.value){ addErr.textContent = (lang==='ko'?'용량을 선택해주세요':'请选择容量'); addErr.className='err'; return; }
+      if(!colorSel.value){ addErr.textContent = (lang==='ko'?'색상을 선택해주세요':'请选择颜色'); addErr.className='err'; return; }
+      const qty = parseInt(qtyInput.value) || 0;
+      if(qty < 1){ addErr.textContent = (lang==='ko'?'수량을 확인해주세요':'请确认数量'); addErr.className='err'; return; }
       addBtn.disabled = true;
       const { error } = await sb.rpc('add_item_by_code', {
-        p_code: code, p_model: modelInput.value.trim(), p_capacity: capInput.value.trim(),
-        p_color: colorInput.value.trim(), p_qty: qty
+        p_code: code, p_model: modelSel.value, p_capacity: capSel.value,
+        p_color: colorSel.value, p_qty: qty
       });
       addBtn.disabled = false;
       if(error){ addErr.textContent = error.message; addErr.className='err'; return; }
-      modelInput.value=''; capInput.value=''; colorInput.value=''; qty=1; qtyLabel.textContent='1';
       await load();
     };
     itemCard.appendChild(addBtn);
@@ -393,34 +423,6 @@ function renderAdminView(){
     app.appendChild(body);
     if(!isAdmin || purchaseTab==='mine') drawMyPurchaseTab(body);
     else drawAllPurchaseTab(body);
-  }
-
-  const MODEL_OPTIONS = ['iPhone 18 Pro', 'iPhone 18 Pro Max'];
-  const CAPACITY_OPTIONS = ['256GB', '512GB', '1TB', '2TB'];
-  const COLOR_OPTIONS = ['Burgundy', 'Black', 'Silver', 'Glacier'];
-  const CARD_COMPANY_OPTIONS = ['부강', 'CH'];
-
-  function selectOf(options, placeholder){
-    const sel = h('select',{});
-    if(placeholder) sel.appendChild(h('option',{value:'',text:placeholder}));
-    options.forEach(o=>sel.appendChild(h('option',{value:o,text:o})));
-    return sel;
-  }
-
-  function chipGroup(options, initial){
-    let value = initial || '';
-    const wrap = h('div',{class:'chiprow'});
-    const buttons = options.map(opt=>{
-      const b = h('button',{type:'button', class:'chip-btn'+(opt===value?' selected':''), text:opt});
-      b.onclick = ()=>{ value = opt; buttons.forEach(x=>x.classList.remove('selected')); b.classList.add('selected'); };
-      wrap.appendChild(b);
-      return b;
-    });
-    return {
-      el: wrap,
-      get value(){ return value; },
-      set value(v){ value=v; buttons.forEach(b=>b.classList.toggle('selected', b.textContent===v)); }
-    };
   }
 
   function drawMyPurchaseTab(body){
