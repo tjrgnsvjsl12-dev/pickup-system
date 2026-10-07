@@ -375,6 +375,7 @@ function renderAdminView(){
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
   let editingPurchase = null; // the purchase row being edited, or null
+  let editingItemId = null; // session_item id being edited, or null
 
   async function boot(){
     const { data } = await sb.auth.getSession();
@@ -561,6 +562,16 @@ function renderAdminView(){
         const editBtn = h('button',{class:'btn-ghost btn-sm',text:'수정',style:'margin-top:6px'});
         editBtn.onclick = ()=>{ editingPurchase = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
         c.appendChild(editBtn);
+        const voidBtn = h('button',{class:'btn-danger btn-sm',text:'취소',style:'margin-top:6px;margin-left:6px'});
+        const voidConfirm = h('span',{class:'hidden muted',text:' 한번 더 누르면 취소됩니다'});
+        let armed = false;
+        voidBtn.onclick = async ()=>{
+          if(!armed){ armed=true; voidConfirm.className='muted'; setTimeout(()=>{armed=false; voidConfirm.className='hidden';},3000); return; }
+          await sb.rpc('void_purchase', { p_purchase_id: p.id });
+          drawDashboard();
+        };
+        c.appendChild(voidBtn);
+        c.appendChild(voidConfirm);
         listWrap.appendChild(c);
       });
     })();
@@ -779,10 +790,43 @@ ${orderLines}
       (s.orders||[]).forEach(o=>card.appendChild(h('span',{class:'pill mono',text:o})));
       if((s.items||[]).length){
         const il = h('div',{style:'margin-top:8px'});
-        s.items.forEach(it=>il.appendChild(h('div',{class:'itemline'},[
-          h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim()}),
-          h('span',{class:'pill',text:'x'+it.qty})
-        ])));
+        s.items.forEach(it=>{
+          if(editingItemId === it.id){
+            const editWrap = h('div',{style:'padding:8px 0;border-bottom:1px solid var(--border)'});
+            const mSel = chipGroup(MODEL_OPTIONS, it.model);
+            const cSel = chipGroup(CAPACITY_OPTIONS, it.capacity);
+            const colSel = chipGroup(COLOR_OPTIONS, it.color);
+            const qInput = h('input',{type:'number',min:'1',step:'1',value:String(it.qty)});
+            editWrap.appendChild(h('label',{text:'모델'})); editWrap.appendChild(mSel.el);
+            editWrap.appendChild(h('label',{text:'용량'})); editWrap.appendChild(cSel.el);
+            editWrap.appendChild(h('label',{text:'색상'})); editWrap.appendChild(colSel.el);
+            editWrap.appendChild(h('label',{text:'수량'})); editWrap.appendChild(qInput);
+            const itemErr = h('div',{class:'err hidden'});
+            editWrap.appendChild(itemErr);
+            const saveBtn = h('button',{class:'btn-primary btn-sm',text:'저장'});
+            saveBtn.onclick = async ()=>{
+              const qty = parseInt(qInput.value) || 0;
+              if(!mSel.value || !cSel.value || !colSel.value || qty < 1){ itemErr.textContent='모델/용량/색상/수량을 모두 확인해주세요'; itemErr.className='err'; return; }
+              const { error } = await sb.rpc('update_session_item', { p_item_id: it.id, p_model: mSel.value, p_capacity: cSel.value, p_color: colSel.value, p_qty: qty });
+              if(error){ itemErr.textContent = error.message; itemErr.className='err'; return; }
+              editingItemId = null;
+              drawDashboard();
+            };
+            const cancelBtn = h('button',{class:'btn-ghost btn-sm',text:'취소',style:'margin-left:6px',onclick:()=>{ editingItemId=null; drawDashboard(); }});
+            editWrap.appendChild(saveBtn);
+            editWrap.appendChild(cancelBtn);
+            il.appendChild(editWrap);
+          } else {
+            il.appendChild(h('div',{class:'itemline'},[
+              h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim()}),
+              h('span',{style:'display:flex;gap:6px;align-items:center'},[
+                h('span',{class:'pill',text:'x'+it.qty}),
+                h('button',{class:'btn-ghost btn-sm',text:'수정',onclick:()=>{ editingItemId=it.id; drawDashboard(); }}),
+                h('button',{class:'btn-danger btn-sm',text:'삭제',onclick:async()=>{ await sb.rpc('remove_session_item',{p_item_id:it.id}); drawDashboard(); }})
+              ])
+            ]));
+          }
+        });
         card.appendChild(il);
       }
       if(s.status==='done'){
