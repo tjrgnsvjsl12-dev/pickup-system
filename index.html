@@ -54,7 +54,11 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .itemline{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
 .itemline:last-child{border-bottom:none}
 .qtybox{display:flex;align-items:center;gap:8px}
-.qtybox button{width:34px;height:34px;padding:0;font-size:16px}
+.qtybox button{width:34px;height:34px;padding:0;font-size:16px;flex:none}
+.qtybox input{width:56px;flex:none;text-align:center;margin-bottom:0;padding:8px 4px}
+.chiprow{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px}
+.chip-btn{padding:8px 14px;border-radius:999px;border:1px solid var(--border);background:var(--surface-2);color:var(--fg);font-size:13px;font-weight:600}
+.chip-btn.selected{background:var(--accent);color:var(--accent-fg);border-color:var(--accent)}
 .topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
 .statusbadge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
 .statusbadge.in_progress{background:var(--chip);color:var(--accent)}
@@ -426,6 +430,18 @@ function renderAdminView(){
     return sel;
   }
 
+  function chipGroup(options){
+    let value = '';
+    const wrap = h('div',{class:'chiprow'});
+    const buttons = options.map(opt=>{
+      const b = h('button',{type:'button', class:'chip-btn', text:opt});
+      b.onclick = ()=>{ value = opt; buttons.forEach(x=>x.classList.remove('selected')); b.classList.add('selected'); };
+      wrap.appendChild(b);
+      return b;
+    });
+    return { el: wrap, get value(){ return value; } };
+  }
+
   function drawMyPurchaseTab(body){
     const card = h('div',{class:'card'});
     card.appendChild(h('label',{text:'매장'}));
@@ -433,14 +449,12 @@ function renderAdminView(){
     stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
     card.appendChild(sel);
 
-    const modelSel = selectOf(MODEL_OPTIONS, '모델 선택');
-    const capSel = selectOf(CAPACITY_OPTIONS, '용량 선택');
-    const colorSel = selectOf(COLOR_OPTIONS, '색상 선택');
-    card.appendChild(h('label',{text:'모델'})); card.appendChild(modelSel);
-    card.appendChild(h('div',{class:'row'},[
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'용량'})); d.appendChild(capSel); return d; })(),
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'색상'})); d.appendChild(colorSel); return d; })()
-    ]));
+    const modelSel = chipGroup(MODEL_OPTIONS);
+    const capSel = chipGroup(CAPACITY_OPTIONS);
+    const colorSel = chipGroup(COLOR_OPTIONS);
+    card.appendChild(h('label',{text:'모델'})); card.appendChild(modelSel.el);
+    card.appendChild(h('label',{text:'용량'})); card.appendChild(capSel.el);
+    card.appendChild(h('label',{text:'색상'})); card.appendChild(colorSel.el);
 
     card.appendChild(h('label',{text:'수량'}));
     const qtyInput = h('input',{type:'number',min:'1',step:'1',value:'1'});
