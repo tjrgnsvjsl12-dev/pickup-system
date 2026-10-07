@@ -414,6 +414,18 @@ function renderAdminView(){
     else drawAllPurchaseTab(body);
   }
 
+  const MODEL_OPTIONS = ['iPhone 18 Pro', 'iPhone 18 Pro Max'];
+  const CAPACITY_OPTIONS = ['256GB', '512GB', '1TB', '2TB'];
+  const COLOR_OPTIONS = ['Burgundy', 'Black', 'Silver', 'Glacier'];
+  const CARD_COMPANY_OPTIONS = ['부강', 'CH'];
+
+  function selectOf(options, placeholder){
+    const sel = h('select',{});
+    if(placeholder) sel.appendChild(h('option',{value:'',text:placeholder}));
+    options.forEach(o=>sel.appendChild(h('option',{value:o,text:o})));
+    return sel;
+  }
+
   function drawMyPurchaseTab(body){
     const card = h('div',{class:'card'});
     card.appendChild(h('label',{text:'매장'}));
@@ -421,34 +433,33 @@ function renderAdminView(){
     stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
     card.appendChild(sel);
 
+    const modelSel = selectOf(MODEL_OPTIONS, '모델 선택');
+    const capSel = selectOf(CAPACITY_OPTIONS, '용량 선택');
+    const colorSel = selectOf(COLOR_OPTIONS, '색상 선택');
+    card.appendChild(h('label',{text:'모델'})); card.appendChild(modelSel);
     card.appendChild(h('div',{class:'row'},[
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'모델'})); return d; })()
-    ]));
-    const modelInput = h('input',{placeholder:'예: iPhone 16 Pro'});
-    const capInput = h('input',{placeholder:'용량 (예: 256GB)'});
-    const colorInput = h('input',{placeholder:'색상 (예: Burgundy)'});
-    card.appendChild(h('label',{text:'모델'})); card.appendChild(modelInput);
-    card.appendChild(h('div',{class:'row'},[
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'용량'})); d.appendChild(capInput); return d; })(),
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'색상'})); d.appendChild(colorInput); return d; })()
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'용량'})); d.appendChild(capSel); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'색상'})); d.appendChild(colorSel); return d; })()
     ]));
 
-    let qty = 1;
-    const qtyLabel = h('span',{text:String(qty),style:'min-width:24px;text-align:center;font-weight:700'});
     card.appendChild(h('label',{text:'수량'}));
+    const qtyInput = h('input',{type:'number',min:'1',step:'1',value:'1'});
     card.appendChild(h('div',{class:'qtybox'},[
-      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ if(qty>1) qty--; qtyLabel.textContent=String(qty); }}),
-      qtyLabel,
-      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ qty++; qtyLabel.textContent=String(qty); }})
+      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ const v=Math.max(1,(parseInt(qtyInput.value)||1)-1); qtyInput.value=String(v); }}),
+      qtyInput,
+      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ const v=(parseInt(qtyInput.value)||0)+1; qtyInput.value=String(v); }})
     ]));
 
+    const dateInput = h('input',{type:'date',value:new Date().toISOString().slice(0,10)});
+    card.appendChild(h('label',{text:'구매 날짜'}));
+    card.appendChild(dateInput);
+
+    const cardCoSel = selectOf(CARD_COMPANY_OPTIONS, '카드 회사 선택');
+    const cardNumInput = h('input',{placeholder:'카드번호'});
     card.appendChild(h('div',{class:'row'},[
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'구매 날짜'})); const i=h('input',{type:'date',value:new Date().toISOString().slice(0,10)}); d.appendChild(i); d._input=i; return d; })(),
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'카드 뒷4자리 (선택)'})); const i=h('input',{maxlength:'4',placeholder:'1234'}); d.appendChild(i); d._input=i; return d; })()
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'카드 회사'})); d.appendChild(cardCoSel); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'카드번호'})); d.appendChild(cardNumInput); return d; })()
     ]));
-    const rowEls = card.querySelectorAll('.row');
-    const dateInput = rowEls[rowEls.length-1].children[0]._input;
-    const cardInput = rowEls[rowEls.length-1].children[1]._input;
 
     card.appendChild(h('label',{text:'메모 (선택)'}));
     const noteInput = h('input',{placeholder:''});
@@ -460,15 +471,19 @@ function renderAdminView(){
     btn.onclick = async ()=>{
       err.className='err hidden';
       if(!sel.value){ err.textContent='매장을 선택해주세요'; err.className='err'; return; }
+      if(!modelSel.value){ err.textContent='모델을 선택해주세요'; err.className='err'; return; }
+      if(!capSel.value){ err.textContent='용량을 선택해주세요'; err.className='err'; return; }
+      if(!colorSel.value){ err.textContent='색상을 선택해주세요'; err.className='err'; return; }
+      const qty = parseInt(qtyInput.value);
+      if(!qty || qty < 1){ err.textContent='수량을 확인해주세요'; err.className='err'; return; }
       btn.disabled=true; btn.textContent='저장 중...';
       const { error } = await sb.rpc('add_purchase', {
-        p_store_id: sel.value, p_model: modelInput.value.trim(), p_capacity: capInput.value.trim(),
-        p_color: colorInput.value.trim(), p_qty: qty, p_purchase_date: dateInput.value,
-        p_card_last4: cardInput.value.trim(), p_note: noteInput.value.trim()
+        p_store_id: sel.value, p_model: modelSel.value, p_capacity: capSel.value,
+        p_color: colorSel.value, p_qty: qty, p_purchase_date: dateInput.value,
+        p_card_company: cardCoSel.value, p_card_last4: cardNumInput.value.trim(), p_note: noteInput.value.trim()
       });
       btn.disabled=false; btn.textContent='구매 기록 추가';
       if(error){ err.textContent = error.message; err.className='err'; return; }
-      modelInput.value=''; capInput.value=''; colorInput.value=''; cardInput.value=''; noteInput.value=''; qty=1; qtyLabel.textContent='1';
       drawDashboard();
     };
     card.appendChild(btn);
@@ -491,7 +506,7 @@ function renderAdminView(){
           h('div',{text:`${p.store_name} · ${p.model} ${p.capacity||''} ${p.color||''}`.replace(/\s+/g,' ').trim()}),
           h('span',{class:'pill',text:'x'+p.qty})
         ]));
-        if(p.card_last4) c.appendChild(h('div',{class:'muted',text:'카드 끝 '+p.card_last4}));
+        if(p.card_company || p.card_last4) c.appendChild(h('div',{class:'muted',text:[p.card_company,p.card_last4].filter(Boolean).join(' · ')}));
         const voidBtn = h('button',{class:'btn-danger btn-sm',text:'취소',style:'margin-top:6px'});
         voidBtn.onclick = async ()=>{ await sb.rpc('void_purchase', { p_purchase_id: p.id }); drawDashboard(); };
         c.appendChild(voidBtn);
@@ -562,8 +577,9 @@ function renderAdminView(){
             h('span',{class:'pill',text:buyerTotal+'대'})
           ]));
           items.forEach(it=>{
+            const cardInfo = [it.card_company, it.card_last4].filter(Boolean).join(' ');
             storeCard.appendChild(h('div',{class:'itemline'},[
-              h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + ' · ' + it.purchase_date},[]),
+              h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + ' · ' + it.purchase_date + (cardInfo?' · '+cardInfo:'')},[]),
               h('span',{class:'pill',text:'x'+it.qty})
             ]));
           });
