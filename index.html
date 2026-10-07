@@ -165,6 +165,7 @@ const MODEL_OPTIONS = ['iPhone 18 Pro', 'iPhone 18 Pro Max'];
 const CAPACITY_OPTIONS = ['256GB', '512GB', '1TB', '2TB'];
 const COLOR_OPTIONS = ['Burgundy', 'Black', 'Silver', 'Glacier'];
 const CARD_COMPANY_OPTIONS = ['부강', 'CH'];
+const QTY_OPTIONS = ['1','2','3','4','5','6','7','8','9','10'];
 
 function selectOf(options, placeholder){
   const sel = h('select',{});
@@ -274,13 +275,9 @@ function renderAlbaView(){
     itemCard.appendChild(h('label',{text:t.capacity})); itemCard.appendChild(capSel.el);
     itemCard.appendChild(h('label',{text:t.color})); itemCard.appendChild(colorSel.el);
 
-    const qtyInput = h('input',{type:'number',min:'1',step:'1',value:'1'});
+    const qtySel = chipGroup(QTY_OPTIONS, '1');
     itemCard.appendChild(h('label',{text:t.qty}));
-    itemCard.appendChild(h('div',{class:'qtybox'},[
-      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ const v=Math.max(1,(parseInt(qtyInput.value)||1)-1); qtyInput.value=String(v); }}),
-      qtyInput,
-      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ const v=(parseInt(qtyInput.value)||0)+1; qtyInput.value=String(v); }})
-    ]));
+    itemCard.appendChild(qtySel.el);
     const addErr = h('div',{class:'err hidden'});
     itemCard.appendChild(addErr);
     const addBtn = h('button',{class:'btn-primary',text:t.add});
@@ -289,8 +286,8 @@ function renderAlbaView(){
       if(!modelSel.value){ addErr.textContent = (lang==='ko'?'모델을 선택해주세요':'请选择型号'); addErr.className='err'; return; }
       if(!capSel.value){ addErr.textContent = (lang==='ko'?'용량을 선택해주세요':'请选择容量'); addErr.className='err'; return; }
       if(!colorSel.value){ addErr.textContent = (lang==='ko'?'색상을 선택해주세요':'请选择颜色'); addErr.className='err'; return; }
-      const qty = parseInt(qtyInput.value) || 0;
-      if(qty < 1){ addErr.textContent = (lang==='ko'?'수량을 확인해주세요':'请确认数量'); addErr.className='err'; return; }
+      const qty = parseInt(qtySel.value) || 0;
+      if(qty < 1){ addErr.textContent = (lang==='ko'?'수량을 선택해주세요':'请选择数量'); addErr.className='err'; return; }
       addBtn.disabled = true;
       const { error } = await sb.rpc('add_item_by_code', {
         p_code: code, p_model: modelSel.value, p_capacity: capSel.value,
@@ -657,7 +654,7 @@ function renderAdminView(){
   function drawSendTab(body){
     if(lastCreated){
       const c = h('div',{class:'card'});
-      const link = location.origin + location.pathname + '#' + lastCreated.code;
+      const link = location.origin + location.pathname + '?t=' + lastCreated.sessionId.slice(0,8) + '#' + lastCreated.code;
       c.appendChild(h('div',{class:'ok',text:'세션이 생성되었습니다 ✓'}));
       c.appendChild(h('label',{text:'접속 코드'}));
       c.appendChild(h('div',{class:'copybox mono',text:lastCreated.code}));
@@ -709,7 +706,7 @@ function renderAdminView(){
   }
 
   function buildAlbaMessage(info){
-    const link = location.origin + location.pathname + '#' + info.code;
+    const link = location.origin + location.pathname + '?t=' + (info.sessionId||info.code).slice(0,8) + '#' + info.code;
     const orderLines = info.orders.join('\n');
     return (
 `[${info.store.name}] 피업 안내
