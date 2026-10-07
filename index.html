@@ -67,15 +67,55 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .langsw button{padding:5px 10px;font-size:12px}
 .hidden{display:none!important}
 .lockmsg{text-align:center;padding:40px 10px;color:var(--muted)}
+.inapp-banner{background:var(--chip);border-bottom:1px solid var(--border);padding:10px 16px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;position:sticky;top:0;z-index:10}
+.inapp-banner button{flex:none;white-space:nowrap}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
 </head>
 <body>
 
+<div id="inappBanner" class="inapp-banner" style="display:none"></div>
 <div id="app"></div>
 
 <script>
+// ---------- escape in-app browsers (KakaoTalk etc.) ----------
+(function(){
+  try{
+    const ua = navigator.userAgent || '';
+    const isKakao = /KAKAOTALK/i.test(ua);
+    const isOtherWebview = /FBAN|FBAV|Instagram|NAVER|Line\//i.test(ua);
+    if(isKakao){
+      // KakaoTalk supports this scheme to hand the current URL to the device's default browser.
+      location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+    }
+    if(isKakao || isOtherWebview){
+      const banner = document.getElementById('inappBanner');
+      if(banner){
+        banner.style.display = 'flex';
+        const msg = document.createElement('span');
+        msg.textContent = '앱 내 브라우저에서는 일부 기능이 제한될 수 있어요.';
+        const btn = document.createElement('button');
+        btn.className = 'btn-ghost btn-sm';
+        btn.textContent = '외부 브라우저로 열기';
+        btn.onclick = function(){
+          if(isKakao){
+            location.href = 'kakaotalk://web/openExternal?url=' + encodeURIComponent(location.href);
+          } else {
+            const url = location.href;
+            const done = ()=>alert('링크가 복사되었습니다. 브라우저 앱(Chrome/Safari)을 열어 주소창에 붙여넣어주세요.');
+            if(navigator.clipboard && navigator.clipboard.writeText){
+              navigator.clipboard.writeText(url).then(done).catch(done);
+            } else { done(); }
+          }
+        };
+        banner.appendChild(msg);
+        banner.appendChild(btn);
+      }
+    }
+  }catch(e){}
+})();
+
 const SB_URL = "https://etgcjgeqnzqisxokycfh.supabase.co";
 const SB_KEY = "sb_publishable_GeVNu4dRdz2fvxnRT8v5aw_0JqLJJyn";
 const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: true } });
