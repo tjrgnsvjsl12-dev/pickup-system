@@ -275,9 +275,13 @@ function renderAlbaView(){
     itemCard.appendChild(h('label',{text:t.capacity})); itemCard.appendChild(capSel.el);
     itemCard.appendChild(h('label',{text:t.color})); itemCard.appendChild(colorSel.el);
 
-    const qtySel = chipGroup(QTY_OPTIONS, '1');
+    const qtyInput = h('input',{type:'number',min:'1',step:'1',value:'1'});
     itemCard.appendChild(h('label',{text:t.qty}));
-    itemCard.appendChild(qtySel.el);
+    itemCard.appendChild(h('div',{class:'qtybox'},[
+      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ const v=Math.max(1,(parseInt(qtyInput.value)||1)-1); qtyInput.value=String(v); }}),
+      qtyInput,
+      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ const v=(parseInt(qtyInput.value)||0)+1; qtyInput.value=String(v); }})
+    ]));
     const addErr = h('div',{class:'err hidden'});
     itemCard.appendChild(addErr);
     const addBtn = h('button',{class:'btn-primary',text:t.add});
@@ -286,8 +290,8 @@ function renderAlbaView(){
       if(!modelSel.value){ addErr.textContent = (lang==='ko'?'모델을 선택해주세요':'请选择型号'); addErr.className='err'; return; }
       if(!capSel.value){ addErr.textContent = (lang==='ko'?'용량을 선택해주세요':'请选择容量'); addErr.className='err'; return; }
       if(!colorSel.value){ addErr.textContent = (lang==='ko'?'색상을 선택해주세요':'请选择颜色'); addErr.className='err'; return; }
-      const qty = parseInt(qtySel.value) || 0;
-      if(qty < 1){ addErr.textContent = (lang==='ko'?'수량을 선택해주세요':'请选择数量'); addErr.className='err'; return; }
+      const qty = parseInt(qtyInput.value) || 0;
+      if(qty < 1){ addErr.textContent = (lang==='ko'?'수량을 확인해주세요':'请确认数量'); addErr.className='err'; return; }
       addBtn.disabled = true;
       const { error } = await sb.rpc('add_item_by_code', {
         p_code: code, p_model: modelSel.value, p_capacity: capSel.value,
