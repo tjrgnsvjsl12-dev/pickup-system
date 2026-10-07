@@ -311,8 +311,11 @@ function renderAlbaView(){
 function renderAdminView(){
   let session = null;
   let stores = [];
+  let section = 'alba'; // 'alba' | 'purchase'
   let activeTab = 'send';
+  let purchaseTab = 'mine'; // 'mine' | 'all'
   let lastCreated = null; // {code, store, albaName, orders}
+  let myProfile = null; // {id, display_name, role}
 
   async function boot(){
     const { data } = await sb.auth.getSession();
@@ -346,19 +349,34 @@ function renderAdminView(){
   }
 
   async function afterLogin(){
-    const { data, error } = await sb.rpc('list_stores');
-    if(!error) stores = data || [];
+    const [{ data: storeData, error: storeErr }, { data: profData, error: profErr }] = await Promise.all([
+      sb.rpc('list_stores'), sb.rpc('get_my_profile')
+    ]);
+    if(!storeErr) stores = storeData || [];
+    if(!profErr) myProfile = profData;
     drawDashboard();
   }
 
   function drawDashboard(){
     app.innerHTML = '';
     const top = h('div',{class:'topbar'},[
-      h('div',{},[h('h1',{text:'픽업 매니저'}), h('div',{class:'sub',text:session.user.email})]),
+      h('div',{},[h('h1',{text:'픽업 매니저'}), h('div',{class:'sub',text:(myProfile&&myProfile.display_name)||session.user.email})]),
       h('button',{class:'btn-ghost btn-sm',text:'로그아웃',onclick: async ()=>{ await sb.auth.signOut(); session=null; drawLogin(); }})
     ]);
     app.appendChild(top);
 
+    const sectionRow = h('div',{class:'tabs',style:'margin-bottom:6px'});
+    [['alba','알바 관리'],['purchase','구매 기록']].forEach(([key,label])=>{
+      const t = h('div',{class:'tab'+(section===key?' active':''), text:label, onclick:()=>{ section=key; drawDashboard(); }});
+      sectionRow.appendChild(t);
+    });
+    app.appendChild(sectionRow);
+
+    if(section==='alba') drawAlbaSection();
+    else drawPurchaseSection();
+  }
+
+  function drawAlbaSection(){
     const tabs = h('div',{class:'tabs'});
     [['send','알바 보내기'],['progress','진행중'],['done','완료 기록']].forEach(([key,label])=>{
       const t = h('div',{class:'tab'+(activeTab===key?' active':''), text:label, onclick:()=>{ activeTab=key; drawDashboard(); }});
@@ -371,6 +389,196 @@ function renderAdminView(){
     if(activeTab==='send') drawSendTab(body);
     else if(activeTab==='progress') drawListTab(body, 'in_progress');
     else drawListTab(body, 'done');
+  }
+
+  function drawPurchaseSection(){
+    const isAdmin = myProfile && myProfile.role === 'admin';
+    if(isAdmin){
+      const tabs = h('div',{class:'tabs'});
+      [['mine','내 구매 입력'],['all','전체 현황']].forEach(([key,label])=>{
+        const t = h('div',{class:'tab'+(purchaseTab===key?' active':''), text:label, onclick:()=>{ purchaseTab=key; drawDashboard(); }});
+        tabs.appendChild(t);
+      });
+      app.appendChild(tabs);
+    }
+    const body = h('div',{id:'tabbody'});
+    app.appendChild(body);
+    if(!isAdmin || purchaseTab==='mine') drawMyPurchaseTab(body);
+    else drawAllPurchaseTab(body);
+  }
+
+  function drawMyPurchaseTab(body){
+    const card = h('div',{class:'card'});
+    card.appendChild(h('label',{text:'매장'}));
+    const sel = h('select',{});
+    stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
+    card.appendChild(sel);
+
+    card.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'모델'})); return d; })()
+    ]));
+    const modelInput = h('input',{placeholder:'예: iPhone 16 Pro'});
+    const capInput = h('input',{placeholder:'용량 (예: 256GB)'});
+    const colorInput = h('input',{placeholder:'색상 (예: Burgundy)'});
+    card.appendChild(h('label',{text:'모델'})); card.appendChild(modelInput);
+    card.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'용량'})); d.appendChild(capInput); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'색상'})); d.appendChild(colorInput); return d; })()
+    ]));
+
+    let qty = 1;
+    const qtyLabel = h('span',{text:String(qty),style:'min-width:24px;text-align:center;font-weight:700'});
+    card.appendChild(h('label',{text:'수량'}));
+    card.appendChild(h('div',{class:'qtybox'},[
+      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ if(qty>1) qty--; qtyLabel.textContent=String(qty); }}),
+      qtyLabel,
+      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ qty++; qtyLabel.textContent=String(qty); }})
+    ]));
+
+    card.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'구매 날짜'})); const i=h('input',{type:'date',value:new Date().toISOString().slice(0,10)}); d.appendChild(i); d._input=i; return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'카드 뒷4자리 (선택)'})); const i=h('input',{maxlength:'4',placeholder:'1234'}); d.appendChild(i); d._input=i; return d; })()
+    ]));
+    const rowEls = card.querySelectorAll('.row');
+    const dateInput = rowEls[rowEls.length-1].children[0]._input;
+    const cardInput = rowEls[rowEls.length-1].children[1]._input;
+
+    card.appendChild(h('label',{text:'메모 (선택)'}));
+    const noteInput = h('input',{placeholder:''});
+    card.appendChild(noteInput);
+
+    const err = h('div',{class:'err hidden'});
+    card.appendChild(err);
+    const btn = h('button',{class:'btn-primary',text:'구매 기록 추가'});
+    btn.onclick = async ()=>{
+      err.className='err hidden';
+      if(!sel.value){ err.textContent='매장을 선택해주세요'; err.className='err'; return; }
+      btn.disabled=true; btn.textContent='저장 중...';
+      const { error } = await sb.rpc('add_purchase', {
+        p_store_id: sel.value, p_model: modelInput.value.trim(), p_capacity: capInput.value.trim(),
+        p_color: colorInput.value.trim(), p_qty: qty, p_purchase_date: dateInput.value,
+        p_card_last4: cardInput.value.trim(), p_note: noteInput.value.trim()
+      });
+      btn.disabled=false; btn.textContent='구매 기록 추가';
+      if(error){ err.textContent = error.message; err.className='err'; return; }
+      modelInput.value=''; capInput.value=''; colorInput.value=''; cardInput.value=''; noteInput.value=''; qty=1; qtyLabel.textContent='1';
+      drawDashboard();
+    };
+    card.appendChild(btn);
+    body.appendChild(card);
+
+    const listWrap = h('div');
+    listWrap.appendChild(h('div',{class:'muted',text:'불러오는 중...'}));
+    body.appendChild(listWrap);
+    (async ()=>{
+      const today = new Date().toISOString().slice(0,10);
+      const { data, error } = await sb.rpc('list_my_purchases', { p_date_from: today, p_date_to: today });
+      listWrap.innerHTML = '';
+      listWrap.appendChild(h('label',{text:'오늘 내가 입력한 기록',style:'display:block;margin-bottom:8px'}));
+      if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
+      const list = data || [];
+      if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:'아직 기록이 없습니다'})); return; }
+      list.forEach(p=>{
+        const c = h('div',{class:'card'});
+        c.appendChild(h('div',{class:'flexbetween'},[
+          h('div',{text:`${p.store_name} · ${p.model} ${p.capacity||''} ${p.color||''}`.replace(/\s+/g,' ').trim()}),
+          h('span',{class:'pill',text:'x'+p.qty})
+        ]));
+        if(p.card_last4) c.appendChild(h('div',{class:'muted',text:'카드 끝 '+p.card_last4}));
+        const voidBtn = h('button',{class:'btn-danger btn-sm',text:'취소',style:'margin-top:6px'});
+        voidBtn.onclick = async ()=>{ await sb.rpc('void_purchase', { p_purchase_id: p.id }); drawDashboard(); };
+        c.appendChild(voidBtn);
+        listWrap.appendChild(c);
+      });
+    })();
+  }
+
+  function drawAllPurchaseTab(body){
+    const ctrl = h('div',{class:'card'});
+    const today = new Date().toISOString().slice(0,10);
+    ctrl.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'시작일'})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'종료일'})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })()
+    ]));
+    const rowEls = ctrl.querySelectorAll('.row');
+    const fromInput = rowEls[0].children[0]._input;
+    const toInput = rowEls[0].children[1]._input;
+    ctrl.appendChild(h('label',{text:'매장'}));
+    const storeSel = h('select',{});
+    storeSel.appendChild(h('option',{value:'',text:'전체 매장'}));
+    stores.forEach(s=>storeSel.appendChild(h('option',{value:s.id,text:s.name})));
+    ctrl.appendChild(storeSel);
+    const loadBtn = h('button',{class:'btn-primary',text:'조회'});
+    ctrl.appendChild(loadBtn);
+    body.appendChild(ctrl);
+
+    const resultWrap = h('div');
+    body.appendChild(resultWrap);
+
+    async function load(){
+      resultWrap.innerHTML = '';
+      resultWrap.appendChild(h('div',{class:'muted',text:'불러오는 중...'}));
+      const { data, error } = await sb.rpc('admin_list_purchases', {
+        p_date_from: fromInput.value, p_date_to: toInput.value, p_store_id: storeSel.value || null
+      });
+      resultWrap.innerHTML = '';
+      if(error){ resultWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
+      const rows = data || [];
+      if(rows.length===0){ resultWrap.appendChild(h('div',{class:'muted',text:'해당 기간에 기록이 없습니다'})); return; }
+
+      const totalQty = rows.reduce((a,r)=>a+r.qty,0);
+      resultWrap.appendChild(h('div',{class:'card'},[
+        h('div',{style:'font-weight:700',text:`총 ${rows.length}건 · ${totalQty}대`})
+      ]));
+
+      // group by store -> by buyer
+      const byStore = {};
+      rows.forEach(r=>{
+        byStore[r.store_name] = byStore[r.store_name] || {};
+        byStore[r.store_name][r.buyer_name] = byStore[r.store_name][r.buyer_name] || [];
+        byStore[r.store_name][r.buyer_name].push(r);
+      });
+      Object.keys(byStore).forEach(storeName=>{
+        const buyers = byStore[storeName];
+        const storeTotal = Object.values(buyers).flat().reduce((a,r)=>a+r.qty,0);
+        const storeCard = h('div',{class:'card'});
+        storeCard.appendChild(h('div',{class:'flexbetween'},[
+          h('div',{style:'font-weight:700',text:storeName}),
+          h('span',{class:'pill',text:storeTotal+'대'})
+        ]));
+        Object.keys(buyers).forEach(buyerName=>{
+          const items = buyers[buyerName];
+          const buyerTotal = items.reduce((a,r)=>a+r.qty,0);
+          storeCard.appendChild(h('hr',{}));
+          storeCard.appendChild(h('div',{class:'flexbetween'},[
+            h('div',{style:'font-weight:600',text:buyerName}),
+            h('span',{class:'pill',text:buyerTotal+'대'})
+          ]));
+          items.forEach(it=>{
+            storeCard.appendChild(h('div',{class:'itemline'},[
+              h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + ' · ' + it.purchase_date},[]),
+              h('span',{class:'pill',text:'x'+it.qty})
+            ]));
+          });
+        });
+        resultWrap.appendChild(storeCard);
+      });
+
+      // model summary
+      const byModel = {};
+      rows.forEach(r=>{
+        const key = `${r.model} ${r.capacity||''} ${r.color||''}`.replace(/\s+/g,' ').trim();
+        byModel[key] = (byModel[key]||0) + r.qty;
+      });
+      const modelCard = h('div',{class:'card'});
+      modelCard.appendChild(h('label',{text:'모델별 합계'}));
+      Object.keys(byModel).forEach(key=>{
+        modelCard.appendChild(h('div',{class:'itemline'},[h('span',{text:key}), h('span',{class:'pill',text:byModel[key]+'대'})]));
+      });
+      resultWrap.appendChild(modelCard);
+    }
+    loadBtn.onclick = load;
+    load();
   }
 
   function drawSendTab(body){
