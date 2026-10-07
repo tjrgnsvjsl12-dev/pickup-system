@@ -403,6 +403,82 @@ function renderAdminView(){
   let myProfile = null; // {id, display_name, role}
   let editingPurchase = null; // the purchase row being edited, or null
   let editingItemId = null; // session_item id being edited, or null
+  let lang = (function(){ try{ return localStorage.getItem('pm_admin_lang') || 'ko'; }catch(e){ return 'ko'; } })();
+
+  const AT = {
+    ko:{
+      brand:'픽업 매니저', adminLogin:'관리자 로그인', email:'이메일', password:'비밀번호',
+      login:'로그인', loggingIn:'로그인 중...', loginFail:'로그인 실패: {msg}', logout:'로그아웃',
+      sectionAlba:'알바 관리', sectionPurchase:'구매 기록',
+      tabSend:'알바 보내기', tabProgress:'진행중', tabDone:'완료 기록',
+      tabMine:'내 구매 입력', tabAll:'전체 현황',
+      store:'매장', albaName:'알바 이름', orders:'주문번호 (한 줄에 하나씩)',
+      selectStore:'매장을 선택해주세요', ordersRequired:'주문번호를 1개 이상 입력해주세요',
+      creating:'생성 중...', createSession:'세션 생성', sessionCreated:'세션이 생성되었습니다 ✓',
+      accessCode:'접속 코드', guideMsg:'알바 안내 메시지 (복사해서 전달하세요)', copyAll:'메시지 전체 복사',
+      newSession:'새 세션 만들기',
+      loading:'불러오는 중...', refresh:'새로고침', none:'내역이 없습니다', noName:'이름없음',
+      statusDone:'완료', statusProgress:'진행중', codeLabel:'코드: ',
+      model:'모델', capacity:'용량', color:'색상', qty:'수량',
+      checkItem:'모델/용량/색상/수량을 모두 확인해주세요',
+      save:'저장', cancel:'취소', edit:'수정', remove:'삭제',
+      note:'메모: ', reportCopy:'실장님 보고 복사', confirmDelete:'한번 더 누르면 삭제됩니다',
+      editPurchase:'구매 기록 수정', purchaseDate:'구매 날짜',
+      selectCardCo:'카드 회사 선택', cardCo:'카드 회사', cardNum:'카드번호', noteOptional:'메모 (선택)',
+      selectModel:'모델을 선택해주세요', selectCapacity:'용량을 선택해주세요', selectColor:'색상을 선택해주세요',
+      checkQty:'수량을 확인해주세요', saving:'저장 중...', editDone:'수정 완료', addPurchase:'구매 기록 추가',
+      cancelEdit:'수정 취소',
+      copyRecords:'기록 복사하기 (톡방用)', fromDate:'시작일', toDate:'종료일', groupBy:'묶는 기준',
+      byDay:'날짜별', byStore:'매장별', copy:'복사하기', selectPeriod:'기간을 선택해주세요',
+      noRecordsInPeriod:'해당 기간에 기록이 없습니다', myToday:'오늘 내가 입력한 기록', noRecordsYet:'아직 기록이 없습니다',
+      confirmVoid:'한번 더 누르면 취소됩니다',
+      allStores:'전체 매장', query:'조회', totalCount:'총 {n}건 · {q}대', unit:'대', modelTotal:'모델별 합계',
+    },
+    zh:{
+      brand:'取货管理', adminLogin:'管理员登录', email:'邮箱', password:'密码',
+      login:'登录', loggingIn:'登录中...', loginFail:'登录失败：{msg}', logout:'登出',
+      sectionAlba:'兼职管理', sectionPurchase:'购买记录',
+      tabSend:'发送兼职通知', tabProgress:'进行中', tabDone:'完成记录',
+      tabMine:'我的购买记录', tabAll:'全部现况',
+      store:'门店', albaName:'兼职姓名', orders:'订单号（每行一个）',
+      selectStore:'请选择门店', ordersRequired:'请至少输入一个订单号',
+      creating:'生成中...', createSession:'创建会话', sessionCreated:'会话已创建 ✓',
+      accessCode:'登录代码', guideMsg:'兼职指南消息（请复制后发送）', copyAll:'复制全部消息',
+      newSession:'创建新会话',
+      loading:'加载中...', refresh:'刷新', none:'暂无记录', noName:'无姓名',
+      statusDone:'已完成', statusProgress:'进行中', codeLabel:'代码：',
+      model:'型号', capacity:'容量', color:'颜色', qty:'数量',
+      checkItem:'请确认型号/容量/颜色/数量',
+      save:'保存', cancel:'取消', edit:'编辑', remove:'删除',
+      note:'备注：', reportCopy:'复制经理报告', confirmDelete:'再次点击即可删除',
+      editPurchase:'编辑购买记录', purchaseDate:'购买日期',
+      selectCardCo:'选择卡公司', cardCo:'卡公司', cardNum:'卡号', noteOptional:'备注（可选）',
+      selectModel:'请选择型号', selectCapacity:'请选择容量', selectColor:'请选择颜色',
+      checkQty:'请确认数量', saving:'保存中...', editDone:'编辑完成', addPurchase:'添加购买记录',
+      cancelEdit:'取消编辑',
+      copyRecords:'复制记录（用于聊天群）', fromDate:'开始日期', toDate:'结束日期', groupBy:'分组方式',
+      byDay:'按日期', byStore:'按门店', copy:'复制', selectPeriod:'请选择日期范围',
+      noRecordsInPeriod:'该时间段内没有记录', myToday:'我今天输入的记录', noRecordsYet:'还没有记录',
+      confirmVoid:'再次点击即可取消',
+      allStores:'全部门店', query:'查询', totalCount:'共 {n} 笔 · {q} 台', unit:'台', modelTotal:'型号合计',
+    }
+  };
+  function t(key, vars){
+    let s = (AT[lang] && AT[lang][key] != null) ? AT[lang][key] : (AT.ko[key]||key);
+    if(vars) Object.keys(vars).forEach(k=>{ s = s.replace('{'+k+'}', vars[k]); });
+    return s;
+  }
+  function setLang(l){
+    lang = l;
+    try{ localStorage.setItem('pm_admin_lang', l); }catch(e){}
+    if(session) drawDashboard(); else drawLogin();
+  }
+  function langSwitcher(){
+    return h('div',{class:'langsw'},[
+      h('button',{class:'btn-ghost'+(lang==='ko'?' btn-primary':''), text:'한국어', onclick:()=>setLang('ko')}),
+      h('button',{class:'btn-ghost'+(lang==='zh'?' btn-primary':''), text:'中文', onclick:()=>setLang('zh')})
+    ]);
+  }
 
   async function boot(){
     const { data } = await sb.auth.getSession();
@@ -412,21 +488,23 @@ function renderAdminView(){
 
   function drawLogin(){
     app.innerHTML = '';
-    app.appendChild(h('h1',{text:'픽업 매니저'}));
-    app.appendChild(h('div',{class:'sub',text:'관리자 로그인'}));
+    app.appendChild(h('div',{class:'topbar'},[
+      h('div',{},[h('h1',{text:t('brand')}), h('div',{class:'sub',text:t('adminLogin')})]),
+      langSwitcher()
+    ]));
     const card = h('div',{class:'card'});
-    const email = h('input',{type:'email',placeholder:'이메일'});
-    const pw = h('input',{type:'password',placeholder:'비밀번호'});
+    const email = h('input',{type:'email',placeholder:t('email')});
+    const pw = h('input',{type:'password',placeholder:t('password')});
     const err = h('div',{class:'err hidden'});
-    card.appendChild(h('label',{text:'이메일'})); card.appendChild(email);
-    card.appendChild(h('label',{text:'비밀번호'})); card.appendChild(pw);
+    card.appendChild(h('label',{text:t('email')})); card.appendChild(email);
+    card.appendChild(h('label',{text:t('password')})); card.appendChild(pw);
     card.appendChild(err);
-    const btn = h('button',{class:'btn-primary',text:'로그인'});
+    const btn = h('button',{class:'btn-primary',text:t('login')});
     btn.onclick = async ()=>{
-      err.className='err hidden'; btn.disabled=true; btn.textContent='로그인 중...';
+      err.className='err hidden'; btn.disabled=true; btn.textContent=t('loggingIn');
       const { data, error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pw.value });
-      btn.disabled=false; btn.textContent='로그인';
-      if(error){ err.textContent = '로그인 실패: '+error.message; err.className='err'; return; }
+      btn.disabled=false; btn.textContent=t('login');
+      if(error){ err.textContent = t('loginFail',{msg:error.message}); err.className='err'; return; }
       session = data.session;
       await afterLogin();
     };
@@ -447,15 +525,18 @@ function renderAdminView(){
   function drawDashboard(){
     app.innerHTML = '';
     const top = h('div',{class:'topbar'},[
-      h('div',{},[h('h1',{text:'픽업 매니저'}), h('div',{class:'sub',text:(myProfile&&myProfile.display_name)||session.user.email})]),
-      h('button',{class:'btn-ghost btn-sm',text:'로그아웃',onclick: async ()=>{ await sb.auth.signOut(); session=null; drawLogin(); }})
+      h('div',{},[h('h1',{text:t('brand')}), h('div',{class:'sub',text:(myProfile&&myProfile.display_name)||session.user.email})]),
+      h('div',{style:'display:flex;align-items:center;gap:8px'},[
+        langSwitcher(),
+        h('button',{class:'btn-ghost btn-sm',text:t('logout'),onclick: async ()=>{ await sb.auth.signOut(); session=null; drawLogin(); }})
+      ])
     ]);
     app.appendChild(top);
 
     const sectionRow = h('div',{class:'tabs',style:'margin-bottom:6px'});
-    [['alba','알바 관리'],['purchase','구매 기록']].forEach(([key,label])=>{
-      const t = h('div',{class:'tab'+(section===key?' active':''), text:label, onclick:()=>{ section=key; drawDashboard(); }});
-      sectionRow.appendChild(t);
+    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')]].forEach(([key,label])=>{
+      const tb = h('div',{class:'tab'+(section===key?' active':''), text:label, onclick:()=>{ section=key; drawDashboard(); }});
+      sectionRow.appendChild(tb);
     });
     app.appendChild(sectionRow);
 
@@ -465,9 +546,9 @@ function renderAdminView(){
 
   function drawAlbaSection(){
     const tabs = h('div',{class:'tabs'});
-    [['send','알바 보내기'],['progress','진행중'],['done','완료 기록']].forEach(([key,label])=>{
-      const t = h('div',{class:'tab'+(activeTab===key?' active':''), text:label, onclick:()=>{ activeTab=key; drawDashboard(); }});
-      tabs.appendChild(t);
+    [['send',t('tabSend')],['progress',t('tabProgress')],['done',t('tabDone')]].forEach(([key,label])=>{
+      const tb = h('div',{class:'tab'+(activeTab===key?' active':''), text:label, onclick:()=>{ activeTab=key; drawDashboard(); }});
+      tabs.appendChild(tb);
     });
     app.appendChild(tabs);
 
@@ -482,9 +563,9 @@ function renderAdminView(){
     const isAdmin = myProfile && myProfile.role === 'admin';
     if(isAdmin){
       const tabs = h('div',{class:'tabs'});
-      [['mine','내 구매 입력'],['all','전체 현황']].forEach(([key,label])=>{
-        const t = h('div',{class:'tab'+(purchaseTab===key?' active':''), text:label, onclick:()=>{ purchaseTab=key; drawDashboard(); }});
-        tabs.appendChild(t);
+      [['mine',t('tabMine')],['all',t('tabAll')]].forEach(([key,label])=>{
+        const tb = h('div',{class:'tab'+(purchaseTab===key?' active':''), text:label, onclick:()=>{ purchaseTab=key; drawDashboard(); }});
+        tabs.appendChild(tb);
       });
       app.appendChild(tabs);
     }
@@ -497,8 +578,8 @@ function renderAdminView(){
   function drawMyPurchaseTab(body){
     const ed = editingPurchase; // snapshot; null when adding new
     const card = h('div',{class:'card'});
-    card.appendChild(h('label',{text: ed ? '구매 기록 수정' : '매장'}));
-    if(ed) card.appendChild(h('label',{text:'매장',style:'margin-top:8px'}));
+    card.appendChild(h('label',{text: ed ? t('editPurchase') : t('store')}));
+    if(ed) card.appendChild(h('label',{text:t('store'),style:'margin-top:8px'}));
     const sel = h('select',{});
     stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
     if(ed) sel.value = ed.store_id;
@@ -507,11 +588,11 @@ function renderAdminView(){
     const modelSel = chipGroup(MODEL_OPTIONS, ed && ed.model);
     const capSel = chipGroup(CAPACITY_OPTIONS, ed && ed.capacity);
     const colorSel = chipGroup(COLOR_OPTIONS, ed && ed.color);
-    card.appendChild(h('label',{text:'모델'})); card.appendChild(modelSel.el);
-    card.appendChild(h('label',{text:'용량'})); card.appendChild(capSel.el);
-    card.appendChild(h('label',{text:'색상'})); card.appendChild(colorSel.el);
+    card.appendChild(h('label',{text:t('model')})); card.appendChild(modelSel.el);
+    card.appendChild(h('label',{text:t('capacity')})); card.appendChild(capSel.el);
+    card.appendChild(h('label',{text:t('color')})); card.appendChild(colorSel.el);
 
-    card.appendChild(h('label',{text:'수량'}));
+    card.appendChild(h('label',{text:t('qty')}));
     const qtyInput = h('input',{type:'number',min:'1',step:'1',value: ed ? String(ed.qty) : '1'});
     card.appendChild(h('div',{class:'qtybox'},[
       h('button',{class:'btn-ghost',text:'-',onclick:()=>{ const v=Math.max(1,(parseInt(qtyInput.value)||1)-1); qtyInput.value=String(v); }}),
@@ -520,33 +601,33 @@ function renderAdminView(){
     ]));
 
     const dateInput = h('input',{type:'date',value: ed ? ed.purchase_date : new Date().toISOString().slice(0,10)});
-    card.appendChild(h('label',{text:'구매 날짜'}));
+    card.appendChild(h('label',{text:t('purchaseDate')}));
     card.appendChild(dateInput);
 
-    const cardCoSel = selectOf(CARD_COMPANY_OPTIONS, '카드 회사 선택');
+    const cardCoSel = selectOf(CARD_COMPANY_OPTIONS, t('selectCardCo'));
     if(ed && ed.card_company) cardCoSel.value = ed.card_company;
-    const cardNumInput = h('input',{placeholder:'카드번호', value: (ed && ed.card_last4) || ''});
+    const cardNumInput = h('input',{placeholder:t('cardNum'), value: (ed && ed.card_last4) || ''});
     card.appendChild(h('div',{class:'row'},[
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'카드 회사'})); d.appendChild(cardCoSel); return d; })(),
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'카드번호'})); d.appendChild(cardNumInput); return d; })()
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('cardCo')})); d.appendChild(cardCoSel); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('cardNum')})); d.appendChild(cardNumInput); return d; })()
     ]));
 
-    card.appendChild(h('label',{text:'메모 (선택)'}));
+    card.appendChild(h('label',{text:t('noteOptional')}));
     const noteInput = h('input',{placeholder:'', value: (ed && ed.note) || ''});
     card.appendChild(noteInput);
 
     const err = h('div',{class:'err hidden'});
     card.appendChild(err);
-    const btn = h('button',{class:'btn-primary',text: ed ? '수정 완료' : '구매 기록 추가'});
+    const btn = h('button',{class:'btn-primary',text: ed ? t('editDone') : t('addPurchase')});
     btn.onclick = async ()=>{
       err.className='err hidden';
-      if(!sel.value){ err.textContent='매장을 선택해주세요'; err.className='err'; return; }
-      if(!modelSel.value){ err.textContent='모델을 선택해주세요'; err.className='err'; return; }
-      if(!capSel.value){ err.textContent='용량을 선택해주세요'; err.className='err'; return; }
-      if(!colorSel.value){ err.textContent='색상을 선택해주세요'; err.className='err'; return; }
+      if(!sel.value){ err.textContent=t('selectStore'); err.className='err'; return; }
+      if(!modelSel.value){ err.textContent=t('selectModel'); err.className='err'; return; }
+      if(!capSel.value){ err.textContent=t('selectCapacity'); err.className='err'; return; }
+      if(!colorSel.value){ err.textContent=t('selectColor'); err.className='err'; return; }
       const qty = parseInt(qtyInput.value);
-      if(!qty || qty < 1){ err.textContent='수량을 확인해주세요'; err.className='err'; return; }
-      btn.disabled=true; btn.textContent='저장 중...';
+      if(!qty || qty < 1){ err.textContent=t('checkQty'); err.className='err'; return; }
+      btn.disabled=true; btn.textContent=t('saving');
       const params = {
         p_store_id: sel.value, p_model: modelSel.value, p_capacity: capSel.value,
         p_color: colorSel.value, p_qty: qty, p_purchase_date: dateInput.value,
@@ -555,50 +636,50 @@ function renderAdminView(){
       const { error } = ed
         ? await sb.rpc('update_purchase', { p_purchase_id: ed.id, ...params })
         : await sb.rpc('add_purchase', params);
-      btn.disabled=false; btn.textContent = ed ? '수정 완료' : '구매 기록 추가';
+      btn.disabled=false; btn.textContent = ed ? t('editDone') : t('addPurchase');
       if(error){ err.textContent = error.message; err.className='err'; return; }
       editingPurchase = null;
       drawDashboard();
     };
     card.appendChild(btn);
     if(ed){
-      const cancelBtn = h('button',{class:'btn-ghost',text:'수정 취소',style:'width:100%;margin-top:8px'});
+      const cancelBtn = h('button',{class:'btn-ghost',text:t('cancelEdit'),style:'width:100%;margin-top:8px'});
       cancelBtn.onclick = ()=>{ editingPurchase = null; drawDashboard(); };
       card.appendChild(cancelBtn);
     }
     body.appendChild(card);
 
     const copyCard = h('div',{class:'card'});
-    copyCard.appendChild(h('label',{text:'기록 복사하기 (톡방用)',style:'display:block;margin-bottom:8px'}));
+    copyCard.appendChild(h('label',{text:t('copyRecords'),style:'display:block;margin-bottom:8px'}));
     const today2 = new Date().toISOString().slice(0,10);
     const copyFrom = h('input',{type:'date',value: today2});
     const copyTo = h('input',{type:'date',value: today2});
     copyCard.appendChild(h('div',{class:'row'},[
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'시작일'})); d.appendChild(copyFrom); return d; })(),
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'종료일'})); d.appendChild(copyTo); return d; })()
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('fromDate')})); d.appendChild(copyFrom); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('toDate')})); d.appendChild(copyTo); return d; })()
     ]));
     let copyGroupBy = 'day';
-    copyCard.appendChild(h('label',{text:'묶는 기준',style:'margin-top:8px'}));
+    copyCard.appendChild(h('label',{text:t('groupBy'),style:'margin-top:8px'}));
     const groupRow = h('div',{class:'chiprow'});
-    const dayBtn = h('button',{type:'button',class:'chip-btn selected',text:'날짜별'});
-    const storeBtn = h('button',{type:'button',class:'chip-btn',text:'매장별'});
+    const dayBtn = h('button',{type:'button',class:'chip-btn selected',text:t('byDay')});
+    const storeBtn = h('button',{type:'button',class:'chip-btn',text:t('byStore')});
     dayBtn.onclick = ()=>{ copyGroupBy='day'; dayBtn.classList.add('selected'); storeBtn.classList.remove('selected'); };
     storeBtn.onclick = ()=>{ copyGroupBy='store'; storeBtn.classList.add('selected'); dayBtn.classList.remove('selected'); };
     groupRow.appendChild(dayBtn); groupRow.appendChild(storeBtn);
     copyCard.appendChild(groupRow);
     const copyErr = h('div',{class:'err hidden'});
     copyCard.appendChild(copyErr);
-    const copyBtn = h('button',{class:'btn-primary',text:'복사하기',style:'margin-top:8px'});
+    const copyBtn = h('button',{class:'btn-primary',text:t('copy'),style:'margin-top:8px'});
     copyBtn.onclick = async ()=>{
       copyErr.className = 'err hidden';
-      if(!copyFrom.value || !copyTo.value){ copyErr.textContent='기간을 선택해주세요'; copyErr.className='err'; return; }
+      if(!copyFrom.value || !copyTo.value){ copyErr.textContent=t('selectPeriod'); copyErr.className='err'; return; }
       const oldText = copyBtn.textContent;
-      copyBtn.disabled = true; copyBtn.textContent = '불러오는 중...';
+      copyBtn.disabled = true; copyBtn.textContent = t('loading');
       const { data, error } = await sb.rpc('list_my_purchases', { p_date_from: copyFrom.value, p_date_to: copyTo.value });
       copyBtn.disabled = false; copyBtn.textContent = oldText;
       if(error){ copyErr.textContent = error.message; copyErr.className = 'err'; return; }
       const list = data || [];
-      if(list.length===0){ copyErr.textContent = '해당 기간에 기록이 없습니다'; copyErr.className = 'err'; return; }
+      if(list.length===0){ copyErr.textContent = t('noRecordsInPeriod'); copyErr.className = 'err'; return; }
       const text = buildCopyText(list, copyGroupBy);
       await copyText(text, copyBtn);
     };
@@ -606,16 +687,16 @@ function renderAdminView(){
     body.appendChild(copyCard);
 
     const listWrap = h('div');
-    listWrap.appendChild(h('div',{class:'muted',text:'불러오는 중...'}));
+    listWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
     body.appendChild(listWrap);
     (async ()=>{
       const today = new Date().toISOString().slice(0,10);
       const { data, error } = await sb.rpc('list_my_purchases', { p_date_from: today, p_date_to: today });
       listWrap.innerHTML = '';
-      listWrap.appendChild(h('label',{text:'오늘 내가 입력한 기록',style:'display:block;margin-bottom:8px'}));
+      listWrap.appendChild(h('label',{text:t('myToday'),style:'display:block;margin-bottom:8px'}));
       if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
       const list = data || [];
-      if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:'아직 기록이 없습니다'})); return; }
+      if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('noRecordsYet')})); return; }
       list.forEach(p=>{
         const c = h('div',{class:'card'});
         c.appendChild(h('div',{class:'flexbetween'},[
@@ -623,11 +704,11 @@ function renderAdminView(){
           h('span',{class:'pill',text:'x'+p.qty})
         ]));
         if(p.card_company || p.card_last4) c.appendChild(h('div',{class:'muted',text:[p.card_company,p.card_last4].filter(Boolean).join(' · ')}));
-        const editBtn = h('button',{class:'btn-ghost btn-sm',text:'수정',style:'margin-top:6px'});
+        const editBtn = h('button',{class:'btn-ghost btn-sm',text:t('edit'),style:'margin-top:6px'});
         editBtn.onclick = ()=>{ editingPurchase = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
         c.appendChild(editBtn);
-        const voidBtn = h('button',{class:'btn-danger btn-sm',text:'취소',style:'margin-top:6px;margin-left:6px'});
-        const voidConfirm = h('span',{class:'hidden muted',text:' 한번 더 누르면 취소됩니다'});
+        const voidBtn = h('button',{class:'btn-danger btn-sm',text:t('cancel'),style:'margin-top:6px;margin-left:6px'});
+        const voidConfirm = h('span',{class:'hidden muted',text:' '+t('confirmVoid')});
         let armed = false;
         voidBtn.onclick = async ()=>{
           if(!armed){ armed=true; voidConfirm.className='muted'; setTimeout(()=>{armed=false; voidConfirm.className='hidden';},3000); return; }
@@ -645,18 +726,18 @@ function renderAdminView(){
     const ctrl = h('div',{class:'card'});
     const today = new Date().toISOString().slice(0,10);
     ctrl.appendChild(h('div',{class:'row'},[
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'시작일'})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })(),
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'종료일'})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })()
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('fromDate')})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('toDate')})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })()
     ]));
     const rowEls = ctrl.querySelectorAll('.row');
     const fromInput = rowEls[0].children[0]._input;
     const toInput = rowEls[0].children[1]._input;
-    ctrl.appendChild(h('label',{text:'매장'}));
+    ctrl.appendChild(h('label',{text:t('store')}));
     const storeSel = h('select',{});
-    storeSel.appendChild(h('option',{value:'',text:'전체 매장'}));
+    storeSel.appendChild(h('option',{value:'',text:t('allStores')}));
     stores.forEach(s=>storeSel.appendChild(h('option',{value:s.id,text:s.name})));
     ctrl.appendChild(storeSel);
-    const loadBtn = h('button',{class:'btn-primary',text:'조회'});
+    const loadBtn = h('button',{class:'btn-primary',text:t('query')});
     ctrl.appendChild(loadBtn);
     body.appendChild(ctrl);
 
@@ -665,18 +746,18 @@ function renderAdminView(){
 
     async function load(){
       resultWrap.innerHTML = '';
-      resultWrap.appendChild(h('div',{class:'muted',text:'불러오는 중...'}));
+      resultWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
       const { data, error } = await sb.rpc('admin_list_purchases', {
         p_date_from: fromInput.value, p_date_to: toInput.value, p_store_id: storeSel.value || null
       });
       resultWrap.innerHTML = '';
       if(error){ resultWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
       const rows = data || [];
-      if(rows.length===0){ resultWrap.appendChild(h('div',{class:'muted',text:'해당 기간에 기록이 없습니다'})); return; }
+      if(rows.length===0){ resultWrap.appendChild(h('div',{class:'muted',text:t('noRecordsInPeriod')})); return; }
 
       const totalQty = rows.reduce((a,r)=>a+r.qty,0);
       resultWrap.appendChild(h('div',{class:'card'},[
-        h('div',{style:'font-weight:700',text:`총 ${rows.length}건 · ${totalQty}대`})
+        h('div',{style:'font-weight:700',text:t('totalCount',{n:rows.length,q:totalQty})})
       ]));
 
       // group by store -> by buyer
@@ -692,7 +773,7 @@ function renderAdminView(){
         const storeCard = h('div',{class:'card'});
         storeCard.appendChild(h('div',{class:'flexbetween'},[
           h('div',{style:'font-weight:700',text:storeName}),
-          h('span',{class:'pill',text:storeTotal+'대'})
+          h('span',{class:'pill',text:storeTotal+t('unit')})
         ]));
         Object.keys(buyers).forEach(buyerName=>{
           const items = buyers[buyerName];
@@ -700,7 +781,7 @@ function renderAdminView(){
           storeCard.appendChild(h('hr',{}));
           storeCard.appendChild(h('div',{class:'flexbetween'},[
             h('div',{style:'font-weight:600',text:buyerName}),
-            h('span',{class:'pill',text:buyerTotal+'대'})
+            h('span',{class:'pill',text:buyerTotal+t('unit')})
           ]));
           items.forEach(it=>{
             const cardInfo = [it.card_company, it.card_last4].filter(Boolean).join(' ');
@@ -720,9 +801,9 @@ function renderAdminView(){
         byModel[key] = (byModel[key]||0) + r.qty;
       });
       const modelCard = h('div',{class:'card'});
-      modelCard.appendChild(h('label',{text:'모델별 합계'}));
+      modelCard.appendChild(h('label',{text:t('modelTotal')}));
       Object.keys(byModel).forEach(key=>{
-        modelCard.appendChild(h('div',{class:'itemline'},[h('span',{text:key}), h('span',{class:'pill',text:byModel[key]+'대'})]));
+        modelCard.appendChild(h('div',{class:'itemline'},[h('span',{text:key}), h('span',{class:'pill',text:byModel[key]+t('unit')})]));
       });
       resultWrap.appendChild(modelCard);
     }
@@ -734,16 +815,16 @@ function renderAdminView(){
     if(lastCreated){
       const c = h('div',{class:'card'});
       const link = location.origin + location.pathname + '?t=' + lastCreated.sessionId.slice(0,8) + '#' + lastCreated.code;
-      c.appendChild(h('div',{class:'ok',text:'세션이 생성되었습니다 ✓'}));
-      c.appendChild(h('label',{text:'접속 코드'}));
+      c.appendChild(h('div',{class:'ok',text:t('sessionCreated')}));
+      c.appendChild(h('label',{text:t('accessCode')}));
       c.appendChild(h('div',{class:'copybox mono',text:lastCreated.code}));
-      c.appendChild(h('label',{text:'알바 안내 메시지 (복사해서 전달하세요)'}));
+      c.appendChild(h('label',{text:t('guideMsg')}));
       const msg = buildAlbaMessage(lastCreated);
       c.appendChild(h('div',{class:'copybox',text:msg}));
-      const copyBtn = h('button',{class:'btn-primary',text:'메시지 전체 복사'});
+      const copyBtn = h('button',{class:'btn-primary',text:t('copyAll')});
       copyBtn.onclick = ()=>copyText(msg, copyBtn);
       c.appendChild(copyBtn);
-      const newBtn = h('button',{class:'btn-ghost',text:'새 세션 만들기',style:'margin-top:8px;width:100%'});
+      const newBtn = h('button',{class:'btn-ghost',text:t('newSession'),style:'margin-top:8px;width:100%'});
       newBtn.onclick = ()=>{ lastCreated=null; drawDashboard(); };
       c.appendChild(newBtn);
       body.appendChild(c);
@@ -755,25 +836,25 @@ function renderAdminView(){
     stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
     const nameInput = h('input',{placeholder:'예: 왕멍'});
     card.appendChild(h('div',{class:'row'},[
-      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:'매장'})); d.appendChild(sel); return d; })(),
-      (()=>{ const d=h('div',{style:'flex:2'}); d.appendChild(h('label',{text:'알바 이름'})); d.appendChild(nameInput); return d; })()
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('store')})); d.appendChild(sel); return d; })(),
+      (()=>{ const d=h('div',{style:'flex:2'}); d.appendChild(h('label',{text:t('albaName')})); d.appendChild(nameInput); return d; })()
     ]));
-    card.appendChild(h('label',{text:'주문번호 (한 줄에 하나씩)'}));
+    card.appendChild(h('label',{text:t('orders')}));
     const ordersInput = h('textarea',{placeholder:'ORD12345\nORD12346'});
     card.appendChild(ordersInput);
     const err = h('div',{class:'err hidden'});
     card.appendChild(err);
-    const btn = h('button',{class:'btn-primary',text:'세션 생성'});
+    const btn = h('button',{class:'btn-primary',text:t('createSession')});
     btn.onclick = async ()=>{
       err.className='err hidden';
       const storeId = sel.value;
       const albaName = nameInput.value.trim();
       const orders = ordersInput.value.split('\n').map(s=>s.trim()).filter(Boolean);
-      if(!storeId){ err.textContent='매장을 선택해주세요'; err.className='err'; return; }
-      if(orders.length===0){ err.textContent='주문번호를 1개 이상 입력해주세요'; err.className='err'; return; }
-      btn.disabled = true; btn.textContent = '생성 중...';
+      if(!storeId){ err.textContent=t('selectStore'); err.className='err'; return; }
+      if(orders.length===0){ err.textContent=t('ordersRequired'); err.className='err'; return; }
+      btn.disabled = true; btn.textContent = t('creating');
       const { data, error } = await sb.rpc('create_session', { p_store_id: storeId, p_alba_name: albaName, p_order_numbers: orders });
-      btn.disabled = false; btn.textContent = '세션 생성';
+      btn.disabled = false; btn.textContent = t('createSession');
       if(error){ err.textContent = error.message; err.className='err'; return; }
       const row = data[0];
       const store = stores.find(s=>s.id===storeId);
@@ -835,22 +916,22 @@ ${orderLines}
   }
 
   async function drawListTab(body, status){
-    body.appendChild(h('div',{class:'muted',text:'불러오는 중...'}));
+    body.appendChild(h('div',{class:'muted',text:t('loading')}));
     const { data, error } = await sb.rpc('list_sessions_for_date', { p_date: new Date().toISOString().slice(0,10), p_status: status });
     body.innerHTML = '';
-    const refreshBtn = h('button',{class:'btn-ghost btn-sm',text:'새로고침',style:'margin-bottom:10px'});
+    const refreshBtn = h('button',{class:'btn-ghost btn-sm',text:t('refresh'),style:'margin-bottom:10px'});
     refreshBtn.onclick = ()=>drawDashboard();
     body.appendChild(refreshBtn);
     if(error){ body.appendChild(h('div',{class:'err',text:error.message})); return; }
     const list = data || [];
-    if(list.length===0){ body.appendChild(h('div',{class:'muted',text:'내역이 없습니다'})); return; }
+    if(list.length===0){ body.appendChild(h('div',{class:'muted',text:t('none')})); return; }
     list.forEach(s=>{
       const card = h('div',{class:'card'});
       card.appendChild(h('div',{class:'flexbetween'},[
-        h('div',{},[h('div',{style:'font-weight:700',text:`${s.store_name} · ${s.alba_name||'이름없음'}`}), h('div',{class:'muted',text:fmtDate(s.created_at)})]),
-        h('span',{class:'statusbadge '+s.status, text: s.status==='done'?'완료':'진행중'})
+        h('div',{},[h('div',{style:'font-weight:700',text:`${s.store_name} · ${s.alba_name||t('noName')}`}), h('div',{class:'muted',text:fmtDate(s.created_at)})]),
+        h('span',{class:'statusbadge '+s.status, text: s.status==='done'?t('statusDone'):t('statusProgress')})
       ]));
-      card.appendChild(h('div',{class:'muted',style:'margin:6px 0 2px',text:'코드: '+s.access_code}));
+      card.appendChild(h('div',{class:'muted',style:'margin:6px 0 2px',text:t('codeLabel')+s.access_code}));
       (s.orders||[]).forEach(o=>card.appendChild(h('span',{class:'pill mono',text:o})));
       if((s.items||[]).length){
         const il = h('div',{style:'margin-top:8px'});
@@ -861,22 +942,22 @@ ${orderLines}
             const cSel = chipGroup(CAPACITY_OPTIONS, it.capacity);
             const colSel = chipGroup(COLOR_OPTIONS, it.color);
             const qInput = h('input',{type:'number',min:'1',step:'1',value:String(it.qty)});
-            editWrap.appendChild(h('label',{text:'모델'})); editWrap.appendChild(mSel.el);
-            editWrap.appendChild(h('label',{text:'용량'})); editWrap.appendChild(cSel.el);
-            editWrap.appendChild(h('label',{text:'색상'})); editWrap.appendChild(colSel.el);
-            editWrap.appendChild(h('label',{text:'수량'})); editWrap.appendChild(qInput);
+            editWrap.appendChild(h('label',{text:t('model')})); editWrap.appendChild(mSel.el);
+            editWrap.appendChild(h('label',{text:t('capacity')})); editWrap.appendChild(cSel.el);
+            editWrap.appendChild(h('label',{text:t('color')})); editWrap.appendChild(colSel.el);
+            editWrap.appendChild(h('label',{text:t('qty')})); editWrap.appendChild(qInput);
             const itemErr = h('div',{class:'err hidden'});
             editWrap.appendChild(itemErr);
-            const saveBtn = h('button',{class:'btn-primary btn-sm',text:'저장'});
+            const saveBtn = h('button',{class:'btn-primary btn-sm',text:t('save')});
             saveBtn.onclick = async ()=>{
               const qty = parseInt(qInput.value) || 0;
-              if(!mSel.value || !cSel.value || !colSel.value || qty < 1){ itemErr.textContent='모델/용량/색상/수량을 모두 확인해주세요'; itemErr.className='err'; return; }
+              if(!mSel.value || !cSel.value || !colSel.value || qty < 1){ itemErr.textContent=t('checkItem'); itemErr.className='err'; return; }
               const { error } = await sb.rpc('update_session_item', { p_item_id: it.id, p_model: mSel.value, p_capacity: cSel.value, p_color: colSel.value, p_qty: qty });
               if(error){ itemErr.textContent = error.message; itemErr.className='err'; return; }
               editingItemId = null;
               drawDashboard();
             };
-            const cancelBtn = h('button',{class:'btn-ghost btn-sm',text:'취소',style:'margin-left:6px',onclick:()=>{ editingItemId=null; drawDashboard(); }});
+            const cancelBtn = h('button',{class:'btn-ghost btn-sm',text:t('cancel'),style:'margin-left:6px',onclick:()=>{ editingItemId=null; drawDashboard(); }});
             editWrap.appendChild(saveBtn);
             editWrap.appendChild(cancelBtn);
             il.appendChild(editWrap);
@@ -885,8 +966,8 @@ ${orderLines}
               h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim()}),
               h('span',{style:'display:flex;gap:6px;align-items:center'},[
                 h('span',{class:'pill',text:'x'+it.qty}),
-                h('button',{class:'btn-ghost btn-sm',text:'수정',onclick:()=>{ editingItemId=it.id; drawDashboard(); }}),
-                h('button',{class:'btn-danger btn-sm',text:'삭제',onclick:async()=>{ await sb.rpc('remove_session_item',{p_item_id:it.id}); drawDashboard(); }})
+                h('button',{class:'btn-ghost btn-sm',text:t('edit'),onclick:()=>{ editingItemId=it.id; drawDashboard(); }}),
+                h('button',{class:'btn-danger btn-sm',text:t('remove'),onclick:async()=>{ await sb.rpc('remove_session_item',{p_item_id:it.id}); drawDashboard(); }})
               ])
             ]));
           }
@@ -896,12 +977,12 @@ ${orderLines}
       if(s.status==='done'){
         const total = (s.items||[]).reduce((a,i)=>a+i.qty,0);
         const report = `${s.store_name}\n이름 : ${s.alba_name||'이름 없음'}\n${(s.orders||[]).join('\n')}\n총 ${(s.orders||[]).length}건 ${total}대\n${(s.items||[]).map(it=>`- ${it.model} ${it.capacity||''}${it.color?' '+it.color:''} x${it.qty}`).join('\n')}${s.note?'\n메모: '+s.note:''}`;
-        const rbtn = h('button',{class:'btn-ghost btn-sm',text:'실장님 보고 복사',style:'margin-top:8px'});
+        const rbtn = h('button',{class:'btn-ghost btn-sm',text:t('reportCopy'),style:'margin-top:8px'});
         rbtn.onclick = ()=>copyText(report, rbtn);
         card.appendChild(rbtn);
       }
-      const delBtn = h('button',{class:'btn-danger btn-sm',text:'삭제',style:'margin-top:8px;margin-left:8px'});
-      const delConfirm = h('span',{class:'hidden muted',text:' 한번 더 누르면 삭제됩니다'});
+      const delBtn = h('button',{class:'btn-danger btn-sm',text:t('remove'),style:'margin-top:8px;margin-left:8px'});
+      const delConfirm = h('span',{class:'hidden muted',text:' '+t('confirmDelete')});
       let armed = false;
       delBtn.onclick = async ()=>{
         if(!armed){ armed=true; delConfirm.className='muted'; setTimeout(()=>{armed=false; delConfirm.className='hidden';},3000); return; }
