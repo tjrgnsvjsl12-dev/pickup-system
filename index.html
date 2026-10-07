@@ -1,0 +1,505 @@
+<title>픽업 매니저</title>
+<style>
+:root{
+  --bg:#f5f3ef; --surface:#ffffff; --surface-2:#f0ede6; --fg:#2a2622; --muted:#7a7265;
+  --border:#e2ddd3; --accent:#b4552f; --accent-fg:#ffffff; --danger:#b23b3b; --danger-fg:#fff;
+  --success:#3f7a4e; --success-fg:#fff; --chip:#efe6da;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    --bg:#1c1a17; --surface:#262320; --surface-2:#2d2a25; --fg:#eee8df; --muted:#a69b8c;
+    --border:#3a362f; --accent:#d97a4e; --accent-fg:#1c1a17; --danger:#e06060; --danger-fg:#1c1a17;
+    --success:#6cc789; --success-fg:#1c1a17; --chip:#33302a; color-scheme:dark;
+  }
+}
+:root[data-theme="dark"]{
+  --bg:#1c1a17; --surface:#262320; --surface-2:#2d2a25; --fg:#eee8df; --muted:#a69b8c;
+  --border:#3a362f; --accent:#d97a4e; --accent-fg:#1c1a17; --danger:#e06060; --danger-fg:#1c1a17;
+  --success:#6cc789; --success-fg:#1c1a17; --chip:#33302a; color-scheme:dark;
+}
+*{box-sizing:border-box}
+body{background:var(--bg);color:var(--fg);font-family:'Noto Sans KR','Noto Sans SC',-apple-system,sans-serif;padding:16px;padding-block:24px;max-width:640px;margin:0 auto;}
+h1{font-size:19px;margin:0 0 2px;letter-spacing:-.01em}
+h2{font-size:14px;margin:0 0 10px;color:var(--muted);font-weight:600}
+.sub{color:var(--muted);font-size:12.5px;margin-bottom:18px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px}
+label{display:block;font-size:12.5px;color:var(--muted);margin-bottom:5px;font-weight:600}
+input,select,textarea{width:100%;padding:10px 11px;border:1px solid var(--border);border-radius:9px;background:var(--surface-2);color:var(--fg);font-size:14px;font-family:inherit;margin-bottom:12px}
+textarea{resize:vertical;min-height:70px}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accent);outline-offset:-1px}
+button{font-family:inherit;font-size:13.5px;font-weight:600;border-radius:9px;border:1px solid transparent;padding:10px 14px;cursor:pointer}
+.btn-primary{background:var(--accent);color:var(--accent-fg);width:100%}
+.btn-primary:disabled{opacity:.5;cursor:default}
+.btn-ghost{background:transparent;border:1px solid var(--border);color:var(--fg)}
+.btn-danger{background:transparent;border:1px solid var(--danger);color:var(--danger)}
+.btn-sm{padding:6px 10px;font-size:12px}
+.row{display:flex;gap:8px;flex-wrap:wrap}
+.row>*{flex:1;min-width:0}
+.tabs{display:flex;gap:6px;margin-bottom:14px;border-bottom:1px solid var(--border);padding-bottom:0}
+.tab{flex:1;text-align:center;padding:9px 4px;font-size:13px;font-weight:600;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;margin-bottom:-1px}
+.tab.active{color:var(--accent);border-bottom-color:var(--accent)}
+.pill{display:inline-block;background:var(--chip);color:var(--fg);font-size:11.5px;padding:2px 8px;border-radius:999px;margin:2px 4px 2px 0}
+.mono{font-family:ui-monospace,Menlo,Consolas,monospace}
+.err{color:var(--danger);font-size:12.5px;margin:-4px 0 10px}
+.ok{color:var(--success);font-size:12.5px;margin:-4px 0 10px}
+.muted{color:var(--muted);font-size:12.5px}
+.copybox{background:var(--surface-2);border:1px solid var(--border);border-radius:9px;padding:10px;font-size:12.5px;white-space:pre-wrap;word-break:break-all;margin-bottom:8px;max-height:260px;overflow-y:auto}
+hr{border:none;border-top:1px solid var(--border);margin:14px 0}
+.flexbetween{display:flex;justify-content:space-between;align-items:center;gap:8px}
+.itemline{display:flex;justify-content:space-between;align-items:center;padding:6px 0;border-bottom:1px solid var(--border);font-size:13px}
+.itemline:last-child{border-bottom:none}
+.qtybox{display:flex;align-items:center;gap:8px}
+.qtybox button{width:34px;height:34px;padding:0;font-size:16px}
+.topbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:16px}
+.statusbadge{font-size:11px;font-weight:700;padding:3px 9px;border-radius:999px}
+.statusbadge.in_progress{background:var(--chip);color:var(--accent)}
+.statusbadge.done{background:var(--chip);color:var(--success)}
+.langsw{display:flex;gap:6px}
+.langsw button{padding:5px 10px;font-size:12px}
+.hidden{display:none!important}
+.lockmsg{text-align:center;padding:40px 10px;color:var(--muted)}
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+
+<div id="app"></div>
+
+<script>
+const SB_URL = "https://etgcjgeqnzqisxokycfh.supabase.co";
+const SB_KEY = "sb_publishable_GeVNu4dRdz2fvxnRT8v5aw_0JqLJJyn";
+const sb = window.supabase.createClient(SB_URL, SB_KEY, { auth: { persistSession: false, autoRefreshToken: true } });
+
+const app = document.getElementById('app');
+const rawHash = (location.hash || '').replace('#','').trim();
+const isAlbaCode = /^[A-Z0-9]{5,8}$/i.test(rawHash);
+
+// ---------- helpers ----------
+function h(tag, attrs, children){
+  const el = document.createElement(tag);
+  if(attrs) for(const k in attrs){
+    if(k === 'text') el.textContent = attrs[k];
+    else if(k === 'html') el.innerHTML = attrs[k];
+    else if(k.startsWith('on')) el.addEventListener(k.slice(2), attrs[k]);
+    else el.setAttribute(k, attrs[k]);
+  }
+  (children||[]).forEach(c => { if(c) el.appendChild(c); });
+  return el;
+}
+async function copyText(text, btn){
+  try{
+    await navigator.clipboard.writeText(text);
+    flashBtn(btn, '복사됨!');
+  }catch(e){
+    try{
+      const ta = document.createElement('textarea');
+      ta.value = text; ta.style.position='fixed'; ta.style.opacity='0';
+      document.body.appendChild(ta); ta.select();
+      document.execCommand('copy'); document.body.removeChild(ta);
+      flashBtn(btn, '복사됨!');
+    }catch(e2){ flashBtn(btn, '복사 실패'); }
+  }
+}
+function flashBtn(btn, msg){
+  if(!btn) return;
+  const old = btn.textContent;
+  btn.textContent = msg;
+  setTimeout(()=>{ btn.textContent = old; }, 1200);
+}
+function fmtDate(iso){
+  try{ const d = new Date(iso); return d.toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}); }
+  catch(e){ return iso; }
+}
+
+// =====================================================================
+// ALBA (access-code) VIEW — no login
+// =====================================================================
+function renderAlbaView(){
+  let lang = 'ko';
+  const T = {
+    ko:{ title:'픽업 안내', store:'매장', orders:'주문번호', copyAll:'전체 복사', account:'계정 정보',
+      id:'아이디', pw:'비밀번호', link:'픽업 링크', open:'열기', itemsTitle:'수령한 기기 입력',
+      model:'모델', capacity:'용량', color:'색상', qty:'수량', add:'추가', addedItems:'입력된 기기',
+      none:'아직 입력된 기기가 없습니다', arrive:'도착 시간', complete:'완료 시간', note:'메모 (선택)',
+      finish:'픽업 완료 보고', finishConfirm:'완료 보고를 제출하시겠습니까? 제출 후에는 수정할 수 없습니다.',
+      yes:'네, 제출합니다', cancel:'취소', done:'완료되었습니다. 감사합니다!', invalid:'유효하지 않은 코드입니다.',
+      loading:'불러오는 중...', copied:'복사됨!', remove:'삭제'},
+    zh:{ title:'取货指南', store:'门店', orders:'订单号', copyAll:'复制全部', account:'账户信息',
+      id:'账号', pw:'密码', link:'取货链接', open:'打开', itemsTitle:'输入已领取设备',
+      model:'型号', capacity:'容量', color:'颜色', qty:'数量', add:'添加', addedItems:'已输入设备',
+      none:'尚未输入设备', arrive:'到达时间', complete:'完成时间', note:'备注（可选）',
+      finish:'提交完成报告', finishConfirm:'确定要提交完成报告吗？提交后无法修改。',
+      yes:'是，提交', cancel:'取消', done:'已完成，谢谢！', invalid:'无效代码。',
+      loading:'加载中...', copied:'已复制!', remove:'删除'}
+  };
+  const code = rawHash.toUpperCase();
+  let session = null;
+
+  async function load(){
+    app.innerHTML = '';
+    app.appendChild(h('div',{class:'lockmsg',text:T[lang].loading}));
+    const { data, error } = await sb.rpc('get_session_by_code', { p_code: code });
+    if(error || !data){
+      app.innerHTML = '';
+      app.appendChild(h('div',{class:'lockmsg'},[h('div',{text:'⚠️'}),h('div',{text:T.ko.invalid}),h('div',{text:T.zh.invalid})]));
+      return;
+    }
+    session = data;
+    draw();
+  }
+
+  function draw(){
+    const t = T[lang];
+    app.innerHTML = '';
+
+    const top = h('div',{class:'topbar'},[
+      h('div',{},[ h('h1',{text:t.title}), h('div',{class:'sub',text: session.store_name}) ]),
+      h('div',{class:'langsw'},[
+        h('button',{class:'btn-ghost'+(lang==='ko'?' btn-primary':''), text:'한국어', onclick:()=>{lang='ko';draw();}}),
+        h('button',{class:'btn-ghost'+(lang==='zh'?' btn-primary':''), text:'中文', onclick:()=>{lang='zh';draw();}})
+      ])
+    ]);
+    app.appendChild(top);
+
+    if(session.status === 'done'){
+      app.appendChild(h('div',{class:'card'},[
+        h('div',{class:'statusbadge done',text:lang==='ko'?'완료됨':'已完成'}),
+        h('div',{style:'margin-top:10px;font-size:14px',text:t.done})
+      ]));
+      return;
+    }
+
+    // orders card
+    const orderLines = (session.order_numbers||[]).join('\n');
+    const ordersCard = h('div',{class:'card'});
+    ordersCard.appendChild(h('div',{class:'flexbetween'},[
+      h('label',{text:t.orders}),
+      (()=>{ const b=h('button',{class:'btn-ghost btn-sm',text:t.copyAll}); b.onclick=()=>copyText(orderLines,b); return b; })()
+    ]));
+    ordersCard.appendChild(h('div',{class:'copybox mono',text: orderLines || '-'}));
+    app.appendChild(ordersCard);
+
+    // account card
+    if(session.account_id || session.pickup_link){
+      const accCard = h('div',{class:'card'});
+      accCard.appendChild(h('label',{text:t.account}));
+      if(session.account_id){
+        const row = h('div',{class:'flexbetween',style:'margin-bottom:6px'},[
+          h('div',{},[h('span',{class:'muted',text:t.id+': '}), h('span',{class:'mono',text:session.account_id})]),
+        ]);
+        const b = h('button',{class:'btn-ghost btn-sm',text:'복사'}); b.onclick=()=>copyText(session.account_id,b);
+        row.appendChild(b);
+        accCard.appendChild(row);
+      }
+      if(session.account_pw){
+        const row = h('div',{class:'flexbetween',style:'margin-bottom:6px'},[
+          h('div',{},[h('span',{class:'muted',text:t.pw+': '}), h('span',{class:'mono',text:session.account_pw})]),
+        ]);
+        const b = h('button',{class:'btn-ghost btn-sm',text:'복사'}); b.onclick=()=>copyText(session.account_pw,b);
+        row.appendChild(b);
+        accCard.appendChild(row);
+      }
+      if(session.pickup_link){
+        const row = h('div',{class:'flexbetween'},[
+          h('div',{class:'muted',text:t.link}),
+        ]);
+        const openA = h('a',{href:session.pickup_link,target:'_blank',rel:'noopener'},[h('button',{class:'btn-ghost btn-sm',text:t.open})]);
+        row.appendChild(openA);
+        accCard.appendChild(row);
+      }
+      app.appendChild(accCard);
+    }
+
+    // item entry card
+    const itemCard = h('div',{class:'card'});
+    itemCard.appendChild(h('label',{text:t.itemsTitle}));
+    const modelInput = h('input',{placeholder:t.model});
+    const capInput = h('input',{placeholder:t.capacity});
+    const colorInput = h('input',{placeholder:t.color});
+    let qty = 1;
+    const qtyLabel = h('span',{text:String(qty),style:'min-width:24px;text-align:center;font-weight:700'});
+    const qtyRow = h('div',{class:'qtybox'},[
+      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ if(qty>1) qty--; qtyLabel.textContent=String(qty); }}),
+      qtyLabel,
+      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ qty++; qtyLabel.textContent=String(qty); }})
+    ]);
+    itemCard.appendChild(h('div',{class:'row'},[modelInput, capInput]));
+    itemCard.appendChild(h('div',{class:'row',style:'align-items:center'},[colorInput]));
+    itemCard.appendChild(h('div',{class:'flexbetween',style:'margin-bottom:12px'},[
+      h('span',{class:'muted',text:t.qty}), qtyRow
+    ]));
+    const addErr = h('div',{class:'err hidden'});
+    itemCard.appendChild(addErr);
+    const addBtn = h('button',{class:'btn-primary',text:t.add});
+    addBtn.onclick = async ()=>{
+      addErr.className='err hidden'; addErr.textContent='';
+      if(!modelInput.value.trim()){ addErr.textContent = (lang==='ko'?'모델을 입력해주세요':'请输入型号'); addErr.className='err'; return; }
+      addBtn.disabled = true;
+      const { error } = await sb.rpc('add_item_by_code', {
+        p_code: code, p_model: modelInput.value.trim(), p_capacity: capInput.value.trim(),
+        p_color: colorInput.value.trim(), p_qty: qty
+      });
+      addBtn.disabled = false;
+      if(error){ addErr.textContent = error.message; addErr.className='err'; return; }
+      modelInput.value=''; capInput.value=''; colorInput.value=''; qty=1; qtyLabel.textContent='1';
+      await load();
+    };
+    itemCard.appendChild(addBtn);
+    app.appendChild(itemCard);
+
+    // added items list
+    const listCard = h('div',{class:'card'});
+    listCard.appendChild(h('label',{text:t.addedItems}));
+    const items = session.items || [];
+    if(items.length === 0){
+      listCard.appendChild(h('div',{class:'muted',text:t.none}));
+    }else{
+      items.forEach(it=>{
+        listCard.appendChild(h('div',{class:'itemline'},[
+          h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim()}),
+          h('span',{class:'pill',text:'x'+it.qty})
+        ]));
+      });
+    }
+    app.appendChild(listCard);
+
+    // completion card
+    const doneCard = h('div',{class:'card'});
+    doneCard.appendChild(h('label',{text:t.arrive}));
+    const arriveInput = h('input',{type:'time'});
+    doneCard.appendChild(arriveInput);
+    doneCard.appendChild(h('label',{text:t.complete}));
+    const completeInput = h('input',{type:'time'});
+    doneCard.appendChild(completeInput);
+    doneCard.appendChild(h('label',{text:t.note}));
+    const noteInput = h('textarea',{});
+    doneCard.appendChild(noteInput);
+
+    const confirmBox = h('div',{class:'hidden'});
+    const finishErr = h('div',{class:'err hidden'});
+    doneCard.appendChild(finishErr);
+
+    const finishBtn = h('button',{class:'btn-primary',text:t.finish});
+    finishBtn.onclick = ()=>{
+      confirmBox.className = '';
+      confirmBox.innerHTML = '';
+      confirmBox.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:t.finishConfirm}));
+      const row = h('div',{class:'row'});
+      const yesBtn = h('button',{class:'btn-primary',text:t.yes});
+      yesBtn.onclick = async ()=>{
+        yesBtn.disabled = true; finishErr.className='err hidden';
+        const { error } = await sb.rpc('complete_session_by_code', {
+          p_code: code, p_arrive: arriveInput.value || '', p_complete: completeInput.value || '', p_note: noteInput.value || ''
+        });
+        if(error){ finishErr.textContent = error.message; finishErr.className='err'; yesBtn.disabled=false; return; }
+        await load();
+      };
+      const noBtn = h('button',{class:'btn-ghost',text:t.cancel, onclick:()=>{ confirmBox.className='hidden'; }});
+      row.appendChild(yesBtn); row.appendChild(noBtn);
+      confirmBox.appendChild(row);
+    };
+    doneCard.appendChild(finishBtn);
+    doneCard.appendChild(confirmBox);
+    app.appendChild(doneCard);
+  }
+
+  load();
+}
+
+// =====================================================================
+// ADMIN VIEW — login required
+// =====================================================================
+function renderAdminView(){
+  let session = null;
+  let stores = [];
+  let activeTab = 'send';
+  let lastCreated = null; // {code, store, albaName, orders}
+
+  async function boot(){
+    const { data } = await sb.auth.getSession();
+    session = data.session;
+    if(session) await afterLogin(); else drawLogin();
+  }
+
+  function drawLogin(){
+    app.innerHTML = '';
+    app.appendChild(h('h1',{text:'픽업 매니저'}));
+    app.appendChild(h('div',{class:'sub',text:'관리자 로그인'}));
+    const card = h('div',{class:'card'});
+    const email = h('input',{type:'email',placeholder:'이메일'});
+    const pw = h('input',{type:'password',placeholder:'비밀번호'});
+    const err = h('div',{class:'err hidden'});
+    card.appendChild(h('label',{text:'이메일'})); card.appendChild(email);
+    card.appendChild(h('label',{text:'비밀번호'})); card.appendChild(pw);
+    card.appendChild(err);
+    const btn = h('button',{class:'btn-primary',text:'로그인'});
+    btn.onclick = async ()=>{
+      err.className='err hidden'; btn.disabled=true; btn.textContent='로그인 중...';
+      const { data, error } = await sb.auth.signInWithPassword({ email: email.value.trim(), password: pw.value });
+      btn.disabled=false; btn.textContent='로그인';
+      if(error){ err.textContent = '로그인 실패: '+error.message; err.className='err'; return; }
+      session = data.session;
+      await afterLogin();
+    };
+    pw.addEventListener('keydown', e=>{ if(e.key==='Enter') btn.click(); });
+    card.appendChild(btn);
+    app.appendChild(card);
+  }
+
+  async function afterLogin(){
+    const { data, error } = await sb.rpc('list_stores');
+    if(!error) stores = data || [];
+    drawDashboard();
+  }
+
+  function drawDashboard(){
+    app.innerHTML = '';
+    const top = h('div',{class:'topbar'},[
+      h('div',{},[h('h1',{text:'픽업 매니저'}), h('div',{class:'sub',text:session.user.email})]),
+      h('button',{class:'btn-ghost btn-sm',text:'로그아웃',onclick: async ()=>{ await sb.auth.signOut(); session=null; drawLogin(); }})
+    ]);
+    app.appendChild(top);
+
+    const tabs = h('div',{class:'tabs'});
+    [['send','알바 보내기'],['progress','진행중'],['done','완료 기록']].forEach(([key,label])=>{
+      const t = h('div',{class:'tab'+(activeTab===key?' active':''), text:label, onclick:()=>{ activeTab=key; drawDashboard(); }});
+      tabs.appendChild(t);
+    });
+    app.appendChild(tabs);
+
+    const body = h('div',{id:'tabbody'});
+    app.appendChild(body);
+    if(activeTab==='send') drawSendTab(body);
+    else if(activeTab==='progress') drawListTab(body, 'in_progress');
+    else drawListTab(body, 'done');
+  }
+
+  function drawSendTab(body){
+    if(lastCreated){
+      const c = h('div',{class:'card'});
+      const link = location.origin + location.pathname + '#' + lastCreated.code;
+      c.appendChild(h('div',{class:'ok',text:'세션이 생성되었습니다 ✓'}));
+      c.appendChild(h('label',{text:'접속 코드'}));
+      c.appendChild(h('div',{class:'copybox mono',text:lastCreated.code}));
+      c.appendChild(h('label',{text:'알바 안내 메시지 (복사해서 전달하세요)'}));
+      const msg = buildAlbaMessage(lastCreated);
+      c.appendChild(h('div',{class:'copybox',text:msg}));
+      const copyBtn = h('button',{class:'btn-primary',text:'메시지 전체 복사'});
+      copyBtn.onclick = ()=>copyText(msg, copyBtn);
+      c.appendChild(copyBtn);
+      const newBtn = h('button',{class:'btn-ghost',text:'새 세션 만들기',style:'margin-top:8px;width:100%'});
+      newBtn.onclick = ()=>{ lastCreated=null; drawDashboard(); };
+      c.appendChild(newBtn);
+      body.appendChild(c);
+      return;
+    }
+
+    const card = h('div',{class:'card'});
+    card.appendChild(h('label',{text:'매장 선택'}));
+    const sel = h('select',{});
+    stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
+    card.appendChild(sel);
+    card.appendChild(h('label',{text:'알바 이름'}));
+    const nameInput = h('input',{placeholder:'예: 왕멍'});
+    card.appendChild(nameInput);
+    card.appendChild(h('label',{text:'주문번호 (한 줄에 하나씩)'}));
+    const ordersInput = h('textarea',{placeholder:'ORD12345\nORD12346'});
+    card.appendChild(ordersInput);
+    const err = h('div',{class:'err hidden'});
+    card.appendChild(err);
+    const btn = h('button',{class:'btn-primary',text:'세션 생성'});
+    btn.onclick = async ()=>{
+      err.className='err hidden';
+      const storeId = sel.value;
+      const albaName = nameInput.value.trim();
+      const orders = ordersInput.value.split('\n').map(s=>s.trim()).filter(Boolean);
+      if(!storeId){ err.textContent='매장을 선택해주세요'; err.className='err'; return; }
+      if(orders.length===0){ err.textContent='주문번호를 1개 이상 입력해주세요'; err.className='err'; return; }
+      btn.disabled = true; btn.textContent = '생성 중...';
+      const { data, error } = await sb.rpc('create_session', { p_store_id: storeId, p_alba_name: albaName, p_order_numbers: orders });
+      btn.disabled = false; btn.textContent = '세션 생성';
+      if(error){ err.textContent = error.message; err.className='err'; return; }
+      const row = data[0];
+      const store = stores.find(s=>s.id===storeId);
+      lastCreated = { code: row.access_code, sessionId: row.session_id, store, albaName, orders };
+      drawDashboard();
+    };
+    card.appendChild(btn);
+    body.appendChild(card);
+  }
+
+  function buildAlbaMessage(info){
+    const link = location.origin + location.pathname + '#' + info.code;
+    const orderLines = info.orders.join('\n');
+    return (
+`[${info.store.name}] 피업 안내 / 取货通知
+
+이름: ${info.albaName || '-'}
+아래 링크로 들어가서 진행해주세요:
+${link}
+
+주문번호:
+${orderLines}
+
+계정: ${info.store.account_id||'-'} / ${info.store.account_pw||'-'}
+픽업 링크: ${info.store.pickup_link||'-'}
+
+(접속 코드: ${info.code})
+---
+请点击上方链接查看详情并完成取货登记。
+完成后请在该页面提交"完成报告"。`
+    );
+  }
+
+  async function drawListTab(body, status){
+    body.appendChild(h('div',{class:'muted',text:'불러오는 중...'}));
+    const { data, error } = await sb.rpc('list_sessions_for_date', { p_date: new Date().toISOString().slice(0,10), p_status: status });
+    body.innerHTML = '';
+    const refreshBtn = h('button',{class:'btn-ghost btn-sm',text:'새로고침',style:'margin-bottom:10px'});
+    refreshBtn.onclick = ()=>drawDashboard();
+    body.appendChild(refreshBtn);
+    if(error){ body.appendChild(h('div',{class:'err',text:error.message})); return; }
+    const list = data || [];
+    if(list.length===0){ body.appendChild(h('div',{class:'muted',text:'내역이 없습니다'})); return; }
+    list.forEach(s=>{
+      const card = h('div',{class:'card'});
+      card.appendChild(h('div',{class:'flexbetween'},[
+        h('div',{},[h('div',{style:'font-weight:700',text:`${s.store_name} · ${s.alba_name||'이름없음'}`}), h('div',{class:'muted',text:fmtDate(s.created_at)})]),
+        h('span',{class:'statusbadge '+s.status, text: s.status==='done'?'완료':'진행중'})
+      ]));
+      card.appendChild(h('div',{class:'muted',style:'margin:6px 0 2px',text:'코드: '+s.access_code}));
+      (s.orders||[]).forEach(o=>card.appendChild(h('span',{class:'pill mono',text:o})));
+      if((s.items||[]).length){
+        const il = h('div',{style:'margin-top:8px'});
+        s.items.forEach(it=>il.appendChild(h('div',{class:'itemline'},[
+          h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim()}),
+          h('span',{class:'pill',text:'x'+it.qty})
+        ])));
+        card.appendChild(il);
+      }
+      if(s.status==='done'){
+        const total = (s.items||[]).reduce((a,i)=>a+i.qty,0);
+        const report = `${s.store_name}\n이름 : ${s.alba_name||'이름 없음'}\n${(s.orders||[]).join('\n')}\n총 ${(s.orders||[]).length}건 ${total}대\n${(s.items||[]).map(it=>`- ${it.model} ${it.capacity||''}${it.color?' '+it.color:''} x${it.qty}`).join('\n')}${s.note?'\n메모: '+s.note:''}`;
+        const rbtn = h('button',{class:'btn-ghost btn-sm',text:'실장님 보고 복사',style:'margin-top:8px'});
+        rbtn.onclick = ()=>copyText(report, rbtn);
+        card.appendChild(rbtn);
+      }
+      const delBtn = h('button',{class:'btn-danger btn-sm',text:'삭제',style:'margin-top:8px;margin-left:8px'});
+      const delConfirm = h('span',{class:'hidden muted',text:' 한번 더 누르면 삭제됩니다'});
+      let armed = false;
+      delBtn.onclick = async ()=>{
+        if(!armed){ armed=true; delConfirm.className='muted'; setTimeout(()=>{armed=false; delConfirm.className='hidden';},3000); return; }
+        await sb.rpc('delete_session', { p_session_id: s.id });
+        drawDashboard();
+      };
+      card.appendChild(delBtn);
+      card.appendChild(delConfirm);
+      body.appendChild(card);
+    });
+  }
+
+  boot();
+}
+
+// =====================================================================
+if(isAlbaCode) renderAlbaView(); else renderAdminView();
+</script>
