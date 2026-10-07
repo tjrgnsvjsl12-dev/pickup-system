@@ -133,14 +133,16 @@ function renderAlbaView(){
       none:'아직 입력된 기기가 없습니다', arrive:'도착 시간', complete:'완료 시간', note:'메모 (선택)',
       finish:'픽업 완료 보고', finishConfirm:'완료 보고를 제출하시겠습니까? 제출 후에는 수정할 수 없습니다.',
       yes:'네, 제출합니다', cancel:'취소', done:'완료되었습니다. 감사합니다!', invalid:'유효하지 않은 코드입니다.',
-      loading:'불러오는 중...', copied:'복사됨!', remove:'삭제'},
+      loading:'불러오는 중...', copied:'복사됨!', remove:'삭제',
+      wechatNote:'※ 아래 기록을 마친 후, 담당자에게 위챗으로 완료 보고를 보내주세요.'},
     zh:{ title:'取货指南', store:'门店', orders:'订单号', copyAll:'复制全部', account:'账户信息',
       id:'账号', pw:'密码', link:'取货链接', open:'打开', itemsTitle:'输入已领取设备',
       model:'型号', capacity:'容量', color:'颜色', qty:'数量', add:'添加', addedItems:'已输入设备',
       none:'尚未输入设备', arrive:'到达时间', complete:'完成时间', note:'备注（可选）',
       finish:'提交完成报告', finishConfirm:'确定要提交完成报告吗？提交后无法修改。',
       yes:'是，提交', cancel:'取消', done:'已完成，谢谢！', invalid:'无效代码。',
-      loading:'加载中...', copied:'已复制!', remove:'删除'}
+      loading:'加载中...', copied:'已复制!', remove:'删除',
+      wechatNote:'※ 完成下方记录后，请通过微信向负责人发送完成报告。'}
   };
   const code = rawHash.toUpperCase();
   let session = null;
@@ -189,36 +191,10 @@ function renderAlbaView(){
     ordersCard.appendChild(h('div',{class:'copybox mono',text: orderLines || '-'}));
     app.appendChild(ordersCard);
 
-    // account card
-    if(session.account_id || session.pickup_link){
-      const accCard = h('div',{class:'card'});
-      accCard.appendChild(h('label',{text:t.account}));
-      if(session.account_id){
-        const row = h('div',{class:'flexbetween',style:'margin-bottom:6px'},[
-          h('div',{},[h('span',{class:'muted',text:t.id+': '}), h('span',{class:'mono',text:session.account_id})]),
-        ]);
-        const b = h('button',{class:'btn-ghost btn-sm',text:'복사'}); b.onclick=()=>copyText(session.account_id,b);
-        row.appendChild(b);
-        accCard.appendChild(row);
-      }
-      if(session.account_pw){
-        const row = h('div',{class:'flexbetween',style:'margin-bottom:6px'},[
-          h('div',{},[h('span',{class:'muted',text:t.pw+': '}), h('span',{class:'mono',text:session.account_pw})]),
-        ]);
-        const b = h('button',{class:'btn-ghost btn-sm',text:'복사'}); b.onclick=()=>copyText(session.account_pw,b);
-        row.appendChild(b);
-        accCard.appendChild(row);
-      }
-      if(session.pickup_link){
-        const row = h('div',{class:'flexbetween'},[
-          h('div',{class:'muted',text:t.link}),
-        ]);
-        const openA = h('a',{href:session.pickup_link,target:'_blank',rel:'noopener'},[h('button',{class:'btn-ghost btn-sm',text:t.open})]);
-        row.appendChild(openA);
-        accCard.appendChild(row);
-      }
-      app.appendChild(accCard);
-    }
+    // note: account/pickup-link info is not shown here — that belongs to the
+    // separate Apple pickup flow (already given in the guide message sent
+    // beforehand). This page is only for recording what was picked up.
+    app.appendChild(h('div',{class:'muted',style:'margin-bottom:12px',text:t.wechatNote}));
 
     // item entry card
     const itemCard = h('div',{class:'card'});
@@ -694,22 +670,49 @@ function renderAdminView(){
     const link = location.origin + location.pathname + '#' + info.code;
     const orderLines = info.orders.join('\n');
     return (
-`[${info.store.name}] 피업 안내 / 取货通知
+`[${info.store.name}] 피업 안내
 
 이름: ${info.albaName || '-'}
-아래 링크로 들어가서 진행해주세요:
-${link}
 
-주문번호:
+① 아래 "픽업 링크"로 들어가서 계정으로 로그인하세요.
+픽업 링크: ${info.store.pickup_link||'-'}
+아이디: ${info.store.account_id||'-'}
+비밀번호: ${info.store.account_pw||'-'}
+
+② 주문번호(W로 시작)를 입력하면 큐알코드가 뜹니다. 주문번호:
 ${orderLines}
 
-계정: ${info.store.account_id||'-'} / ${info.store.account_pw||'-'}
-픽업 링크: ${info.store.pickup_link||'-'}
+③ 큐알코드를 매장 직원에게 보여주고 아이폰을 수령하세요.
+
+④ 전부 받으신 후, 아래 "기록 링크"로 들어가서 받은 아이폰의 모델/용량/색상/수량을 입력해주세요.
+기록 링크: ${link}
+
+⑤ 입력을 마친 후, 담당자에게 위챗으로 완료 보고를 보내주세요.
 
 (접속 코드: ${info.code})
+
 ---
-请点击上方链接查看详情并完成取货登记。
-完成后请在该页面提交"完成报告"。`
+
+[${info.store.name}] 取货指南
+
+姓名: ${info.albaName || '-'}
+
+① 请点击下方"取货链接"登录账户。
+取货链接: ${info.store.pickup_link||'-'}
+账号: ${info.store.account_id||'-'}
+密码: ${info.store.account_pw||'-'}
+
+② 输入以W开头的订单号后会生成二维码。订单号如下：
+${orderLines}
+
+③ 向店员出示二维码即可领取iPhone。
+
+④ 全部领取完成后，请点击下方"记录链接"，输入领取的iPhone型号/容量/颜色/数量。
+记录链接: ${link}
+
+⑤ 输入完成后，请通过微信向负责人发送完成报告。
+
+(登录代码: ${info.code})`
     );
   }
 
