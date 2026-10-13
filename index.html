@@ -509,7 +509,7 @@ function renderAdminView(){
       sectionAlba:'알바 관리', sectionPurchase:'구매 기록',
       tabSend:'알바 보내기', tabProgress:'진행중', tabDone:'완료 기록', tabSummary:'수량 집계',
       tabMine:'내 구매 입력', tabAll:'전체 현황',
-      store:'매장', albaName:'알바 이름', orders:'주문번호 (한 줄에 하나씩)',
+      store:'매장', albaName:'알바 이름', albaNamePh:'예: 왕멍', orders:'주문번호 (한 줄에 하나씩)',
       selectStore:'매장을 선택해주세요', ordersRequired:'주문번호를 1개 이상 입력해주세요',
       creating:'생성 중...', createSession:'세션 생성', sessionCreated:'세션이 생성되었습니다 ✓',
       accessCode:'접속 코드', guideMsg:'알바 안내 메시지 (복사해서 전달하세요)', copyAll:'메시지 전체 복사',
@@ -545,7 +545,7 @@ function renderAdminView(){
       sectionAlba:'兼职管理', sectionPurchase:'购买记录',
       tabSend:'发送兼职通知', tabProgress:'进行中', tabDone:'完成记录', tabSummary:'数量汇总',
       tabMine:'我的购买记录', tabAll:'全部现况',
-      store:'门店', albaName:'兼职姓名', orders:'订单号（每行一个）',
+      store:'门店', albaName:'兼职姓名', albaNamePh:'例：王猛', orders:'订单号（每行一个）',
       selectStore:'请选择门店', ordersRequired:'请至少输入一个订单号',
       creating:'生成中...', createSession:'创建会话', sessionCreated:'会话已创建 ✓',
       accessCode:'登录代码', guideMsg:'兼职指南消息（请复制后发送）', copyAll:'复制全部消息',
@@ -986,7 +986,7 @@ function renderAdminView(){
     const card = h('div',{class:'card'});
     const sel = h('select',{});
     stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
-    const nameInput = h('input',{placeholder:'예: 왕멍'});
+    const nameInput = h('input',{placeholder:t('albaNamePh')});
     card.appendChild(h('div',{class:'row'},[
       (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('store')})); d.appendChild(sel); return d; })(),
       (()=>{ const d=h('div',{style:'flex:2'}); d.appendChild(h('label',{text:t('albaName')})); d.appendChild(nameInput); return d; })()
