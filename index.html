@@ -188,9 +188,16 @@ function buildCopyText(list, groupBy){
   return lines.join('\n').trim();
 }
 
-const MODEL_OPTIONS = ['iPhone 18 Pro', 'iPhone 18 Pro Max'];
+// iPhone Duo is the priority item right now, so it leads the list.
+const MODEL_OPTIONS = ['iPhone Duo', 'iPhone 18 Pro', 'iPhone 18 Pro Max'];
 const CAPACITY_OPTIONS = ['256GB', '512GB', '1TB', '2TB'];
-const COLOR_OPTIONS = ['Burgundy', 'Black', 'Silver', 'Glacier'];
+const COLOR_OPTIONS_BY_MODEL = {
+  'iPhone Duo': ['Star White', 'Night Sky'],
+  'iPhone 18 Pro': ['Burgundy', 'Black', 'Silver', 'Glacier'],
+  'iPhone 18 Pro Max': ['Burgundy', 'Black', 'Silver', 'Glacier']
+};
+const COLOR_OPTIONS = COLOR_OPTIONS_BY_MODEL['iPhone 18 Pro']; // default/fallback set
+function colorOptionsFor(model){ return COLOR_OPTIONS_BY_MODEL[model] || COLOR_OPTIONS; }
 const CARD_COMPANY_OPTIONS = ['부강', 'CH'];
 const QTY_OPTIONS = ['1','2','3','4','5','6','7','8','9','10'];
 
@@ -201,19 +208,33 @@ function selectOf(options, placeholder){
   return sel;
 }
 
-function chipGroup(options, initial){
+function chipGroup(options, initial, onChange){
   let value = initial || '';
   const wrap = h('div',{class:'chiprow'});
-  const buttons = options.map(opt=>{
-    const b = h('button',{type:'button', class:'chip-btn'+(opt===value?' selected':''), text:opt});
-    b.onclick = ()=>{ value = opt; buttons.forEach(x=>x.classList.remove('selected')); b.classList.add('selected'); };
-    wrap.appendChild(b);
-    return b;
-  });
+  let buttons = [];
+  function build(opts){
+    wrap.innerHTML = '';
+    buttons = opts.map(opt=>{
+      const b = h('button',{type:'button', class:'chip-btn'+(opt===value?' selected':''), text:opt});
+      b.onclick = ()=>{
+        value = opt;
+        buttons.forEach(x=>x.classList.remove('selected'));
+        b.classList.add('selected');
+        if(onChange) onChange(value);
+      };
+      wrap.appendChild(b);
+      return b;
+    });
+  }
+  build(options);
   return {
     el: wrap,
     get value(){ return value; },
-    set value(v){ value=v; buttons.forEach(b=>b.classList.toggle('selected', b.textContent===v)); }
+    set value(v){ value=v; buttons.forEach(b=>b.classList.toggle('selected', b.textContent===v)); },
+    setOptions(opts, keepIfPresent){
+      if(!(keepIfPresent && opts.includes(value))) value = '';
+      build(opts);
+    }
   };
 }
 
@@ -295,9 +316,9 @@ function renderAlbaView(){
     // item entry card
     const itemCard = h('div',{class:'card'});
     itemCard.appendChild(h('label',{text:t.itemsTitle}));
-    const modelSel = chipGroup(MODEL_OPTIONS);
+    const modelSel = chipGroup(MODEL_OPTIONS, '', (m)=>colorSel.setOptions(colorOptionsFor(m)));
     const capSel = chipGroup(CAPACITY_OPTIONS);
-    const colorSel = chipGroup(COLOR_OPTIONS);
+    const colorSel = chipGroup(colorOptionsFor(MODEL_OPTIONS[0]));
     itemCard.appendChild(h('label',{text:t.model})); itemCard.appendChild(modelSel.el);
     itemCard.appendChild(h('label',{text:t.capacity})); itemCard.appendChild(capSel.el);
     itemCard.appendChild(h('label',{text:t.color})); itemCard.appendChild(colorSel.el);
@@ -401,6 +422,7 @@ function renderAdminView(){
   let purchaseTab = 'mine'; // 'mine' | 'all'
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
+  let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
   let editingPurchase = null; // the purchase row being edited, or null
   let editingItemId = null; // session_item id being edited, or null
   let lang = (function(){ try{ return localStorage.getItem('pm_admin_lang') || 'ko'; }catch(e){ return 'ko'; } })();
@@ -522,11 +544,12 @@ function renderAdminView(){
   }
 
   async function afterLogin(){
-    const [{ data: storeData, error: storeErr }, { data: profData, error: profErr }] = await Promise.all([
-      sb.rpc('list_stores'), sb.rpc('get_my_profile')
+    const [{ data: storeData, error: storeErr }, { data: profData, error: profErr }, { data: settingsData, error: settingsErr }] = await Promise.all([
+      sb.rpc('list_stores'), sb.rpc('get_my_profile'), sb.rpc('get_app_settings')
     ]);
     if(!storeErr) stores = storeData || [];
     if(!profErr) myProfile = profData;
+    if(!settingsErr && settingsData) appSettings = settingsData;
     drawDashboard();
   }
 
@@ -569,30 +592,18 @@ function renderAdminView(){
   }
 
   function drawStoreSettingsTab(body){
+    // One shared pickup account — the same account/link is used for every store,
+    // so this is a single global form rather than per-store settings.
     const card = h('div',{class:'card'});
     card.appendChild(h('label',{text:t('storeSettings')}));
     card.appendChild(h('div',{class:'muted',style:'margin:-2px 0 10px',text:t('storeSaveHint')}));
 
-    const sel = h('select',{});
-    stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
-    card.appendChild(h('label',{text:t('selectStoreToEdit')}));
-    card.appendChild(sel);
-
-    const linkInput = h('input',{placeholder:'https://...'});
-    const idInput = h('input',{placeholder:''});
-    const pwInput = h('input',{placeholder:''});
+    const linkInput = h('input',{placeholder:'https://...', value: appSettings.pickup_link || ''});
+    const idInput = h('input',{placeholder:'', value: appSettings.account_id || ''});
+    const pwInput = h('input',{placeholder:'', value: appSettings.account_pw || ''});
     card.appendChild(h('label',{text:t('pickupLink')})); card.appendChild(linkInput);
     card.appendChild(h('label',{text:t('accountId')})); card.appendChild(idInput);
     card.appendChild(h('label',{text:t('accountPw')})); card.appendChild(pwInput);
-
-    function fillFromStore(){
-      const s = stores.find(x=>x.id===sel.value);
-      linkInput.value = (s && s.pickup_link) || '';
-      idInput.value = (s && s.account_id) || '';
-      pwInput.value = (s && s.account_pw) || '';
-    }
-    sel.onchange = fillFromStore;
-    fillFromStore();
 
     const msg = h('div',{class:'ok hidden'});
     card.appendChild(msg);
@@ -600,14 +611,12 @@ function renderAdminView(){
     btn.onclick = async ()=>{
       msg.className = 'hidden';
       btn.disabled = true; const oldText = btn.textContent; btn.textContent = t('saving');
-      const { error } = await sb.rpc('update_store_credentials', {
-        p_store_id: sel.value, p_account_id: idInput.value.trim(),
-        p_account_pw: pwInput.value.trim(), p_pickup_link: linkInput.value.trim()
+      const { error } = await sb.rpc('update_app_settings', {
+        p_account_id: idInput.value.trim(), p_account_pw: pwInput.value.trim(), p_pickup_link: linkInput.value.trim()
       });
       btn.disabled = false; btn.textContent = oldText;
       if(error){ msg.className='err'; msg.textContent = error.message; return; }
-      const s = stores.find(x=>x.id===sel.value);
-      if(s){ s.pickup_link = linkInput.value.trim(); s.account_id = idInput.value.trim(); s.account_pw = pwInput.value.trim(); }
+      appSettings = { account_id: idInput.value.trim(), account_pw: pwInput.value.trim(), pickup_link: linkInput.value.trim() };
       msg.className = 'ok'; msg.textContent = t('storeSaveDone');
     };
     card.appendChild(btn);
@@ -640,9 +649,9 @@ function renderAdminView(){
     if(ed) sel.value = ed.store_id;
     card.appendChild(sel);
 
-    const modelSel = chipGroup(MODEL_OPTIONS, ed && ed.model);
+    const modelSel = chipGroup(MODEL_OPTIONS, ed && ed.model, (m)=>colorSel.setOptions(colorOptionsFor(m)));
     const capSel = chipGroup(CAPACITY_OPTIONS, ed && ed.capacity);
-    const colorSel = chipGroup(COLOR_OPTIONS, ed && ed.color);
+    const colorSel = chipGroup(colorOptionsFor((ed && ed.model) || MODEL_OPTIONS[0]), ed && ed.color);
     card.appendChild(h('label',{text:t('model')})); card.appendChild(modelSel.el);
     card.appendChild(h('label',{text:t('capacity')})); card.appendChild(capSel.el);
     card.appendChild(h('label',{text:t('color')})); card.appendChild(colorSel.el);
@@ -933,9 +942,9 @@ function renderAdminView(){
 이름: ${info.albaName || '-'}
 
 ① 아래 "픽업 링크"로 들어가서 계정으로 로그인하세요.
-픽업 링크: ${info.store.pickup_link||'-'}
-아이디: ${info.store.account_id||'-'}
-비밀번호: ${info.store.account_pw||'-'}
+픽업 링크: ${appSettings.pickup_link||'-'}
+아이디: ${appSettings.account_id||'-'}
+비밀번호: ${appSettings.account_pw||'-'}
 
 ② 주문번호(W로 시작)를 입력하면 큐알코드가 뜹니다. 주문번호:
 ${orderLines}
@@ -956,9 +965,9 @@ ${orderLines}
 姓名: ${info.albaName || '-'}
 
 ① 请点击下方"取货链接"登录账户。
-取货链接: ${info.store.pickup_link||'-'}
-账号: ${info.store.account_id||'-'}
-密码: ${info.store.account_pw||'-'}
+取货链接: ${appSettings.pickup_link||'-'}
+账号: ${appSettings.account_id||'-'}
+密码: ${appSettings.account_pw||'-'}
 
 ② 输入以W开头的订单号后会生成二维码。订单号如下：
 ${orderLines}
@@ -997,9 +1006,9 @@ ${orderLines}
         s.items.forEach(it=>{
           if(editingItemId === it.id){
             const editWrap = h('div',{style:'padding:8px 0;border-bottom:1px solid var(--border)'});
-            const mSel = chipGroup(MODEL_OPTIONS, it.model);
+            const mSel = chipGroup(MODEL_OPTIONS, it.model, (m)=>colSel.setOptions(colorOptionsFor(m)));
             const cSel = chipGroup(CAPACITY_OPTIONS, it.capacity);
-            const colSel = chipGroup(COLOR_OPTIONS, it.color);
+            const colSel = chipGroup(colorOptionsFor(it.model || MODEL_OPTIONS[0]), it.color);
             const qInput = h('input',{type:'number',min:'1',step:'1',value:String(it.qty)});
             editWrap.appendChild(h('label',{text:t('model')})); editWrap.appendChild(mSel.el);
             editWrap.appendChild(h('label',{text:t('capacity')})); editWrap.appendChild(cSel.el);
