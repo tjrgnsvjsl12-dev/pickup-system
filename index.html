@@ -69,6 +69,22 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .lockmsg{text-align:center;padding:40px 10px;color:var(--muted)}
 .inapp-banner{background:var(--chip);border-bottom:1px solid var(--border);padding:10px 16px;font-size:12.5px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-wrap:wrap;position:sticky;top:0;z-index:10}
 .inapp-banner button{flex:none;white-space:nowrap}
+.sumhead{display:flex;justify-content:space-between;align-items:baseline;margin-bottom:12px;gap:10px}
+.sumhead .label{font-size:12.5px;color:var(--muted);font-weight:700}
+.sumhead .bignum{font-size:30px;font-weight:800;color:var(--accent);line-height:1;font-variant-numeric:tabular-nums}
+.sumhead .bignum .u{font-size:14px;color:var(--muted);font-weight:700;margin-left:2px}
+.sumtable{width:100%;border-collapse:collapse;table-layout:fixed}
+.sumtable th,.sumtable td{padding:9px 6px;text-align:center;font-size:13.5px;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
+.sumtable th{color:var(--muted);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.03em;white-space:nowrap}
+.sumtable td:first-child,.sumtable th:first-child{text-align:left}
+.sumtable td:nth-child(2){text-align:left}
+.sumtable tbody tr:nth-child(even){background:var(--surface-2)}
+.sumtable tfoot td{font-weight:800;font-size:15px;background:var(--chip);border-top:2px solid var(--border);border-bottom:none;color:var(--accent)}
+.sumtable .storecell{font-weight:700;color:var(--fg)}
+.sumtable .qtycell{font-weight:700}
+.sumtable .qtycell.zero{color:var(--muted);font-weight:400;opacity:.45}
+.colorsw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;border:1px solid var(--border)}
+.sumwrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
 </style>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+KR:wght@400;600;700&family=Noto+Sans+SC:wght@400;600;700&display=swap">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
@@ -200,6 +216,12 @@ const COLOR_OPTIONS = COLOR_OPTIONS_BY_MODEL['iPhone 18 Pro']; // default/fallba
 function colorOptionsFor(model){ return COLOR_OPTIONS_BY_MODEL[model] || COLOR_OPTIONS; }
 const CARD_COMPANY_OPTIONS = ['부강', 'CH'];
 const QTY_OPTIONS = ['1','2','3','4','5','6','7','8','9','10'];
+// small dot swatch next to each color name in quantity-summary tables, so colors are
+// told apart at a glance instead of just by reading the English name.
+const COLOR_SWATCH = {
+  'Star White': '#f3efe6', 'Night Sky': '#1f2430',
+  'Burgundy': '#5c1a22', 'Black': '#161616', 'Silver': '#cfd0d2', 'Glacier': '#dce8ec'
+};
 
 function selectOf(options, placeholder){
   const sel = h('select',{});
@@ -1094,17 +1116,20 @@ ${orderLines}
     const list = data || [];
     if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('none')})); restoreScrollIfPending(); return; }
 
-    // quantity summary by store x capacity, for the sessions currently in view —
-    // useful right now since pickups are basically all iPhone Duo, so capacity is
-    // the thing that actually needs tracking per store.
-    const byStoreCap = {};
+    // quantity summary by store x color x capacity, for the sessions currently in
+    // view — laid out as one scannable table instead of nested text lines, since
+    // pickups are basically all iPhone Duo and store/color/capacity is exactly
+    // what needs tracking at a glance.
+    const byStoreColorCap = {}; // store -> color -> capacity -> qty
     const capTotals = {};
     let grandTotal = 0;
     list.forEach(s=>{
       (s.items||[]).forEach(it=>{
         const cap = it.capacity || '-';
-        byStoreCap[s.store_name] = byStoreCap[s.store_name] || {};
-        byStoreCap[s.store_name][cap] = (byStoreCap[s.store_name][cap]||0) + it.qty;
+        const col = it.color || '-';
+        byStoreColorCap[s.store_name] = byStoreColorCap[s.store_name] || {};
+        byStoreColorCap[s.store_name][col] = byStoreColorCap[s.store_name][col] || {};
+        byStoreColorCap[s.store_name][col][cap] = (byStoreColorCap[s.store_name][col][cap]||0) + it.qty;
         capTotals[cap] = (capTotals[cap]||0) + it.qty;
         grandTotal += it.qty;
       });
@@ -1113,26 +1138,47 @@ ${orderLines}
     Object.keys(capTotals).forEach(c=>{ if(!capsPresent.includes(c)) capsPresent.push(c); });
     if(capsPresent.length){
       const sumCard = h('div',{class:'card'});
-      sumCard.appendChild(h('label',{text:t('qtySummary')}));
-      Object.keys(byStoreCap).forEach(storeName=>{
-        const caps = byStoreCap[storeName];
-        const storeTotal = Object.values(caps).reduce((a,n)=>a+n,0);
-        sumCard.appendChild(h('div',{class:'flexbetween',style:'margin-top:8px'},[
-          h('div',{style:'font-weight:600',text:storeName}),
-          h('span',{class:'pill',text:storeTotal+t('unit')})
-        ]));
-        capsPresent.filter(c=>caps[c]).forEach(c=>{
-          sumCard.appendChild(h('div',{class:'itemline'},[h('span',{text:c}), h('span',{class:'pill',text:caps[c]+t('unit')})]));
+      sumCard.appendChild(h('div',{class:'sumhead'},[
+        h('div',{class:'label',text:t('qtySummary')}),
+        h('div',{class:'bignum'},[h('span',{text:String(grandTotal)}), h('span',{class:'u',text:t('unit')})])
+      ]));
+
+      const thead = h('thead',{},[h('tr',{},[
+        h('th',{text:t('store')}),
+        h('th',{text:t('color')}),
+        ...capsPresent.map(c=>h('th',{text:c})),
+        h('th',{text:t('qty')})
+      ])]);
+
+      const tbody = h('tbody',{});
+      Object.keys(byStoreColorCap).sort().forEach(storeName=>{
+        const colorMap = byStoreColorCap[storeName];
+        Object.keys(colorMap).sort().forEach((colorName, idx)=>{
+          const caps = colorMap[colorName];
+          const rowTotal = Object.values(caps).reduce((a,n)=>a+n,0);
+          const sw = COLOR_SWATCH[colorName];
+          tbody.appendChild(h('tr',{},[
+            h('td',{class:'storecell', text: idx===0 ? storeName : ''}),
+            h('td',{},[
+              sw ? h('span',{class:'colorsw',style:'background:'+sw}) : null,
+              h('span',{text:colorName})
+            ]),
+            ...capsPresent.map(c=>h('td',{class:'qtycell'+(caps[c]?'':' zero'), text: caps[c] ? String(caps[c]) : '–'})),
+            h('td',{class:'qtycell',text:String(rowTotal)})
+          ]));
         });
       });
-      sumCard.appendChild(h('hr',{}));
-      capsPresent.forEach(c=>{
-        sumCard.appendChild(h('div',{class:'itemline'},[h('span',{style:'font-weight:600',text:c}), h('span',{class:'pill',text:(capTotals[c]||0)+t('unit')})]));
-      });
-      sumCard.appendChild(h('div',{class:'flexbetween',style:'margin-top:8px'},[
-        h('div',{style:'font-weight:700',text:t('grandTotal')}),
-        h('span',{class:'pill',text:grandTotal+t('unit')})
-      ]));
+
+      const tfoot = h('tfoot',{},[h('tr',{},[
+        h('td',{text:t('grandTotal')}),
+        h('td',{text:''}),
+        ...capsPresent.map(c=>h('td',{text:String(capTotals[c]||0)})),
+        h('td',{text:String(grandTotal)})
+      ])]);
+
+      const tableWrap = h('div',{class:'sumwrap'});
+      tableWrap.appendChild(h('table',{class:'sumtable'},[thead, tbody, tfoot]));
+      sumCard.appendChild(tableWrap);
       listWrap.appendChild(sumCard);
     }
 
