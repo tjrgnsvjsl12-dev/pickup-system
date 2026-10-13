@@ -445,6 +445,7 @@ function renderAdminView(){
       checkItem:'모델/용량/색상/수량을 모두 확인해주세요',
       save:'저장', cancel:'취소', edit:'수정', remove:'삭제',
       note:'메모: ', reportCopy:'실장님 보고 복사', confirmDelete:'한번 더 누르면 삭제됩니다',
+      arriveLabel:'도착', completeLabel:'완료',
       editPurchase:'구매 기록 수정', purchaseDate:'구매 날짜',
       selectCardCo:'카드 회사 선택', cardCo:'카드 회사', cardNum:'카드번호', noteOptional:'메모 (선택)',
       selectModel:'모델을 선택해주세요', selectCapacity:'용량을 선택해주세요', selectColor:'색상을 선택해주세요',
@@ -477,6 +478,7 @@ function renderAdminView(){
       checkItem:'请确认型号/容量/颜色/数量',
       save:'保存', cancel:'取消', edit:'编辑', remove:'删除',
       note:'备注：', reportCopy:'复制经理报告', confirmDelete:'再次点击即可删除',
+      arriveLabel:'到达', completeLabel:'完成',
       editPurchase:'编辑购买记录', purchaseDate:'购买日期',
       selectCardCo:'选择卡公司', cardCo:'卡公司', cardNum:'卡号', noteOptional:'备注（可选）',
       selectModel:'请选择型号', selectCapacity:'请选择容量', selectColor:'请选择颜色',
@@ -1053,6 +1055,13 @@ ${orderLines}
       }
       if(s.status==='done'){
         const total = (s.items||[]).reduce((a,i)=>a+i.qty,0);
+        if(s.arrive_time || s.complete_time){
+          card.appendChild(h('div',{class:'muted',style:'margin-top:6px',
+            text:[s.arrive_time?`${t('arriveLabel')} ${s.arrive_time}`:'', s.complete_time?`${t('completeLabel')} ${s.complete_time}`:''].filter(Boolean).join(' · ')}));
+        }
+        if(s.note){
+          card.appendChild(h('div',{class:'copybox',style:'margin-top:6px',text:s.note}));
+        }
         const report = `${s.store_name}\n이름 : ${s.alba_name||'이름 없음'}\n${(s.orders||[]).join('\n')}\n총 ${(s.orders||[]).length}건 ${total}대\n${(s.items||[]).map(it=>`- ${it.model} ${it.capacity||''}${it.color?' '+it.color:''} x${it.qty}`).join('\n')}${s.note?'\n메모: '+s.note:''}`;
         const rbtn = h('button',{class:'btn-ghost btn-sm',text:t('reportCopy'),style:'margin-top:8px'});
         rbtn.onclick = ()=>copyText(report, rbtn);
