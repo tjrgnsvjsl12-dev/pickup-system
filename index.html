@@ -481,6 +481,7 @@ function renderAdminView(){
   let editingItemId = null; // session_item id being edited, or null
   let listDateFrom = new Date().toISOString().slice(0,10); // date range for 진행중/완료 기록 tabs
   let listDateTo = new Date().toISOString().slice(0,10);
+  let listStoreFilter = null; // store name to filter 진행중/완료 기록 by, or null for 전체
   let summaryDateFrom = new Date().toISOString().slice(0,10); // separate date range for the 수량 집계 tab
   let summaryDateTo = new Date().toISOString().slice(0,10);
   let lang = (function(){ try{ return localStorage.getItem('pm_admin_lang') || 'ko'; }catch(e){ return 'ko'; } })();
@@ -519,7 +520,7 @@ function renderAdminView(){
       model:'모델', capacity:'용량', color:'색상', qty:'수량',
       checkItem:'모델/용량/색상/수량을 모두 확인해주세요',
       save:'저장', cancel:'취소', edit:'수정', remove:'삭제',
-      note:'메모: ', reportCopy:'실장님 보고 복사', confirmDelete:'한번 더 누르면 삭제됩니다',
+      note:'메모: ', reportCopy:'복사', confirmDelete:'한번 더 누르면 삭제됩니다',
       arriveLabel:'도착', completeLabel:'완료',
       markPaid:'송금 완료 체크', unmarkPaid:'송금 완료 취소', paidBy:'{name}님이 {time} 송금 처리함', paidBadge:'송금완료',
       today:'오늘', last7:'최근 7일', last30:'최근 30일',
@@ -555,7 +556,7 @@ function renderAdminView(){
       model:'型号', capacity:'容量', color:'颜色', qty:'数量',
       checkItem:'请确认型号/容量/颜色/数量',
       save:'保存', cancel:'取消', edit:'编辑', remove:'删除',
-      note:'备注：', reportCopy:'复制经理报告', confirmDelete:'再次点击即可删除',
+      note:'备注：', reportCopy:'复制', confirmDelete:'再次点击即可删除',
       arriveLabel:'到达', completeLabel:'完成',
       markPaid:'标记已转账', unmarkPaid:'取消已转账', paidBy:'{name} 于 {time} 已处理转账', paidBadge:'已转账',
       today:'今天', last7:'最近7天', last30:'最近30天',
@@ -1118,13 +1119,53 @@ ${orderLines}
     if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); restoreScrollIfPending(); return; }
     const list = data || [];
     if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('none')})); restoreScrollIfPending(); return; }
-    list.forEach(s=>{
+
+    // store filter — 전체 first, then one chip per store that actually has a
+    // session in the current range, so a busy list can be narrowed to just one
+    // store's pickups without a second round-trip to the server.
+    const storeNames = [...new Set(list.map(s=>s.store_name))].sort();
+    if(listStoreFilter && !storeNames.includes(listStoreFilter)) listStoreFilter = null; // stale pick from a previous range
+
+    const cardsWrap = h('div');
+    function renderCards(){
+      cardsWrap.innerHTML = '';
+      const filtered = listStoreFilter ? list.filter(s=>s.store_name===listStoreFilter) : list;
+      if(filtered.length===0){ cardsWrap.appendChild(h('div',{class:'muted',text:t('none')})); return; }
+      filtered.forEach(s=>cardsWrap.appendChild(renderSessionCard(s)));
+    }
+
+    if(storeNames.length > 1){
+      const filterRow = h('div',{class:'chiprow',style:'margin-bottom:10px'});
+      const chipBtns = {};
+      const applyFilter = ()=>{
+        Object.keys(chipBtns).forEach(key=>chipBtns[key].classList.toggle('selected', key===(listStoreFilter||'__all__')));
+        renderCards();
+      };
+      const allChip = h('button',{type:'button', class:'chip-btn', text:t('allStores')});
+      allChip.onclick = ()=>{ listStoreFilter = null; applyFilter(); };
+      chipBtns['__all__'] = allChip;
+      filterRow.appendChild(allChip);
+      storeNames.forEach(name=>{
+        const chip = h('button',{type:'button', class:'chip-btn', text:name});
+        chip.onclick = ()=>{ listStoreFilter = name; applyFilter(); };
+        chipBtns[name] = chip;
+        filterRow.appendChild(chip);
+      });
+      listWrap.appendChild(filterRow);
+      applyFilter();
+    } else {
+      listStoreFilter = null;
+      renderCards();
+    }
+    listWrap.appendChild(cardsWrap);
+    restoreScrollIfPending();
+
+    function renderSessionCard(s){
       const card = h('div',{class:'card'});
       card.appendChild(h('div',{class:'flexbetween'},[
         h('div',{},[h('div',{style:'font-weight:700',text:`${s.store_name} · ${s.alba_name||t('noName')}`}), h('div',{class:'muted',text:fmtDate(s.created_at, lang==='zh')})]),
         h('span',{class:'statusbadge '+s.status, text: s.status==='done'?t('statusDone'):t('statusProgress')})
       ]));
-      card.appendChild(h('div',{class:'muted',style:'margin:6px 0 2px',text:t('codeLabel')+s.access_code}));
       (s.orders||[]).forEach(o=>card.appendChild(h('span',{class:'pill mono',text:o})));
       if((s.items||[]).length){
         const il = h('div',{style:'margin-top:8px'});
@@ -1209,9 +1250,8 @@ ${orderLines}
       };
       card.appendChild(delBtn);
       card.appendChild(delConfirm);
-      listWrap.appendChild(card);
-    });
-    restoreScrollIfPending();
+      return card;
+    }
   }
 
   // builds the store x color x capacity quantity table as its own card, used only
