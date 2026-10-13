@@ -274,7 +274,8 @@ function renderAlbaView(){
       yes:'네, 제출합니다', cancel:'취소', done:'완료되었습니다. 감사합니다!', invalid:'유효하지 않은 코드입니다.',
       loading:'불러오는 중...', copied:'복사됨!', remove:'삭제',
       wechatNote:'※ 아래 기록을 마친 후, 담당자에게 위챗으로 완료 보고를 보내주세요.',
-      alipay:'알리페이 계좌', realName:'성명 (중문 / 영문 대문자)', realNamePh:'예: 董晓灿 DONG XIAOCAN',
+      alipay:'수령 계좌 (알리페이 또는 국내계좌·은행명)', alipayPh:'예: 알리페이 138xxxx8000 또는 국민은행 123456-01-123456',
+      realName:'성명', realNamePh:'예: 홍길동 / 董晓灿 DONG XIAOCAN',
       wechatReportLabel:'위챗 보고문 (복사해서 담당자에게 보내세요)', copyReport:'보고문 복사',
       fillTimesHint:'도착/완료 시간을 입력하면 보고문이 자동으로 완성됩니다.'},
     zh:{ title:'取货指南', store:'门店', orders:'订单号', copyAll:'复制全部', account:'账户信息',
@@ -285,7 +286,8 @@ function renderAlbaView(){
       yes:'是，提交', cancel:'取消', done:'已完成，谢谢！', invalid:'无效代码。',
       loading:'加载中...', copied:'已复制!', remove:'删除',
       wechatNote:'※ 完成下方记录后，请通过微信向负责人发送完成报告。',
-      alipay:'支付宝账号', realName:'姓名（中文 / 英文大写）', realNamePh:'例：董晓灿 DONG XIAOCAN',
+      alipay:'收款账户（支付宝或韩国银行账户）', alipayPh:'例：支付宝138xxxx8000 或 국민은행 123456-01-123456',
+      realName:'姓名', realNamePh:'例：董晓灿 DONG XIAOCAN / 韩文姓名',
       wechatReportLabel:'微信报告文本（复制后发送给负责人）', copyReport:'复制报告文本',
       fillTimesHint:'填写到达/完成时间后，报告文本会自动生成。'}
   };
@@ -405,7 +407,7 @@ function renderAlbaView(){
     const completeInput = h('input',{type:'time'});
     doneCard.appendChild(completeInput);
     doneCard.appendChild(h('label',{text:t.alipay}));
-    const alipayInput = h('input',{placeholder:''});
+    const alipayInput = h('input',{placeholder:t.alipayPh});
     doneCard.appendChild(alipayInput);
     doneCard.appendChild(h('label',{text:t.realName}));
     const nameInput2 = h('input',{placeholder:t.realNamePh});
@@ -1022,7 +1024,7 @@ function renderAdminView(){
     const link = location.origin + location.pathname + '?t=' + (info.sessionId||info.code).slice(0,8) + '#' + info.code;
     const orderLines = info.orders.join('\n');
     return (
-`[${info.store.name}] 피업 안내
+`[${info.store.name}] 픽업 안내
 
 이름: ${info.albaName || '-'}
 
@@ -1042,7 +1044,7 @@ ${orderLines}
 ⑤ 입력을 마친 후, 담당자에게 위챗으로 아래 양식 그대로 완료 보고를 보내주세요.
 
 [보고 양식]
-알리페이 계좌,성명(중문) 성명(영문 대문자)
+수령계좌(알리페이 또는 국내계좌·은행명),성명
 몇시 픽업시작 몇건 몇대 수령 몇시 퇴근
 
 (접속 코드: ${info.code})
@@ -1069,7 +1071,7 @@ ${orderLines}
 ⑤ 输入完成后，请严格按照下方格式通过微信向负责人发送完成报告（格式中的韩文用词请勿更改）。
 
 [报告格式]
-支付宝账号,中文姓名 英文姓名(大写)
+收款账户（支付宝或韩国银行账户·开户行名称），姓名
 몇시 픽업시작 몇건 몇대 수령 몇시 퇴근
 ※ 몇시=几点，픽업시작=开始取货，몇건=几件，몇대=几台，수령=领取，퇴근=下班
 
