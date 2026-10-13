@@ -251,7 +251,10 @@ function renderAlbaView(){
       finish:'픽업 완료 보고', finishConfirm:'완료 보고를 제출하시겠습니까? 제출 후에는 수정할 수 없습니다.',
       yes:'네, 제출합니다', cancel:'취소', done:'완료되었습니다. 감사합니다!', invalid:'유효하지 않은 코드입니다.',
       loading:'불러오는 중...', copied:'복사됨!', remove:'삭제',
-      wechatNote:'※ 아래 기록을 마친 후, 담당자에게 위챗으로 완료 보고를 보내주세요.'},
+      wechatNote:'※ 아래 기록을 마친 후, 담당자에게 위챗으로 완료 보고를 보내주세요.',
+      alipay:'알리페이 계좌', realName:'성명 (중문 / 영문 대문자)', realNamePh:'예: 董晓灿 DONG XIAOCAN',
+      wechatReportLabel:'위챗 보고문 (복사해서 담당자에게 보내세요)', copyReport:'보고문 복사',
+      fillTimesHint:'도착/완료 시간을 입력하면 보고문이 자동으로 완성됩니다.'},
     zh:{ title:'取货指南', store:'门店', orders:'订单号', copyAll:'复制全部', account:'账户信息',
       id:'账号', pw:'密码', link:'取货链接', open:'打开', itemsTitle:'输入已领取设备',
       model:'型号', capacity:'容量', color:'颜色', qty:'数量', add:'添加', addedItems:'已输入设备',
@@ -259,7 +262,10 @@ function renderAlbaView(){
       finish:'提交完成报告', finishConfirm:'确定要提交完成报告吗？提交后无法修改。',
       yes:'是，提交', cancel:'取消', done:'已完成，谢谢！', invalid:'无效代码。',
       loading:'加载中...', copied:'已复制!', remove:'删除',
-      wechatNote:'※ 完成下方记录后，请通过微信向负责人发送完成报告。'}
+      wechatNote:'※ 完成下方记录后，请通过微信向负责人发送完成报告。',
+      alipay:'支付宝账号', realName:'姓名（中文 / 英文大写）', realNamePh:'例：董晓灿 DONG XIAOCAN',
+      wechatReportLabel:'微信报告文本（复制后发送给负责人）', copyReport:'复制报告文本',
+      fillTimesHint:'填写到达/完成时间后，报告文本会自动生成。'}
   };
   const code = rawHash.toUpperCase();
   let session = null;
@@ -376,15 +382,41 @@ function renderAlbaView(){
     doneCard.appendChild(h('label',{text:t.complete}));
     const completeInput = h('input',{type:'time'});
     doneCard.appendChild(completeInput);
-    doneCard.appendChild(h('label',{text:t.note}));
-    const noteInput = h('textarea',{});
-    doneCard.appendChild(noteInput);
+    doneCard.appendChild(h('label',{text:t.alipay}));
+    const alipayInput = h('input',{placeholder:''});
+    doneCard.appendChild(alipayInput);
+    doneCard.appendChild(h('label',{text:t.realName}));
+    const nameInput2 = h('input',{placeholder:t.realNamePh});
+    doneCard.appendChild(nameInput2);
+
+    // live-built WeChat report text — this is also what gets saved as the record's note,
+    // so the admin/managers see exactly what was sent.
+    doneCard.appendChild(h('label',{text:t.wechatReportLabel,style:'margin-top:10px'}));
+    const reportBox = h('div',{class:'copybox mono'});
+    doneCard.appendChild(reportBox);
+    const reportCopyBtn = h('button',{class:'btn-ghost',text:t.copyReport,style:'width:100%'});
+    reportCopyBtn.onclick = ()=>copyText(reportBox.textContent, reportCopyBtn);
+    doneCard.appendChild(reportCopyBtn);
+    doneCard.appendChild(h('div',{class:'muted',style:'margin:6px 0 0',text:t.fillTimesHint}));
+
+    function buildReportText(){
+      const totalQty = items.reduce((a,i)=>a+i.qty,0);
+      const orderCount = (session.order_numbers||[]).length;
+      const alipay = alipayInput.value.trim();
+      const name = nameInput2.value.trim();
+      const arrive = arriveInput.value || '';
+      const complete = completeInput.value || '';
+      return `${alipay || '-'},${name || '-'}\n${arrive || '-'}픽업시작 ${orderCount}건 ${totalQty}대 수령 ${complete || '-'}퇴근`;
+    }
+    function refreshReport(){ reportBox.textContent = buildReportText(); }
+    [arriveInput, completeInput, alipayInput, nameInput2].forEach(inp=>inp.addEventListener('input', refreshReport));
+    refreshReport();
 
     const confirmBox = h('div',{class:'hidden'});
     const finishErr = h('div',{class:'err hidden'});
     doneCard.appendChild(finishErr);
 
-    const finishBtn = h('button',{class:'btn-primary',text:t.finish});
+    const finishBtn = h('button',{class:'btn-primary',text:t.finish,style:'margin-top:10px'});
     finishBtn.onclick = ()=>{
       confirmBox.className = '';
       confirmBox.innerHTML = '';
@@ -394,7 +426,7 @@ function renderAlbaView(){
       yesBtn.onclick = async ()=>{
         yesBtn.disabled = true; finishErr.className='err hidden';
         const { error } = await sb.rpc('complete_session_by_code', {
-          p_code: code, p_arrive: arriveInput.value || '', p_complete: completeInput.value || '', p_note: noteInput.value || ''
+          p_code: code, p_arrive: arriveInput.value || '', p_complete: completeInput.value || '', p_note: buildReportText()
         });
         if(error){ finishErr.textContent = error.message; finishErr.className='err'; yesBtn.disabled=false; return; }
         await load();
@@ -446,6 +478,7 @@ function renderAdminView(){
       save:'저장', cancel:'취소', edit:'수정', remove:'삭제',
       note:'메모: ', reportCopy:'실장님 보고 복사', confirmDelete:'한번 더 누르면 삭제됩니다',
       arriveLabel:'도착', completeLabel:'완료',
+      markPaid:'송금 완료 체크', unmarkPaid:'송금 완료 취소', paidBy:'{name}님이 {time} 송금 처리함', paidBadge:'송금완료',
       editPurchase:'구매 기록 수정', purchaseDate:'구매 날짜',
       selectCardCo:'카드 회사 선택', cardCo:'카드 회사', cardNum:'카드번호', noteOptional:'메모 (선택)',
       selectModel:'모델을 선택해주세요', selectCapacity:'용량을 선택해주세요', selectColor:'색상을 선택해주세요',
@@ -479,6 +512,7 @@ function renderAdminView(){
       save:'保存', cancel:'取消', edit:'编辑', remove:'删除',
       note:'备注：', reportCopy:'复制经理报告', confirmDelete:'再次点击即可删除',
       arriveLabel:'到达', completeLabel:'完成',
+      markPaid:'标记已转账', unmarkPaid:'取消已转账', paidBy:'{name} 于 {time} 已处理转账', paidBadge:'已转账',
       editPurchase:'编辑购买记录', purchaseDate:'购买日期',
       selectCardCo:'选择卡公司', cardCo:'卡公司', cardNum:'卡号', noteOptional:'备注（可选）',
       selectModel:'请选择型号', selectCapacity:'请选择容量', selectColor:'请选择颜色',
@@ -1066,6 +1100,24 @@ ${orderLines}
         const rbtn = h('button',{class:'btn-ghost btn-sm',text:t('reportCopy'),style:'margin-top:8px'});
         rbtn.onclick = ()=>copyText(report, rbtn);
         card.appendChild(rbtn);
+
+        // Shared "paid" flag — whoever handles the money transfer (e.g. 부산실장님) marks it here,
+        // and since every logged-in person sees the same record, nobody double-pays.
+        const paidRow = h('div',{style:'margin-top:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap'});
+        if(s.paid){
+          paidRow.appendChild(h('span',{class:'statusbadge done',text:t('paidBadge')}));
+          if(s.paid_by_name && s.paid_at){
+            paidRow.appendChild(h('span',{class:'muted',text:t('paidBy',{name:s.paid_by_name, time:fmtDate(s.paid_at)})}));
+          }
+        }
+        const paidBtn = h('button',{class: s.paid ? 'btn-ghost btn-sm' : 'btn-primary btn-sm', text: s.paid ? t('unmarkPaid') : t('markPaid')});
+        paidBtn.onclick = async ()=>{
+          paidBtn.disabled = true;
+          await sb.rpc('mark_session_paid', { p_session_id: s.id, p_paid: !s.paid });
+          drawDashboard();
+        };
+        paidRow.appendChild(paidBtn);
+        card.appendChild(paidRow);
       }
       const delBtn = h('button',{class:'btn-danger btn-sm',text:t('remove'),style:'margin-top:8px;margin-left:8px'});
       const delConfirm = h('span',{class:'hidden muted',text:' '+t('confirmDelete')});
