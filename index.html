@@ -481,6 +481,8 @@ function renderAdminView(){
   let editingItemId = null; // session_item id being edited, or null
   let listDateFrom = new Date().toISOString().slice(0,10); // date range for 진행중/완료 기록 tabs
   let listDateTo = new Date().toISOString().slice(0,10);
+  let summaryDateFrom = new Date().toISOString().slice(0,10); // separate date range for the 수량 집계 tab
+  let summaryDateTo = new Date().toISOString().slice(0,10);
   let lang = (function(){ try{ return localStorage.getItem('pm_admin_lang') || 'ko'; }catch(e){ return 'ko'; } })();
   let pendingScrollY = null; // when a button re-renders the dashboard (paid toggle, edit, delete...),
                               // we remember the scroll position here and restore it once the new
@@ -505,7 +507,7 @@ function renderAdminView(){
       brand:'픽업 매니저', adminLogin:'관리자 로그인', email:'이메일', password:'비밀번호',
       login:'로그인', loggingIn:'로그인 중...', loginFail:'로그인 실패: {msg}', logout:'로그아웃',
       sectionAlba:'알바 관리', sectionPurchase:'구매 기록',
-      tabSend:'알바 보내기', tabProgress:'진행중', tabDone:'완료 기록',
+      tabSend:'알바 보내기', tabProgress:'진행중', tabDone:'완료 기록', tabSummary:'수량 집계',
       tabMine:'내 구매 입력', tabAll:'전체 현황',
       store:'매장', albaName:'알바 이름', orders:'주문번호 (한 줄에 하나씩)',
       selectStore:'매장을 선택해주세요', ordersRequired:'주문번호를 1개 이상 입력해주세요',
@@ -541,7 +543,7 @@ function renderAdminView(){
       brand:'取货管理', adminLogin:'管理员登录', email:'邮箱', password:'密码',
       login:'登录', loggingIn:'登录中...', loginFail:'登录失败：{msg}', logout:'登出',
       sectionAlba:'兼职管理', sectionPurchase:'购买记录',
-      tabSend:'发送兼职通知', tabProgress:'进行中', tabDone:'完成记录',
+      tabSend:'发送兼职通知', tabProgress:'进行中', tabDone:'完成记录', tabSummary:'数量汇总',
       tabMine:'我的购买记录', tabAll:'全部现况',
       store:'门店', albaName:'兼职姓名', orders:'订单号（每行一个）',
       selectStore:'请选择门店', ordersRequired:'请至少输入一个订单号',
@@ -658,7 +660,7 @@ function renderAdminView(){
 
   function drawAlbaSection(){
     const tabs = h('div',{class:'tabs'});
-    [['send',t('tabSend')],['progress',t('tabProgress')],['done',t('tabDone')],['stores',t('tabStores')]].forEach(([key,label])=>{
+    [['send',t('tabSend')],['progress',t('tabProgress')],['done',t('tabDone')],['summary',t('tabSummary')],['stores',t('tabStores')]].forEach(([key,label])=>{
       const tb = h('div',{class:'tab'+(activeTab===key?' active':''), text:label, onclick:()=>{ activeTab=key; drawDashboard(); }});
       tabs.appendChild(tb);
     });
@@ -669,6 +671,7 @@ function renderAdminView(){
     if(activeTab==='send') drawSendTab(body);
     else if(activeTab==='progress') drawListTab(body, 'in_progress');
     else if(activeTab==='done') drawListTab(body, 'done');
+    else if(activeTab==='summary') drawQtySummaryTab(body);
     else drawStoreSettingsTab(body);
   }
 
@@ -1115,73 +1118,6 @@ ${orderLines}
     if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); restoreScrollIfPending(); return; }
     const list = data || [];
     if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('none')})); restoreScrollIfPending(); return; }
-
-    // quantity summary by store x color x capacity, for the sessions currently in
-    // view — laid out as one scannable table instead of nested text lines, since
-    // pickups are basically all iPhone Duo and store/color/capacity is exactly
-    // what needs tracking at a glance.
-    const byStoreColorCap = {}; // store -> color -> capacity -> qty
-    const capTotals = {};
-    let grandTotal = 0;
-    list.forEach(s=>{
-      (s.items||[]).forEach(it=>{
-        const cap = it.capacity || '-';
-        const col = it.color || '-';
-        byStoreColorCap[s.store_name] = byStoreColorCap[s.store_name] || {};
-        byStoreColorCap[s.store_name][col] = byStoreColorCap[s.store_name][col] || {};
-        byStoreColorCap[s.store_name][col][cap] = (byStoreColorCap[s.store_name][col][cap]||0) + it.qty;
-        capTotals[cap] = (capTotals[cap]||0) + it.qty;
-        grandTotal += it.qty;
-      });
-    });
-    const capsPresent = CAPACITY_OPTIONS.filter(c=>capTotals[c]);
-    Object.keys(capTotals).forEach(c=>{ if(!capsPresent.includes(c)) capsPresent.push(c); });
-    if(capsPresent.length){
-      const sumCard = h('div',{class:'card'});
-      sumCard.appendChild(h('div',{class:'sumhead'},[
-        h('div',{class:'label',text:t('qtySummary')}),
-        h('div',{class:'bignum'},[h('span',{text:String(grandTotal)}), h('span',{class:'u',text:t('unit')})])
-      ]));
-
-      const thead = h('thead',{},[h('tr',{},[
-        h('th',{text:t('store')}),
-        h('th',{text:t('color')}),
-        ...capsPresent.map(c=>h('th',{text:c})),
-        h('th',{text:t('qty')})
-      ])]);
-
-      const tbody = h('tbody',{});
-      Object.keys(byStoreColorCap).sort().forEach(storeName=>{
-        const colorMap = byStoreColorCap[storeName];
-        Object.keys(colorMap).sort().forEach((colorName, idx)=>{
-          const caps = colorMap[colorName];
-          const rowTotal = Object.values(caps).reduce((a,n)=>a+n,0);
-          const sw = COLOR_SWATCH[colorName];
-          tbody.appendChild(h('tr',{},[
-            h('td',{class:'storecell', text: idx===0 ? storeName : ''}),
-            h('td',{},[
-              sw ? h('span',{class:'colorsw',style:'background:'+sw}) : null,
-              h('span',{text:colorName})
-            ]),
-            ...capsPresent.map(c=>h('td',{class:'qtycell'+(caps[c]?'':' zero'), text: caps[c] ? String(caps[c]) : '–'})),
-            h('td',{class:'qtycell',text:String(rowTotal)})
-          ]));
-        });
-      });
-
-      const tfoot = h('tfoot',{},[h('tr',{},[
-        h('td',{text:t('grandTotal')}),
-        h('td',{text:''}),
-        ...capsPresent.map(c=>h('td',{text:String(capTotals[c]||0)})),
-        h('td',{text:String(grandTotal)})
-      ])]);
-
-      const tableWrap = h('div',{class:'sumwrap'});
-      tableWrap.appendChild(h('table',{class:'sumtable'},[thead, tbody, tfoot]));
-      sumCard.appendChild(tableWrap);
-      listWrap.appendChild(sumCard);
-    }
-
     list.forEach(s=>{
       const card = h('div',{class:'card'});
       card.appendChild(h('div',{class:'flexbetween'},[
@@ -1276,6 +1212,121 @@ ${orderLines}
       listWrap.appendChild(card);
     });
     restoreScrollIfPending();
+  }
+
+  // builds the store x color x capacity quantity table as its own card, used only
+  // by the dedicated "수량 집계" tab (kept separate from 완료 기록 so the two
+  // don't get mixed up — a long session list with the summary stuck on top was
+  // confusing).
+  function buildQtySummaryCard(list){
+    const byStoreColorCap = {}; // store -> color -> capacity -> qty
+    const capTotals = {};
+    let grandTotal = 0;
+    list.forEach(s=>{
+      (s.items||[]).forEach(it=>{
+        const cap = it.capacity || '-';
+        const col = it.color || '-';
+        byStoreColorCap[s.store_name] = byStoreColorCap[s.store_name] || {};
+        byStoreColorCap[s.store_name][col] = byStoreColorCap[s.store_name][col] || {};
+        byStoreColorCap[s.store_name][col][cap] = (byStoreColorCap[s.store_name][col][cap]||0) + it.qty;
+        capTotals[cap] = (capTotals[cap]||0) + it.qty;
+        grandTotal += it.qty;
+      });
+    });
+    const capsPresent = CAPACITY_OPTIONS.filter(c=>capTotals[c]);
+    Object.keys(capTotals).forEach(c=>{ if(!capsPresent.includes(c)) capsPresent.push(c); });
+    if(!capsPresent.length) return null;
+
+    const sumCard = h('div',{class:'card'});
+    sumCard.appendChild(h('div',{class:'sumhead'},[
+      h('div',{class:'label',text:t('qtySummary')}),
+      h('div',{class:'bignum'},[h('span',{text:String(grandTotal)}), h('span',{class:'u',text:t('unit')})])
+    ]));
+
+    const thead = h('thead',{},[h('tr',{},[
+      h('th',{text:t('store')}),
+      h('th',{text:t('color')}),
+      ...capsPresent.map(c=>h('th',{text:c})),
+      h('th',{text:t('qty')})
+    ])]);
+
+    const tbody = h('tbody',{});
+    Object.keys(byStoreColorCap).sort().forEach(storeName=>{
+      const colorMap = byStoreColorCap[storeName];
+      Object.keys(colorMap).sort().forEach((colorName, idx)=>{
+        const caps = colorMap[colorName];
+        const rowTotal = Object.values(caps).reduce((a,n)=>a+n,0);
+        const sw = COLOR_SWATCH[colorName];
+        tbody.appendChild(h('tr',{},[
+          h('td',{class:'storecell', text: idx===0 ? storeName : ''}),
+          h('td',{},[
+            sw ? h('span',{class:'colorsw',style:'background:'+sw}) : null,
+            h('span',{text:colorName})
+          ]),
+          ...capsPresent.map(c=>h('td',{class:'qtycell'+(caps[c]?'':' zero'), text: caps[c] ? String(caps[c]) : '–'})),
+          h('td',{class:'qtycell',text:String(rowTotal)})
+        ]));
+      });
+    });
+
+    const tfoot = h('tfoot',{},[h('tr',{},[
+      h('td',{text:t('grandTotal')}),
+      h('td',{text:''}),
+      ...capsPresent.map(c=>h('td',{text:String(capTotals[c]||0)})),
+      h('td',{text:String(grandTotal)})
+    ])]);
+
+    const tableWrap = h('div',{class:'sumwrap'});
+    tableWrap.appendChild(h('table',{class:'sumtable'},[thead, tbody, tfoot]));
+    sumCard.appendChild(tableWrap);
+    return sumCard;
+  }
+
+  async function drawQtySummaryTab(body){
+    // its own date-range controls — separate state from the 진행중/완료 기록 tabs
+    // so switching tabs doesn't fight over which range is selected.
+    const ctrl = h('div',{class:'card'});
+    const fromInput = h('input',{type:'date', value: summaryDateFrom});
+    const toInput = h('input',{type:'date', value: summaryDateTo});
+    ctrl.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('fromDate')})); d.appendChild(fromInput); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('toDate')})); d.appendChild(toInput); return d; })()
+    ]));
+    const quickRow = h('div',{class:'chiprow'});
+    const todayStr = new Date().toISOString().slice(0,10);
+    const mk = (days, label)=>{
+      const b = h('button',{type:'button', class:'chip-btn', text:label});
+      b.onclick = ()=>{
+        const d = new Date(); d.setDate(d.getDate()-days);
+        fromInput.value = d.toISOString().slice(0,10);
+        toInput.value = todayStr;
+        loadBtn.click();
+      };
+      return b;
+    };
+    quickRow.appendChild(mk(0, t('today')));
+    quickRow.appendChild(mk(6, t('last7')));
+    quickRow.appendChild(mk(29, t('last30')));
+    ctrl.appendChild(quickRow);
+    const loadBtn = h('button',{class:'btn-primary',text:t('query')});
+    loadBtn.onclick = ()=>{ summaryDateFrom = fromInput.value; summaryDateTo = toInput.value; drawDashboard(); };
+    ctrl.appendChild(loadBtn);
+    body.appendChild(ctrl);
+
+    const resultWrap = h('div');
+    resultWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
+    body.appendChild(resultWrap);
+
+    // counts both 진행중/완료 — anything already scanned in, regardless of whether
+    // the alba has finished the pickup yet.
+    const { data, error } = await sb.rpc('list_sessions_for_range', { p_date_from: summaryDateFrom, p_date_to: summaryDateTo, p_status: null });
+    resultWrap.innerHTML = '';
+    if(error){ resultWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
+    const list = data || [];
+    if(list.length===0){ resultWrap.appendChild(h('div',{class:'muted',text:t('none')})); return; }
+    const card = buildQtySummaryCard(list);
+    if(card) resultWrap.appendChild(card);
+    else resultWrap.appendChild(h('div',{class:'muted',text:t('none')}));
   }
 
   boot();
