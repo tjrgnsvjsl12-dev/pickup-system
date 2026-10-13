@@ -433,6 +433,10 @@ function renderAdminView(){
       noRecordsInPeriod:'해당 기간에 기록이 없습니다', myToday:'오늘 내가 입력한 기록', noRecordsYet:'아직 기록이 없습니다',
       confirmVoid:'한번 더 누르면 취소됩니다',
       allStores:'전체 매장', query:'조회', totalCount:'총 {n}건 · {q}대', unit:'대', modelTotal:'모델별 합계',
+      tabStores:'매장 설정', storeSettings:'픽업 계정 정보 설정', selectStoreToEdit:'매장 선택',
+      accountId:'아이디', accountPw:'비밀번호', pickupLink:'픽업 링크 (URL)',
+      storeSaveDone:'저장되었습니다 ✓', storeSaveHint:'여기에 입력한 정보는 알바 안내 메시지의 ①번에 자동으로 들어갑니다.',
+      copyLinkOnly:'④번 기록 링크만 복사', copyLinkHint:'하이퍼링크는 받는 앱(카톡/위챗)이 실제로 "전송"된 메시지에서만 자동으로 만들어줍니다. 전체 메시지에 섞여 있으면 인식이 안 될 때가 있으니, 링크만 따로 복사해서 별도 메시지로 보내면 확실하게 클릭 가능한 링크로 뜹니다.',
     },
     zh:{
       brand:'取货管理', adminLogin:'管理员登录', email:'邮箱', password:'密码',
@@ -461,6 +465,10 @@ function renderAdminView(){
       noRecordsInPeriod:'该时间段内没有记录', myToday:'我今天输入的记录', noRecordsYet:'还没有记录',
       confirmVoid:'再次点击即可取消',
       allStores:'全部门店', query:'查询', totalCount:'共 {n} 笔 · {q} 台', unit:'台', modelTotal:'型号合计',
+      tabStores:'门店设置', storeSettings:'设置取货账户信息', selectStoreToEdit:'选择门店',
+      accountId:'账号', accountPw:'密码', pickupLink:'取货链接 (URL)',
+      storeSaveDone:'已保存 ✓', storeSaveHint:'这里输入的信息会自动填入兼职指南消息的①步骤中。',
+      copyLinkOnly:'只复制④记录链接', copyLinkHint:'超链接只有在消息被"实际发送"后，由接收方应用（微信/KakaoTalk）自动生成。混在整段消息里有时无法识别，单独复制链接并作为单独消息发送，才能确保显示为可点击链接。',
     }
   };
   function t(key, vars){
@@ -546,7 +554,7 @@ function renderAdminView(){
 
   function drawAlbaSection(){
     const tabs = h('div',{class:'tabs'});
-    [['send',t('tabSend')],['progress',t('tabProgress')],['done',t('tabDone')]].forEach(([key,label])=>{
+    [['send',t('tabSend')],['progress',t('tabProgress')],['done',t('tabDone')],['stores',t('tabStores')]].forEach(([key,label])=>{
       const tb = h('div',{class:'tab'+(activeTab===key?' active':''), text:label, onclick:()=>{ activeTab=key; drawDashboard(); }});
       tabs.appendChild(tb);
     });
@@ -556,7 +564,54 @@ function renderAdminView(){
     app.appendChild(body);
     if(activeTab==='send') drawSendTab(body);
     else if(activeTab==='progress') drawListTab(body, 'in_progress');
-    else drawListTab(body, 'done');
+    else if(activeTab==='done') drawListTab(body, 'done');
+    else drawStoreSettingsTab(body);
+  }
+
+  function drawStoreSettingsTab(body){
+    const card = h('div',{class:'card'});
+    card.appendChild(h('label',{text:t('storeSettings')}));
+    card.appendChild(h('div',{class:'muted',style:'margin:-2px 0 10px',text:t('storeSaveHint')}));
+
+    const sel = h('select',{});
+    stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
+    card.appendChild(h('label',{text:t('selectStoreToEdit')}));
+    card.appendChild(sel);
+
+    const linkInput = h('input',{placeholder:'https://...'});
+    const idInput = h('input',{placeholder:''});
+    const pwInput = h('input',{placeholder:''});
+    card.appendChild(h('label',{text:t('pickupLink')})); card.appendChild(linkInput);
+    card.appendChild(h('label',{text:t('accountId')})); card.appendChild(idInput);
+    card.appendChild(h('label',{text:t('accountPw')})); card.appendChild(pwInput);
+
+    function fillFromStore(){
+      const s = stores.find(x=>x.id===sel.value);
+      linkInput.value = (s && s.pickup_link) || '';
+      idInput.value = (s && s.account_id) || '';
+      pwInput.value = (s && s.account_pw) || '';
+    }
+    sel.onchange = fillFromStore;
+    fillFromStore();
+
+    const msg = h('div',{class:'ok hidden'});
+    card.appendChild(msg);
+    const btn = h('button',{class:'btn-primary',text:t('save')});
+    btn.onclick = async ()=>{
+      msg.className = 'hidden';
+      btn.disabled = true; const oldText = btn.textContent; btn.textContent = t('saving');
+      const { error } = await sb.rpc('update_store_credentials', {
+        p_store_id: sel.value, p_account_id: idInput.value.trim(),
+        p_account_pw: pwInput.value.trim(), p_pickup_link: linkInput.value.trim()
+      });
+      btn.disabled = false; btn.textContent = oldText;
+      if(error){ msg.className='err'; msg.textContent = error.message; return; }
+      const s = stores.find(x=>x.id===sel.value);
+      if(s){ s.pickup_link = linkInput.value.trim(); s.account_id = idInput.value.trim(); s.account_pw = pwInput.value.trim(); }
+      msg.className = 'ok'; msg.textContent = t('storeSaveDone');
+    };
+    card.appendChild(btn);
+    body.appendChild(card);
   }
 
   function drawPurchaseSection(){
@@ -824,6 +879,10 @@ function renderAdminView(){
       const copyBtn = h('button',{class:'btn-primary',text:t('copyAll')});
       copyBtn.onclick = ()=>copyText(msg, copyBtn);
       c.appendChild(copyBtn);
+      const copyLinkBtn = h('button',{class:'btn-ghost',text:t('copyLinkOnly'),style:'margin-top:8px;width:100%'});
+      copyLinkBtn.onclick = ()=>copyText(link, copyLinkBtn);
+      c.appendChild(copyLinkBtn);
+      c.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:t('copyLinkHint')}));
       const newBtn = h('button',{class:'btn-ghost',text:t('newSession'),style:'margin-top:8px;width:100%'});
       newBtn.onclick = ()=>{ lastCreated=null; drawDashboard(); };
       c.appendChild(newBtn);
