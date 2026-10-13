@@ -460,6 +460,23 @@ function renderAdminView(){
   let listDateFrom = new Date().toISOString().slice(0,10); // date range for 진행중/완료 기록 tabs
   let listDateTo = new Date().toISOString().slice(0,10);
   let lang = (function(){ try{ return localStorage.getItem('pm_admin_lang') || 'ko'; }catch(e){ return 'ko'; } })();
+  let pendingScrollY = null; // when a button re-renders the dashboard (paid toggle, edit, delete...),
+                              // we remember the scroll position here and restore it once the new
+                              // content has actually loaded, so the page doesn't jump to the top.
+
+  // Use this instead of calling drawDashboard() directly from a button handler
+  // so the scroll position survives the re-render (including the async list reload).
+  function rerenderKeepScroll(){
+    pendingScrollY = window.scrollY;
+    drawDashboard();
+  }
+  function restoreScrollIfPending(){
+    if(pendingScrollY !== null){
+      const y = pendingScrollY;
+      pendingScrollY = null;
+      requestAnimationFrame(()=>{ window.scrollTo(0, y); requestAnimationFrame(()=>window.scrollTo(0, y)); });
+    }
+  }
 
   const AT = {
     ko:{
@@ -1071,9 +1088,9 @@ ${orderLines}
     const refreshBtn = h('button',{class:'btn-ghost btn-sm',text:t('refresh'),style:'margin-bottom:10px'});
     refreshBtn.onclick = ()=>drawDashboard();
     listWrap.appendChild(refreshBtn);
-    if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
+    if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); restoreScrollIfPending(); return; }
     const list = data || [];
-    if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('none')})); return; }
+    if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('none')})); restoreScrollIfPending(); return; }
     list.forEach(s=>{
       const card = h('div',{class:'card'});
       card.appendChild(h('div',{class:'flexbetween'},[
@@ -1104,9 +1121,9 @@ ${orderLines}
               const { error } = await sb.rpc('update_session_item', { p_item_id: it.id, p_model: mSel.value, p_capacity: cSel.value, p_color: colSel.value, p_qty: qty });
               if(error){ itemErr.textContent = error.message; itemErr.className='err'; return; }
               editingItemId = null;
-              drawDashboard();
+              rerenderKeepScroll();
             };
-            const cancelBtn = h('button',{class:'btn-ghost btn-sm',text:t('cancel'),style:'margin-left:6px',onclick:()=>{ editingItemId=null; drawDashboard(); }});
+            const cancelBtn = h('button',{class:'btn-ghost btn-sm',text:t('cancel'),style:'margin-left:6px',onclick:()=>{ editingItemId=null; rerenderKeepScroll(); }});
             editWrap.appendChild(saveBtn);
             editWrap.appendChild(cancelBtn);
             il.appendChild(editWrap);
@@ -1115,8 +1132,8 @@ ${orderLines}
               h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim()}),
               h('span',{style:'display:flex;gap:6px;align-items:center'},[
                 h('span',{class:'pill',text:'x'+it.qty}),
-                h('button',{class:'btn-ghost btn-sm',text:t('edit'),onclick:()=>{ editingItemId=it.id; drawDashboard(); }}),
-                h('button',{class:'btn-danger btn-sm',text:t('remove'),onclick:async()=>{ await sb.rpc('remove_session_item',{p_item_id:it.id}); drawDashboard(); }})
+                h('button',{class:'btn-ghost btn-sm',text:t('edit'),onclick:()=>{ editingItemId=it.id; rerenderKeepScroll(); }}),
+                h('button',{class:'btn-danger btn-sm',text:t('remove'),onclick:async()=>{ await sb.rpc('remove_session_item',{p_item_id:it.id}); rerenderKeepScroll(); }})
               ])
             ]));
           }
@@ -1150,7 +1167,7 @@ ${orderLines}
         paidBtn.onclick = async ()=>{
           paidBtn.disabled = true;
           await sb.rpc('mark_session_paid', { p_session_id: s.id, p_paid: !s.paid });
-          drawDashboard();
+          rerenderKeepScroll();
         };
         paidRow.appendChild(paidBtn);
         card.appendChild(paidRow);
@@ -1161,12 +1178,13 @@ ${orderLines}
       delBtn.onclick = async ()=>{
         if(!armed){ armed=true; delConfirm.className='muted'; setTimeout(()=>{armed=false; delConfirm.className='hidden';},3000); return; }
         await sb.rpc('delete_session', { p_session_id: s.id });
-        drawDashboard();
+        rerenderKeepScroll();
       };
       card.appendChild(delBtn);
       card.appendChild(delConfirm);
       listWrap.appendChild(card);
     });
+    restoreScrollIfPending();
   }
 
   boot();
