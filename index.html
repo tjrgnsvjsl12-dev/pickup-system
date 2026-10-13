@@ -457,6 +457,8 @@ function renderAdminView(){
   let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
   let editingPurchase = null; // the purchase row being edited, or null
   let editingItemId = null; // session_item id being edited, or null
+  let listDateFrom = new Date().toISOString().slice(0,10); // date range for 진행중/완료 기록 tabs
+  let listDateTo = new Date().toISOString().slice(0,10);
   let lang = (function(){ try{ return localStorage.getItem('pm_admin_lang') || 'ko'; }catch(e){ return 'ko'; } })();
 
   const AT = {
@@ -479,6 +481,7 @@ function renderAdminView(){
       note:'메모: ', reportCopy:'실장님 보고 복사', confirmDelete:'한번 더 누르면 삭제됩니다',
       arriveLabel:'도착', completeLabel:'완료',
       markPaid:'송금 완료 체크', unmarkPaid:'송금 완료 취소', paidBy:'{name}님이 {time} 송금 처리함', paidBadge:'송금완료',
+      today:'오늘', last7:'최근 7일', last30:'최근 30일',
       editPurchase:'구매 기록 수정', purchaseDate:'구매 날짜',
       selectCardCo:'카드 회사 선택', cardCo:'카드 회사', cardNum:'카드번호', noteOptional:'메모 (선택)',
       selectModel:'모델을 선택해주세요', selectCapacity:'용량을 선택해주세요', selectColor:'색상을 선택해주세요',
@@ -513,6 +516,7 @@ function renderAdminView(){
       note:'备注：', reportCopy:'复制经理报告', confirmDelete:'再次点击即可删除',
       arriveLabel:'到达', completeLabel:'完成',
       markPaid:'标记已转账', unmarkPaid:'取消已转账', paidBy:'{name} 于 {time} 已处理转账', paidBadge:'已转账',
+      today:'今天', last7:'最近7天', last30:'最近30天',
       editPurchase:'编辑购买记录', purchaseDate:'购买日期',
       selectCardCo:'选择卡公司', cardCo:'卡公司', cardNum:'卡号', noteOptional:'备注（可选）',
       selectModel:'请选择型号', selectCapacity:'请选择容量', selectColor:'请选择颜色',
@@ -1029,15 +1033,47 @@ ${orderLines}
   }
 
   async function drawListTab(body, status){
-    body.appendChild(h('div',{class:'muted',text:t('loading')}));
-    const { data, error } = await sb.rpc('list_sessions_for_date', { p_date: new Date().toISOString().slice(0,10), p_status: status });
-    body.innerHTML = '';
+    // date-range controls — defaults to today, but lets you pull up a whole
+    // weekend's worth of pickups (e.g. Fri–Sun) in one view.
+    const ctrl = h('div',{class:'card'});
+    const fromInput = h('input',{type:'date', value: listDateFrom});
+    const toInput = h('input',{type:'date', value: listDateTo});
+    ctrl.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('fromDate')})); d.appendChild(fromInput); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('toDate')})); d.appendChild(toInput); return d; })()
+    ]));
+    const quickRow = h('div',{class:'chiprow'});
+    const todayStr = new Date().toISOString().slice(0,10);
+    const mk = (days, label)=>{
+      const b = h('button',{type:'button', class:'chip-btn', text:label});
+      b.onclick = ()=>{
+        const d = new Date(); d.setDate(d.getDate()-days);
+        fromInput.value = d.toISOString().slice(0,10);
+        toInput.value = todayStr;
+        loadBtn.click();
+      };
+      return b;
+    };
+    quickRow.appendChild(mk(0, t('today')));
+    quickRow.appendChild(mk(6, t('last7')));
+    quickRow.appendChild(mk(29, t('last30')));
+    ctrl.appendChild(quickRow);
+    const loadBtn = h('button',{class:'btn-primary',text:t('query')});
+    loadBtn.onclick = ()=>{ listDateFrom = fromInput.value; listDateTo = toInput.value; drawDashboard(); };
+    ctrl.appendChild(loadBtn);
+    body.appendChild(ctrl);
+
+    const listWrap = h('div');
+    listWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
+    body.appendChild(listWrap);
+    const { data, error } = await sb.rpc('list_sessions_for_range', { p_date_from: listDateFrom, p_date_to: listDateTo, p_status: status });
+    listWrap.innerHTML = '';
     const refreshBtn = h('button',{class:'btn-ghost btn-sm',text:t('refresh'),style:'margin-bottom:10px'});
     refreshBtn.onclick = ()=>drawDashboard();
-    body.appendChild(refreshBtn);
-    if(error){ body.appendChild(h('div',{class:'err',text:error.message})); return; }
+    listWrap.appendChild(refreshBtn);
+    if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
     const list = data || [];
-    if(list.length===0){ body.appendChild(h('div',{class:'muted',text:t('none')})); return; }
+    if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('none')})); return; }
     list.forEach(s=>{
       const card = h('div',{class:'card'});
       card.appendChild(h('div',{class:'flexbetween'},[
@@ -1129,7 +1165,7 @@ ${orderLines}
       };
       card.appendChild(delBtn);
       card.appendChild(delConfirm);
-      body.appendChild(card);
+      listWrap.appendChild(card);
     });
   }
 
