@@ -523,7 +523,7 @@ function renderAdminView(){
       checkItem:'모델/용량/색상/수량을 모두 확인해주세요',
       save:'저장', cancel:'취소', edit:'수정', remove:'삭제',
       note:'메모: ', reportCopy:'복사', confirmDelete:'한번 더 누르면 삭제됩니다',
-      arriveLabel:'도착', completeLabel:'완료',
+      arriveLabel:'도착', completeLabel:'완료', overtimeBadge:'⚠ 3시간 초과',
       markPaid:'송금 완료 체크', unmarkPaid:'송금 완료 취소', paidBy:'{name}님이 {time} 송금 처리함', paidBadge:'송금완료',
       today:'오늘', last7:'최근 7일', last30:'최근 30일',
       editPurchase:'구매 기록 수정', purchaseDate:'구매 날짜',
@@ -559,7 +559,7 @@ function renderAdminView(){
       checkItem:'请确认型号/容量/颜色/数量',
       save:'保存', cancel:'取消', edit:'编辑', remove:'删除',
       note:'备注：', reportCopy:'复制', confirmDelete:'再次点击即可删除',
-      arriveLabel:'到达', completeLabel:'完成',
+      arriveLabel:'到达', completeLabel:'完成', overtimeBadge:'⚠ 超过3小时',
       markPaid:'标记已转账', unmarkPaid:'取消已转账', paidBy:'{name} 于 {time} 已处理转账', paidBadge:'已转账',
       today:'今天', last7:'最近7天', last30:'最近30天',
       editPurchase:'编辑购买记录', purchaseDate:'购买日期',
@@ -1208,8 +1208,19 @@ ${orderLines}
       if(s.status==='done'){
         const total = (s.items||[]).reduce((a,i)=>a+i.qty,0);
         if(s.arrive_time || s.complete_time){
-          card.appendChild(h('div',{class:'muted',style:'margin-top:6px',
-            text:[s.arrive_time?`${t('arriveLabel')} ${s.arrive_time}`:'', s.complete_time?`${t('completeLabel')} ${s.complete_time}`:''].filter(Boolean).join(' · ')}));
+          let overLimit = false;
+          if(s.arrive_time && s.complete_time){
+            const toMin = (hm)=>{ const [h,m] = hm.split(':').map(Number); return h*60+(m||0); };
+            let diff = toMin(s.complete_time) - toMin(s.arrive_time);
+            if(diff < 0) diff += 24*60; // crossed midnight
+            overLimit = diff > 180; // 3 hours
+          }
+          const timeRow = h('div',{class:'muted',style:'margin-top:6px;display:flex;align-items:center;gap:8px;flex-wrap:wrap'+(overLimit?';color:var(--danger,#d64545);font-weight:700':'')});
+          timeRow.appendChild(h('span',{text:[s.arrive_time?`${t('arriveLabel')} ${s.arrive_time}`:'', s.complete_time?`${t('completeLabel')} ${s.complete_time}`:''].filter(Boolean).join(' · ')}));
+          if(overLimit){
+            timeRow.appendChild(h('span',{style:'background:var(--danger,#d64545);color:#fff;border-radius:999px;padding:2px 9px;font-size:11.5px;font-weight:800;white-space:nowrap', text:t('overtimeBadge')}));
+          }
+          card.appendChild(timeRow);
         }
         if(s.note){
           card.appendChild(h('div',{class:'copybox',style:'margin-top:6px',text:s.note}));
