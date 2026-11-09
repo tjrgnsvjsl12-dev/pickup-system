@@ -180,6 +180,12 @@ function fmtShortDate(iso){
   try{ const d = new Date(iso+'T00:00:00'); return (d.getMonth()+1)+'/'+d.getDate(); }
   catch(e){ return iso; }
 }
+function fmtWon(n){
+  if(n === null || n === undefined || n === '') return '';
+  const num = Number(n);
+  if(isNaN(num)) return '';
+  return num.toLocaleString('ko-KR');
+}
 function buildCopyText(list, groupBy){
   const sorted = [...list].sort((a,b)=>
     (a.purchase_date||'').localeCompare(b.purchase_date||'') ||
@@ -473,13 +479,19 @@ function renderAlbaView(){
 function renderAdminView(){
   let session = null;
   let stores = [];
-  let section = 'alba'; // 'alba' | 'purchase'
+  let section = 'alba'; // 'alba' | 'purchase' | 'supplier'
   let activeTab = 'send';
   let purchaseTab = 'mine'; // 'mine' | 'all'
+  let supplierTab = 'mine'; // 'mine' | 'all'
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
   let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
   let editingPurchase = null; // the purchase row being edited, or null
+  let editingSupplier = null; // the supplier-order row being edited, or null
+  let myPurchaseDateFrom = new Date().toISOString().slice(0,10); // date range for "내가 입력한 기록" (구매 기록)
+  let myPurchaseDateTo = new Date().toISOString().slice(0,10);
+  let mySupplierDateFrom = new Date().toISOString().slice(0,10); // date range for "내가 입력한 기록" (공급업체)
+  let mySupplierDateTo = new Date().toISOString().slice(0,10);
   let editingItemId = null; // session_item id being edited, or null
   let listDateFrom = new Date().toISOString().slice(0,10); // date range for 진행중/완료 기록 tabs
   let listDateTo = new Date().toISOString().slice(0,10);
@@ -509,9 +521,9 @@ function renderAdminView(){
     ko:{
       brand:'픽업 매니저', adminLogin:'관리자 로그인', email:'이메일', password:'비밀번호',
       login:'로그인', loggingIn:'로그인 중...', loginFail:'로그인 실패: {msg}', logout:'로그아웃',
-      sectionAlba:'알바 관리', sectionPurchase:'구매 기록',
+      sectionAlba:'알바 관리', sectionPurchase:'구매 기록', sectionSupplier:'공급업체',
       tabSend:'알바 보내기', tabProgress:'진행중', tabDone:'완료 기록', tabSummary:'수량 집계',
-      tabMine:'내 구매 입력', tabAll:'전체 현황',
+      tabMine:'내 구매 입력', tabAll:'전체 현황', tabMineSupplier:'내 입고 입력',
       store:'매장', albaName:'알바 이름', albaNamePh:'예: 왕멍', orders:'주문번호 (한 줄에 하나씩)',
       selectStore:'매장을 선택해주세요', ordersRequired:'주문번호를 1개 이상 입력해주세요',
       creating:'생성 중...', createSession:'세션 생성', sessionCreated:'세션이 생성되었습니다 ✓',
@@ -533,7 +545,7 @@ function renderAdminView(){
       cancelEdit:'수정 취소',
       copyRecords:'기록 복사하기 (톡방用)', fromDate:'시작일', toDate:'종료일', groupBy:'묶는 기준',
       byDay:'날짜별', byStore:'매장별', copy:'복사하기', selectPeriod:'기간을 선택해주세요',
-      noRecordsInPeriod:'해당 기간에 기록이 없습니다', myToday:'오늘 내가 입력한 기록', noRecordsYet:'아직 기록이 없습니다',
+      noRecordsInPeriod:'해당 기간에 기록이 없습니다', myToday:'내가 입력한 기록', noRecordsYet:'아직 기록이 없습니다',
       confirmVoid:'한번 더 누르면 취소됩니다',
       allStores:'전체 매장', query:'조회', totalCount:'총 {n}건 · {q}대', unit:'대', modelTotal:'모델별 합계',
       tabStores:'매장 설정', storeSettings:'픽업 계정 정보 설정', selectStoreToEdit:'매장 선택',
@@ -541,13 +553,16 @@ function renderAdminView(){
       storeSaveDone:'저장되었습니다 ✓', storeSaveHint:'여기에 입력한 정보는 알바 안내 메시지의 ①번에 자동으로 들어갑니다.',
       copyLinkOnly:'④번 기록 링크만 복사', copyLinkHint:'하이퍼링크는 받는 앱(카톡/위챗)이 실제로 "전송"된 메시지에서만 자동으로 만들어줍니다. 전체 메시지에 섞여 있으면 인식이 안 될 때가 있으니, 링크만 따로 복사해서 별도 메시지로 보내면 확실하게 클릭 가능한 링크로 뜹니다.',
       qtySummary:'수량 집계 (매장별 · 용량별)', grandTotal:'전체 합계',
+      companyName:'공급업체명', companyNamePh:'예: ○○무역', receivedDate:'받은 날짜', amount:'금액 (원)', amountPh:'예: 1200000',
+      addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
+      wonUnit:'원',
     },
     zh:{
       brand:'取货管理', adminLogin:'管理员登录', email:'邮箱', password:'密码',
       login:'登录', loggingIn:'登录中...', loginFail:'登录失败：{msg}', logout:'登出',
-      sectionAlba:'兼职管理', sectionPurchase:'购买记录',
+      sectionAlba:'兼职管理', sectionPurchase:'购买记录', sectionSupplier:'供应商',
       tabSend:'发送兼职通知', tabProgress:'进行中', tabDone:'完成记录', tabSummary:'数量汇总',
-      tabMine:'我的购买记录', tabAll:'全部现况',
+      tabMine:'我的购买记录', tabAll:'全部现况', tabMineSupplier:'我的入库记录',
       store:'门店', albaName:'兼职姓名', albaNamePh:'例：王猛', orders:'订单号（每行一个）',
       selectStore:'请选择门店', ordersRequired:'请至少输入一个订单号',
       creating:'生成中...', createSession:'创建会话', sessionCreated:'会话已创建 ✓',
@@ -569,7 +584,7 @@ function renderAdminView(){
       cancelEdit:'取消编辑',
       copyRecords:'复制记录（用于聊天群）', fromDate:'开始日期', toDate:'结束日期', groupBy:'分组方式',
       byDay:'按日期', byStore:'按门店', copy:'复制', selectPeriod:'请选择日期范围',
-      noRecordsInPeriod:'该时间段内没有记录', myToday:'我今天输入的记录', noRecordsYet:'还没有记录',
+      noRecordsInPeriod:'该时间段内没有记录', myToday:'我输入的记录', noRecordsYet:'还没有记录',
       confirmVoid:'再次点击即可取消',
       allStores:'全部门店', query:'查询', totalCount:'共 {n} 笔 · {q} 台', unit:'台', modelTotal:'型号合计',
       tabStores:'门店设置', storeSettings:'设置取货账户信息', selectStoreToEdit:'选择门店',
@@ -577,6 +592,9 @@ function renderAdminView(){
       storeSaveDone:'已保存 ✓', storeSaveHint:'这里输入的信息会自动填入兼职指南消息的①步骤中。',
       copyLinkOnly:'只复制④记录链接', copyLinkHint:'超链接只有在消息被"实际发送"后，由接收方应用（微信/KakaoTalk）自动生成。混在整段消息里有时无法识别，单独复制链接并作为单独消息发送，才能确保显示为可点击链接。',
       qtySummary:'数量汇总（按门店 · 按容量）', grandTotal:'总计',
+      companyName:'供应商名称', companyNamePh:'例：○○贸易', receivedDate:'收货日期', amount:'金额（韩元）', amountPh:'例：1200000',
+      addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
+      wonUnit:'韩元',
     }
   };
   function t(key, vars){
@@ -651,14 +669,15 @@ function renderAdminView(){
     app.appendChild(top);
 
     const sectionRow = h('div',{class:'tabs',style:'margin-bottom:6px'});
-    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')]].forEach(([key,label])=>{
+    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')],['supplier',t('sectionSupplier')]].forEach(([key,label])=>{
       const tb = h('div',{class:'tab'+(section===key?' active':''), text:label, onclick:()=>{ section=key; drawDashboard(); }});
       sectionRow.appendChild(tb);
     });
     app.appendChild(sectionRow);
 
     if(section==='alba') drawAlbaSection();
-    else drawPurchaseSection();
+    else if(section==='purchase') drawPurchaseSection();
+    else drawSupplierSection();
   }
 
   function drawAlbaSection(){
@@ -837,12 +856,26 @@ function renderAdminView(){
     copyCard.appendChild(copyBtn);
     body.appendChild(copyCard);
 
+    // "내가 입력한 기록" — now a selectable date range instead of a hardcoded "today",
+    // so a past day's entry can be pulled up and corrected, not just today's.
+    const myListCtrl = h('div',{class:'card'});
+    const myFromInput = h('input',{type:'date',value: myPurchaseDateFrom});
+    const myToInput = h('input',{type:'date',value: myPurchaseDateTo});
+    myListCtrl.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('fromDate')})); d.appendChild(myFromInput); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('toDate')})); d.appendChild(myToInput); return d; })()
+    ]));
+    const myQueryBtn = h('button',{class:'btn-ghost btn-sm',text:t('query'),style:'margin-top:8px'});
+    myListCtrl.appendChild(myQueryBtn);
+    body.appendChild(myListCtrl);
+
     const listWrap = h('div');
     listWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
     body.appendChild(listWrap);
-    (async ()=>{
-      const today = new Date().toISOString().slice(0,10);
-      const { data, error } = await sb.rpc('list_my_purchases', { p_date_from: today, p_date_to: today });
+    async function loadMyList(){
+      listWrap.innerHTML = '';
+      listWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
+      const { data, error } = await sb.rpc('list_my_purchases', { p_date_from: myPurchaseDateFrom, p_date_to: myPurchaseDateTo });
       listWrap.innerHTML = '';
       listWrap.appendChild(h('label',{text:t('myToday'),style:'display:block;margin-bottom:8px'}));
       if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
@@ -870,7 +903,13 @@ function renderAdminView(){
         c.appendChild(voidConfirm);
         listWrap.appendChild(c);
       });
-    })();
+    }
+    myQueryBtn.onclick = ()=>{
+      myPurchaseDateFrom = myFromInput.value;
+      myPurchaseDateTo = myToInput.value;
+      loadMyList();
+    };
+    loadMyList();
   }
 
   function drawAllPurchaseTab(body){
@@ -943,6 +982,235 @@ function renderAdminView(){
           });
         });
         resultWrap.appendChild(storeCard);
+      });
+
+      // model summary
+      const byModel = {};
+      rows.forEach(r=>{
+        const key = `${r.model} ${r.capacity||''} ${r.color||''}`.replace(/\s+/g,' ').trim();
+        byModel[key] = (byModel[key]||0) + r.qty;
+      });
+      const modelCard = h('div',{class:'card'});
+      modelCard.appendChild(h('label',{text:t('modelTotal')}));
+      Object.keys(byModel).forEach(key=>{
+        modelCard.appendChild(h('div',{class:'itemline'},[h('span',{text:key}), h('span',{class:'pill',text:byModel[key]+t('unit')})]));
+      });
+      resultWrap.appendChild(modelCard);
+    }
+    loadBtn.onclick = load;
+    load();
+  }
+
+  function drawSupplierSection(){
+    const isAdmin = myProfile && myProfile.role === 'admin';
+    if(isAdmin){
+      const tabs = h('div',{class:'tabs'});
+      [['mine',t('tabMineSupplier')],['all',t('tabAll')]].forEach(([key,label])=>{
+        const tb = h('div',{class:'tab'+(supplierTab===key?' active':''), text:label, onclick:()=>{ supplierTab=key; drawDashboard(); }});
+        tabs.appendChild(tb);
+      });
+      app.appendChild(tabs);
+    }
+    const body = h('div',{id:'tabbody'});
+    app.appendChild(body);
+    if(!isAdmin || supplierTab==='mine') drawMySupplierTab(body);
+    else drawAllSupplierTab(body);
+  }
+
+  function drawMySupplierTab(body){
+    const ed = editingSupplier; // snapshot; null when adding new
+    const card = h('div',{class:'card'});
+    card.appendChild(h('label',{text: ed ? t('editSupplier') : t('companyName')}));
+    if(ed) card.appendChild(h('label',{text:t('companyName'),style:'margin-top:8px'}));
+    const companyInput = h('input',{placeholder:t('companyNamePh'), value: (ed && ed.company_name) || ''});
+    card.appendChild(companyInput);
+
+    const modelSel = chipGroup(MODEL_OPTIONS, ed && ed.model, (m)=>colorSel.setOptions(colorOptionsFor(m)));
+    const capSel = chipGroup(CAPACITY_OPTIONS, ed && ed.capacity);
+    const colorSel = chipGroup(colorOptionsFor((ed && ed.model) || MODEL_OPTIONS[0]), ed && ed.color);
+    card.appendChild(h('label',{text:t('model')})); card.appendChild(modelSel.el);
+    card.appendChild(h('label',{text:t('capacity')})); card.appendChild(capSel.el);
+    card.appendChild(h('label',{text:t('color')})); card.appendChild(colorSel.el);
+
+    card.appendChild(h('label',{text:t('qty')}));
+    const qtyInput = h('input',{type:'number',min:'1',step:'1',value: ed ? String(ed.qty) : '1'});
+    card.appendChild(h('div',{class:'qtybox'},[
+      h('button',{class:'btn-ghost',text:'-',onclick:()=>{ const v=Math.max(1,(parseInt(qtyInput.value)||1)-1); qtyInput.value=String(v); }}),
+      qtyInput,
+      h('button',{class:'btn-ghost',text:'+',onclick:()=>{ const v=(parseInt(qtyInput.value)||0)+1; qtyInput.value=String(v); }})
+    ]));
+
+    card.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('receivedDate')})); const i=h('input',{type:'date',value: ed ? ed.received_date : new Date().toISOString().slice(0,10)}); d.appendChild(i); d._input=i; return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('amount')})); const i=h('input',{type:'number',min:'0',step:'1',placeholder:t('amountPh'), value: (ed && ed.amount!=null) ? String(ed.amount) : ''}); d.appendChild(i); d._input=i; return d; })()
+    ]));
+    const rowEls2 = card.querySelectorAll('.row');
+    const dateInput = rowEls2[rowEls2.length-1].children[0]._input;
+    const amountInput = rowEls2[rowEls2.length-1].children[1]._input;
+
+    card.appendChild(h('label',{text:t('noteOptional')}));
+    const noteInput = h('input',{placeholder:'', value: (ed && ed.note) || ''});
+    card.appendChild(noteInput);
+
+    const err = h('div',{class:'err hidden'});
+    card.appendChild(err);
+    const btn = h('button',{class:'btn-primary',text: ed ? t('editDone') : t('addSupplier')});
+    btn.onclick = async ()=>{
+      err.className='err hidden';
+      if(!companyInput.value.trim()){ err.textContent=t('selectCompanyName'); err.className='err'; return; }
+      if(!modelSel.value){ err.textContent=t('selectModel'); err.className='err'; return; }
+      if(!capSel.value){ err.textContent=t('selectCapacity'); err.className='err'; return; }
+      if(!colorSel.value){ err.textContent=t('selectColor'); err.className='err'; return; }
+      const qty = parseInt(qtyInput.value);
+      if(!qty || qty < 1){ err.textContent=t('checkQty'); err.className='err'; return; }
+      btn.disabled=true; btn.textContent=t('saving');
+      const params = {
+        p_company_name: companyInput.value.trim(), p_model: modelSel.value, p_capacity: capSel.value,
+        p_color: colorSel.value, p_qty: qty, p_amount: amountInput.value===''?null:Number(amountInput.value),
+        p_received_date: dateInput.value, p_note: noteInput.value.trim()
+      };
+      const { error } = ed
+        ? await sb.rpc('update_supplier_order', { p_order_id: ed.id, ...params })
+        : await sb.rpc('add_supplier_order', params);
+      btn.disabled=false; btn.textContent = ed ? t('editDone') : t('addSupplier');
+      if(error){ err.textContent = error.message; err.className='err'; return; }
+      editingSupplier = null;
+      drawDashboard();
+    };
+    card.appendChild(btn);
+    if(ed){
+      const cancelBtn = h('button',{class:'btn-ghost',text:t('cancelEdit'),style:'width:100%;margin-top:8px'});
+      cancelBtn.onclick = ()=>{ editingSupplier = null; drawDashboard(); };
+      card.appendChild(cancelBtn);
+    }
+    body.appendChild(card);
+
+    // "내가 입력한 기록" — selectable date range, same pattern as 구매 기록 (any past
+    // day's entry can be pulled up and edited/취소, not just today's).
+    const myListCtrl = h('div',{class:'card'});
+    const myFromInput = h('input',{type:'date',value: mySupplierDateFrom});
+    const myToInput = h('input',{type:'date',value: mySupplierDateTo});
+    myListCtrl.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('fromDate')})); d.appendChild(myFromInput); return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('toDate')})); d.appendChild(myToInput); return d; })()
+    ]));
+    const myQueryBtn = h('button',{class:'btn-ghost btn-sm',text:t('query'),style:'margin-top:8px'});
+    myListCtrl.appendChild(myQueryBtn);
+    body.appendChild(myListCtrl);
+
+    const listWrap = h('div');
+    listWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
+    body.appendChild(listWrap);
+    async function loadMyList(){
+      listWrap.innerHTML = '';
+      listWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
+      const { data, error } = await sb.rpc('list_my_supplier_orders', { p_date_from: mySupplierDateFrom, p_date_to: mySupplierDateTo });
+      listWrap.innerHTML = '';
+      listWrap.appendChild(h('label',{text:t('myToday'),style:'display:block;margin-bottom:8px'}));
+      if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
+      const list = data || [];
+      if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('noRecordsYet')})); return; }
+      list.forEach(p=>{
+        const c = h('div',{class:'card'});
+        c.appendChild(h('div',{class:'flexbetween'},[
+          h('div',{text:`${p.company_name} · ${p.model} ${p.capacity||''} ${p.color||''}`.replace(/\s+/g,' ').trim()}),
+          h('span',{class:'pill',text:'x'+p.qty})
+        ]));
+        c.appendChild(h('div',{class:'muted',text:[fmtShortDate(p.received_date), p.amount!=null?fmtWon(p.amount)+t('wonUnit'):''].filter(Boolean).join(' · ')}));
+        const editBtn = h('button',{class:'btn-ghost btn-sm',text:t('edit'),style:'margin-top:6px'});
+        editBtn.onclick = ()=>{ editingSupplier = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
+        c.appendChild(editBtn);
+        const voidBtn = h('button',{class:'btn-danger btn-sm',text:t('cancel'),style:'margin-top:6px;margin-left:6px'});
+        const voidConfirm = h('span',{class:'hidden muted',text:' '+t('confirmVoid')});
+        let armed = false;
+        voidBtn.onclick = async ()=>{
+          if(!armed){ armed=true; voidConfirm.className='muted'; setTimeout(()=>{armed=false; voidConfirm.className='hidden';},3000); return; }
+          await sb.rpc('void_supplier_order', { p_order_id: p.id });
+          drawDashboard();
+        };
+        c.appendChild(voidBtn);
+        c.appendChild(voidConfirm);
+        listWrap.appendChild(c);
+      });
+    }
+    myQueryBtn.onclick = ()=>{
+      mySupplierDateFrom = myFromInput.value;
+      mySupplierDateTo = myToInput.value;
+      loadMyList();
+    };
+    loadMyList();
+  }
+
+  function drawAllSupplierTab(body){
+    const ctrl = h('div',{class:'card'});
+    const today = new Date().toISOString().slice(0,10);
+    ctrl.appendChild(h('div',{class:'row'},[
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('fromDate')})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })(),
+      (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('toDate')})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })()
+    ]));
+    const rowEls = ctrl.querySelectorAll('.row');
+    const fromInput = rowEls[0].children[0]._input;
+    const toInput = rowEls[0].children[1]._input;
+    const loadBtn = h('button',{class:'btn-primary',text:t('query')});
+    ctrl.appendChild(loadBtn);
+    body.appendChild(ctrl);
+
+    const resultWrap = h('div');
+    body.appendChild(resultWrap);
+
+    async function load(){
+      resultWrap.innerHTML = '';
+      resultWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
+      const { data, error } = await sb.rpc('admin_list_supplier_orders', {
+        p_date_from: fromInput.value, p_date_to: toInput.value, p_company_name: null
+      });
+      resultWrap.innerHTML = '';
+      if(error){ resultWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
+      const rows = data || [];
+      if(rows.length===0){ resultWrap.appendChild(h('div',{class:'muted',text:t('noRecordsInPeriod')})); return; }
+
+      const totalQty = rows.reduce((a,r)=>a+r.qty,0);
+      const totalAmount = rows.reduce((a,r)=>a+(Number(r.amount)||0),0);
+      resultWrap.appendChild(h('div',{class:'card'},[
+        h('div',{style:'font-weight:700',text:t('totalCount',{n:rows.length,q:totalQty})}),
+        h('div',{class:'muted',style:'margin-top:4px',text:t('totalAmount')+': '+fmtWon(totalAmount)+t('wonUnit')})
+      ]));
+
+      // group by company -> by buyer
+      const byCompany = {};
+      rows.forEach(r=>{
+        byCompany[r.company_name] = byCompany[r.company_name] || {};
+        byCompany[r.company_name][r.buyer_name] = byCompany[r.company_name][r.buyer_name] || [];
+        byCompany[r.company_name][r.buyer_name].push(r);
+      });
+      Object.keys(byCompany).forEach(companyName=>{
+        const buyers = byCompany[companyName];
+        const items = Object.values(buyers).flat();
+        const companyTotal = items.reduce((a,r)=>a+r.qty,0);
+        const companyAmount = items.reduce((a,r)=>a+(Number(r.amount)||0),0);
+        const companyCard = h('div',{class:'card'});
+        companyCard.appendChild(h('div',{class:'flexbetween'},[
+          h('div',{style:'font-weight:700',text:companyName},[]),
+          h('span',{class:'pill',text:companyTotal+t('unit')})
+        ]));
+        companyCard.appendChild(h('div',{class:'muted',style:'margin-top:2px',text:t('totalAmount')+': '+fmtWon(companyAmount)+t('wonUnit')}));
+        Object.keys(buyers).forEach(buyerName=>{
+          const buyerItems = buyers[buyerName];
+          const buyerTotal = buyerItems.reduce((a,r)=>a+r.qty,0);
+          companyCard.appendChild(h('hr',{}));
+          companyCard.appendChild(h('div',{class:'flexbetween'},[
+            h('div',{style:'font-weight:600',text:buyerName}),
+            h('span',{class:'pill',text:buyerTotal+t('unit')})
+          ]));
+          buyerItems.forEach(it=>{
+            const amountStr = it.amount!=null ? fmtWon(it.amount)+t('wonUnit') : '';
+            companyCard.appendChild(h('div',{class:'itemline'},[
+              h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + ' · ' + it.received_date + (amountStr?' · '+amountStr:'')},[]),
+              h('span',{class:'pill',text:'x'+it.qty})
+            ]));
+          });
+        });
+        resultWrap.appendChild(companyCard);
       });
 
       // model summary
