@@ -555,7 +555,11 @@ function renderAdminView(){
       qtySummary:'수량 집계 (매장별 · 용량별)', grandTotal:'전체 합계',
       companyName:'공급업체명', companyNamePh:'예: ○○무역', receivedDate:'받은 날짜', amount:'금액 (원)', amountPh:'예: 1200000',
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
-      wonUnit:'원',
+      wonUnit:'원', sectionBackup:'백업',
+      backupTitle:'전체 기록 내려받기', backupDesc:'알바 기록 · 구매 기록 · 공급업체 · 삭제/취소된 기록까지 전부 파일로 저장합니다. 정기적으로 내려받아 보관해두세요.',
+      backupFormat:'파일 형식', backupXlsx:'엑셀 (.xlsx) — 시트별로 정리', backupCsv:'CSV (.csv) — 항목별 파일',
+      backupPeriod:'기간', backupAll:'전체 기간', backupRange:'기간 지정', backupDownload:'내려받기', backupPreparing:'파일 만드는 중...',
+      backupDone:'내려받기 완료 ✓', backupLibFail:'엑셀 라이브러리를 불러오지 못했습니다. 인터넷 연결을 확인하거나 CSV로 받아주세요.',
     },
     zh:{
       brand:'取货管理', adminLogin:'管理员登录', email:'邮箱', password:'密码',
@@ -594,7 +598,11 @@ function renderAdminView(){
       qtySummary:'数量汇总（按门店 · 按容量）', grandTotal:'总计',
       companyName:'供应商名称', companyNamePh:'例：○○贸易', receivedDate:'收货日期', amount:'金额（韩元）', amountPh:'例：1200000',
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
-      wonUnit:'韩元',
+      wonUnit:'韩元', sectionBackup:'备份',
+      backupTitle:'下载全部记录', backupDesc:'将兼职记录 · 购买记录 · 供应商 · 已删除/已取消的记录全部保存为文件。请定期下载保存。',
+      backupFormat:'文件格式', backupXlsx:'Excel (.xlsx) — 按工作表整理', backupCsv:'CSV (.csv) — 按项目分文件',
+      backupPeriod:'期间', backupAll:'全部期间', backupRange:'指定期间', backupDownload:'下载', backupPreparing:'正在生成文件...',
+      backupDone:'下载完成 ✓', backupLibFail:'无法加载Excel库。请检查网络或改用CSV。',
     }
   };
   function t(key, vars){
@@ -669,7 +677,7 @@ function renderAdminView(){
     app.appendChild(top);
 
     const sectionRow = h('div',{class:'tabs',style:'margin-bottom:6px'});
-    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')],['supplier',t('sectionSupplier')]].forEach(([key,label])=>{
+    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')],['supplier',t('sectionSupplier')],['backup',t('sectionBackup')]].forEach(([key,label])=>{
       const tb = h('div',{class:'tab'+(section===key?' active':''), text:label, onclick:()=>{ section=key; drawDashboard(); }});
       sectionRow.appendChild(tb);
     });
@@ -677,7 +685,8 @@ function renderAdminView(){
 
     if(section==='alba') drawAlbaSection();
     else if(section==='purchase') drawPurchaseSection();
-    else drawSupplierSection();
+    else if(section==='supplier') drawSupplierSection();
+    else drawBackupSection();
   }
 
   function drawAlbaSection(){
@@ -999,6 +1008,94 @@ function renderAdminView(){
     }
     loadBtn.onclick = load;
     load();
+  }
+
+  function loadSheetJS(){
+    return new Promise((resolve,reject)=>{
+      if(window.XLSX) return resolve(window.XLSX);
+      const sc = document.createElement('script');
+      sc.src = 'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+      sc.onload = ()=> window.XLSX ? resolve(window.XLSX) : reject(new Error('xlsx'));
+      sc.onerror = ()=> reject(new Error('xlsx'));
+      document.head.appendChild(sc);
+    });
+  }
+
+  function drawBackupSection(){
+    const card = h('div',{class:'card'});
+    card.appendChild(h('div',{style:'font-weight:700;font-size:16px',text:t('backupTitle')}));
+    card.appendChild(h('div',{class:'muted',style:'margin:6px 0 12px',text:t('backupDesc')}));
+
+    let fmt = 'xlsx', allPeriod = true;
+    const mkChoice = (labelKey, options, getter, setter)=>{
+      card.appendChild(h('label',{text:t(labelKey)}));
+      const row = h('div',{class:'chiprow',style:'margin-bottom:10px'});
+      const btns = {};
+      options.forEach(([val,txt])=>{
+        const b = h('button',{type:'button',class:'chip-btn'+(getter()===val?' selected':''),text:txt});
+        b.onclick = ()=>{ setter(val); Object.keys(btns).forEach(k=>btns[k].classList.toggle('selected',k===String(val))); if(labelKey==='backupPeriod') rangeBox.style.display = (val===false)?'block':'none'; };
+        btns[String(val)] = b; row.appendChild(b);
+      });
+      card.appendChild(row);
+    };
+    mkChoice('backupFormat',[['xlsx',t('backupXlsx')],['csv',t('backupCsv')]],()=>fmt,v=>{fmt=v;});
+    const rangeBox = h('div',{style:'display:none;margin-bottom:10px'});
+    const today = new Date().toISOString().slice(0,10);
+    const fromI = h('input',{type:'date',value:today}), toI = h('input',{type:'date',value:today});
+    rangeBox.appendChild(h('div',{class:'row'},[
+      (()=>{const d=h('div',{});d.appendChild(h('label',{text:t('fromDate')}));d.appendChild(fromI);return d;})(),
+      (()=>{const d=h('div',{});d.appendChild(h('label',{text:t('toDate')}));d.appendChild(toI);return d;})()
+    ]));
+    mkChoice('backupPeriod',[[true,t('backupAll')],[false,t('backupRange')]],()=>allPeriod,v=>{allPeriod=v;});
+    card.appendChild(rangeBox);
+
+    const err = h('div',{class:'err hidden'});
+    const ok = h('div',{class:'muted hidden',style:'margin-top:8px'});
+    const btn = h('button',{class:'btn-primary',text:t('backupDownload')});
+    card.appendChild(err); card.appendChild(btn); card.appendChild(ok);
+
+    btn.onclick = async ()=>{
+      err.className='err hidden'; ok.className='muted hidden';
+      const old = btn.textContent; btn.disabled = true; btn.textContent = t('backupPreparing');
+      try{
+        const { data, error } = await sb.rpc('admin_export_all', {
+          p_date_from: allPeriod ? null : fromI.value, p_date_to: allPeriod ? null : toI.value
+        });
+        if(error) throw error;
+        const fmtTime = v=> v ? new Date(v).toLocaleString('ko-KR',{hour12:false}) : '';
+        const sheets = [
+          ['알바기록', (data.sessions||[]).map(r=>({'생성일시':fmtTime(r.created_at),'매장':r.store_name,'알바명':r.alba_name,'상태':r.status==='done'?'완료':'진행중','주문번호':r.orders||'','도착':r.arrive_time||'','완료':r.complete_time||'','제출내용(계좌/보고)':r.note||'','완료일시':fmtTime(r.completed_at),'송금완료':r.paid?'Y':'','송금일시':fmtTime(r.paid_at),'송금처리자':r.paid_by_name||''}))],
+          ['알바품목', (data.session_items||[]).map(r=>({'생성일시':fmtTime(r.created_at),'매장':r.store_name,'알바명':r.alba_name,'모델':r.model,'용량':r.capacity||'','색상':r.color||'','수량':r.qty}))],
+          ['구매기록', (data.purchases||[]).map(r=>({'구매일':r.purchase_date,'매장':r.store_name,'입력자':r.buyer_name||'','모델':r.model,'용량':r.capacity||'','색상':r.color||'','수량':r.qty,'카드회사':r.card_company||'','카드끝4자리':r.card_last4||'','메모':r.note||'','입력일시':fmtTime(r.created_at),'취소됨':r.voided?'Y':''}))],
+          ['공급업체', (data.supplier_orders||[]).map(r=>({'받은날짜':r.received_date,'공급업체':r.company_name,'입력자':r.buyer_name||'','모델':r.model,'용량':r.capacity||'','색상':r.color||'','수량':r.qty,'금액(원)':r.amount===null?'':Number(r.amount),'메모':r.note||'','입력일시':fmtTime(r.created_at),'취소됨':r.voided?'Y':''}))],
+          ['삭제된알바기록', (data.deleted_sessions||[]).map(r=>({'삭제일시':fmtTime(r.deleted_at),'삭제자':r.deleted_by_name||'','매장':r.store_name||'','알바명':r.alba_name||'','상태':r.status||'','생성일시':fmtTime(r.created_at),'제출내용':r.note||'','주문번호':r.orders||'','품목(원본)':r.items||''}))]
+        ];
+        const stamp = new Date().toISOString().slice(0,10);
+        if(fmt==='xlsx'){
+          let X; try{ X = await loadSheetJS(); }catch(e){ throw new Error(t('backupLibFail')); }
+          const wb = X.utils.book_new();
+          sheets.forEach(([name,rows])=>{
+            const ws = rows.length ? X.utils.json_to_sheet(rows) : X.utils.aoa_to_sheet([['(기록 없음)']]);
+            if(rows.length) ws['!cols'] = Object.keys(rows[0]).map(k=>({wch:Math.min(40,Math.max(10,k.length*2+2))}));
+            X.utils.book_append_sheet(wb, ws, name);
+          });
+          X.writeFile(wb, `픽업시스템_백업_${stamp}.xlsx`);
+        } else {
+          const esc = v=> { const str = String(v===null||v===undefined?'':v); return /[",\n\r]/.test(str) ? '"'+str.replace(/"/g,'""')+'"' : str; };
+          for(const [name,rows] of sheets){
+            const cols = rows.length ? Object.keys(rows[0]) : ['(기록 없음)'];
+            const lines = [cols.map(esc).join(',')].concat(rows.map(r=>cols.map(c=>esc(r[c])).join(',')));
+            const blob = new Blob(['﻿'+lines.join('\r\n')],{type:'text/csv;charset=utf-8'});
+            const a = document.createElement('a'); a.href = URL.createObjectURL(blob); a.download = `픽업시스템_${name}_${stamp}.csv`;
+            document.body.appendChild(a); a.click(); a.remove();
+            await new Promise(r=>setTimeout(r,400));
+          }
+        }
+        ok.textContent = t('backupDone') + ' ('+sheets.map(([n,r])=>n+' '+r.length).join(' · ')+')'; ok.className='muted';
+      }catch(e){ err.textContent = e.message || String(e); err.className='err'; }
+      btn.disabled = false; btn.textContent = old;
+    };
+    app.appendChild(card);
   }
 
   function drawSupplierSection(){
