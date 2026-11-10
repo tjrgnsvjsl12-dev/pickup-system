@@ -187,26 +187,45 @@ function fmtWon(n){
   return num.toLocaleString('ko-KR');
 }
 function buildCopyText(list, groupBy){
+  // 같은 날짜는 한 번만, 같은 매장도 한 번만 표시하고 아래에 모델 · 용량 · 색상 x수량만 나열
   const sorted = [...list].sort((a,b)=>
     (a.purchase_date||'').localeCompare(b.purchase_date||'') ||
     (a.store_name||'').localeCompare(b.store_name||'') ||
     (a.created_at||'').localeCompare(b.created_at||'')
   );
-  const groups = {}; const order = [];
-  sorted.forEach(p=>{
-    const key = groupBy==='day' ? fmtShortDate(p.purchase_date) : (p.store_name||'-');
-    if(!(key in groups)){ groups[key]=[]; order.push(key); }
-    groups[key].push(p);
-  });
+  const cardOf = p => [p.card_company, p.card_last4].filter(Boolean).join(' ');
+  const itemOf = (p, withCard) => {
+    const spec = [p.model, p.capacity, p.color].filter(Boolean).join(' · ') || '-';
+    return `${spec} x${p.qty}` + (withCard && cardOf(p) ? ` (${cardOf(p)})` : '');
+  };
+  // 한 매장 묶음: 카드가 하나뿐이면 매장 이름 옆에 한 번만, 여러 개면 줄마다 표시
+  const block = (storeName, rows) => {
+    const cards = [...new Set(rows.map(cardOf).filter(Boolean))];
+    const single = cards.length === 1;
+    const out = [];
+    if(storeName !== null) out.push(`[${storeName}]` + (single ? ` ${cards[0]}` : ''));
+    else if(single) out.push(cards[0]);
+    rows.forEach(p=>out.push(itemOf(p, !single)));
+    return out;
+  };
+  const by = (arr, keyFn) => { const m = new Map(); arr.forEach(x=>{ const k = keyFn(x); if(!m.has(k)) m.set(k, []); m.get(k).push(x); }); return m; };
   const lines = [];
-  order.forEach(key=>{
-    lines.push(`■ ${key}`);
-    groups[key].forEach(p=>{
-      const cardStr = [p.card_company, p.card_last4].filter(Boolean).join(' ') || '-';
-      lines.push(`${fmtShortDate(p.purchase_date)} · ${p.store_name||'-'} · ${cardStr} · ${p.model||'-'} · ${p.capacity||'-'} · x${p.qty}`);
+  if(groupBy==='day'){
+    by(sorted, p=>fmtShortDate(p.purchase_date)).forEach((dayRows, day)=>{
+      lines.push(`■ ${day}`);
+      by(dayRows, p=>p.store_name||'-').forEach((rows, store)=>{ lines.push(...block(store, rows)); });
+      lines.push('');
     });
-    lines.push('');
-  });
+  } else {
+    by(sorted, p=>p.store_name||'-').forEach((storeRows, store)=>{
+      lines.push(`■ ${store}`);
+      by(storeRows, p=>fmtShortDate(p.purchase_date)).forEach((rows, day)=>{
+        lines.push(day);
+        lines.push(...block(null, rows));
+      });
+      lines.push('');
+    });
+  }
   return lines.join('\n').trim();
 }
 
