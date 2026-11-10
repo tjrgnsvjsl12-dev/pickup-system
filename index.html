@@ -488,6 +488,8 @@ function renderAdminView(){
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
   let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
+  let editFromAll = false; // 전체 현황에서 수정 버튼으로 들어왔는지 (저장/취소 후 전체 현황으로 복귀)
+  const canEditAll = ()=> !!(myProfile && myProfile.can_edit_all);
   let editingPurchase = null; // the purchase row being edited, or null
   let supplierMode = 'batch'; // 'batch' (명세서 일괄) | 'single'
   let editingSupplier = null; // the supplier-order row being edited, or null
@@ -794,6 +796,33 @@ function renderAdminView(){
     else drawAllPurchaseTab(body);
   }
 
+  function rowRightCell(row, kind, reload){
+    const cell = h('span',{style:'display:inline-flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end'});
+    cell.appendChild(h('span',{class:'pill',text:'x'+row.qty}));
+    if(!canEditAll()) return cell;
+    const eb = h('button',{type:'button',class:'btn-ghost btn-sm',text:t('edit')});
+    eb.onclick = ()=>{
+      editFromAll = true;
+      if(kind==='purchase'){ editingPurchase = row; purchaseTab = 'mine'; }
+      else { editingSupplier = row; supplierTab = 'mine'; }
+      drawDashboard(); window.scrollTo({top:0,behavior:'smooth'});
+    };
+    cell.appendChild(eb);
+    const vb = h('button',{type:'button',class:'btn-danger btn-sm',text:t('cancel')});
+    let armed = false;
+    vb.onclick = async ()=>{
+      if(!armed){ armed=true; vb.textContent=t('confirmVoid'); setTimeout(()=>{armed=false; vb.textContent=t('cancel');},3000); return; }
+      vb.disabled = true;
+      const { error } = kind==='purchase'
+        ? await sb.rpc('void_purchase', { p_purchase_id: row.id })
+        : await sb.rpc('void_supplier_order', { p_order_id: row.id });
+      if(error){ vb.disabled=false; vb.textContent=error.message; return; }
+      reload();
+    };
+    cell.appendChild(vb);
+    return cell;
+  }
+
   function drawMyPurchaseTab(body){
     const ed = editingPurchase; // snapshot; null when adding new
     const card = h('div',{class:'card'});
@@ -858,15 +887,17 @@ function renderAdminView(){
       btn.disabled=false; btn.textContent = ed ? t('editDone') : t('addPurchase');
       if(error){ err.textContent = error.message; err.className='err'; return; }
       editingPurchase = null;
+      if(editFromAll){ editFromAll = false; purchaseTab = 'all'; }
       drawDashboard();
     };
     card.appendChild(btn);
     if(ed){
       const cancelBtn = h('button',{class:'btn-ghost',text:t('cancelEdit'),style:'width:100%;margin-top:8px'});
-      cancelBtn.onclick = ()=>{ editingPurchase = null; drawDashboard(); };
+      cancelBtn.onclick = ()=>{ editingPurchase = null; if(editFromAll){ editFromAll = false; purchaseTab = 'all'; } drawDashboard(); };
       card.appendChild(cancelBtn);
     }
     body.appendChild(card);
+    if(ed && editFromAll) return; // 전체 현황에서 온 수정은 수정 폼만 보여준다
 
     const copyCard = h('div',{class:'card'});
     copyCard.appendChild(h('label',{text:t('copyRecords'),style:'display:block;margin-bottom:8px'}));
@@ -938,7 +969,7 @@ function renderAdminView(){
         ]));
         if(p.card_company || p.card_last4) c.appendChild(h('div',{class:'muted',text:[p.card_company,p.card_last4].filter(Boolean).join(' · ')}));
         const editBtn = h('button',{class:'btn-ghost btn-sm',text:t('edit'),style:'margin-top:6px'});
-        editBtn.onclick = ()=>{ editingPurchase = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
+        editBtn.onclick = ()=>{ editFromAll = false; editingPurchase = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
         c.appendChild(editBtn);
         const voidBtn = h('button',{class:'btn-danger btn-sm',text:t('cancel'),style:'margin-top:6px;margin-left:6px'});
         const voidConfirm = h('span',{class:'hidden muted',text:' '+t('confirmVoid')});
@@ -1026,7 +1057,7 @@ function renderAdminView(){
             const cardInfo = [it.card_company, it.card_last4].filter(Boolean).join(' ');
             storeCard.appendChild(h('div',{class:'itemline'},[
               h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + ' · ' + it.purchase_date + (cardInfo?' · '+cardInfo:'')},[]),
-              h('span',{class:'pill',text:'x'+it.qty})
+              rowRightCell(it,'purchase',load)
             ]));
           });
         });
@@ -1313,15 +1344,17 @@ function renderAdminView(){
       btn.disabled=false; btn.textContent = ed ? t('editDone') : t('addSupplier');
       if(error){ err.textContent = error.message; err.className='err'; return; }
       editingSupplier = null;
+      if(editFromAll){ editFromAll = false; supplierTab = 'all'; }
       drawDashboard();
     };
     card.appendChild(btn);
     if(ed){
       const cancelBtn = h('button',{class:'btn-ghost',text:t('cancelEdit'),style:'width:100%;margin-top:8px'});
-      cancelBtn.onclick = ()=>{ editingSupplier = null; drawDashboard(); };
+      cancelBtn.onclick = ()=>{ editingSupplier = null; if(editFromAll){ editFromAll = false; supplierTab = 'all'; } drawDashboard(); };
       card.appendChild(cancelBtn);
     }
     if(ed || supplierMode==='single') body.appendChild(card);
+    if(ed && editFromAll) return;
 
     // "내가 입력한 기록" — selectable date range, same pattern as 구매 기록 (any past
     // day's entry can be pulled up and edited/취소, not just today's).
@@ -1373,7 +1406,7 @@ function renderAdminView(){
           const right = h('span',{style:'margin-left:auto;display:inline-flex;gap:6px;align-items:center'});
           right.appendChild(h('span',{class:'pill',text:'x'+p.qty}));
           const editBtn = h('button',{class:'btn-ghost btn-sm',text:t('edit')});
-          editBtn.onclick = ()=>{ editingSupplier = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
+          editBtn.onclick = ()=>{ editFromAll = false; editingSupplier = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
           right.appendChild(editBtn);
           const vb = h('button',{class:'btn-danger btn-sm',text:t('cancel')});
           let armedL = false;
@@ -1483,7 +1516,7 @@ function renderAdminView(){
               const priceStr = it.amount!=null ? ' · '+(it.unit_price!=null?fmtWon(it.unit_price)+'×'+it.qty+' = ':'')+fmtWon(it.amount)+t('wonUnit') : '';
               companyCard.appendChild(h('div',{class:'itemline'},[
                 h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + priceStr},[]),
-                h('span',{class:'pill',text:'x'+it.qty})
+                rowRightCell(it,'supplier',load)
               ]));
             });
           });
