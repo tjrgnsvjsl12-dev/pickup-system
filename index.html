@@ -211,6 +211,8 @@ function buildCopyText(list, groupBy){
 }
 
 // iPhone Duo is the priority item right now, so it leads the list.
+// 명세서 사진 자동 인식: Supabase에 ANTHROPIC_API_KEY를 등록한 뒤 true로 바꾸면 버튼이 다시 나타납니다.
+const SCAN_ENABLED = false;
 const MODEL_OPTIONS = ['iPhone Duo', 'iPhone 18 Pro', 'iPhone 18 Pro Max'];
 const CAPACITY_OPTIONS = ['256GB', '512GB', '1TB', '2TB'];
 const COLOR_OPTIONS_BY_MODEL = {
@@ -1192,7 +1194,7 @@ function renderAdminView(){
     const scanFile = h('input',{type:'file',accept:'image/*',style:'display:none'});
     const scanBtn = h('button',{type:'button',class:'btn-primary',text:t('scanBtn'),style:'width:100%;margin-bottom:10px'});
     const scanMsg = h('div',{class:'muted',style:'margin-bottom:10px;white-space:pre-line'});
-    card.appendChild(scanFile); card.appendChild(scanBtn); card.appendChild(scanMsg);
+    if(SCAN_ENABLED){ card.appendChild(scanFile); card.appendChild(scanBtn); card.appendChild(scanMsg); }
     scanBtn.onclick = ()=>scanFile.click();
     card.appendChild(h('label',{text:t('companyName')}));
     const companyInput = h('input',{placeholder:t('companyNamePh')});
