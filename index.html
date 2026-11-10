@@ -505,6 +505,8 @@ function renderAdminView(){
   let section = 'alba'; // 'alba' | 'purchase' | 'supplier'
   let activeTab = 'send';
   let purchaseTab = 'mine'; // 'mine' | 'all'
+  let progressDate = new Date().toISOString().slice(0,10);
+  let progressTimer = null;
   let supplierTab = 'mine'; // 'mine' | 'all'
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
@@ -583,6 +585,8 @@ function renderAdminView(){
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
       wonUnit:'원', sectionBackup:'백업', storeZhTitle:'매장 중문 이름 (중문 화면에서 표시)', storeZhHint:'한글 화면에서는 한글 매장명, 중문 화면에서는 아래 중문 이름이 표시됩니다.',
       modeBatch:'명세서 일괄 입력', modeSingle:'한 건 입력', batchLines:'품목', addLine:'+ 줄 추가', removeLine:'삭제',
+      targetTitle:'오늘 목표 현황', targetNone:'등록된 목표가 없습니다', targetLeft:'잔여', targetDone:'완료', targetOver:'{n}대 초과', targetSet:'목표 설정', targetSave:'목표 저장', targetClose:'닫기', targetAuto:'30초마다 자동 갱신 · 전체 구매자 합산',
+      warnOver:'⚠ 잔여 {a}대인데 {b}대를 입력하셨습니다. 중복 구매가 아닌지 확인해주세요. 맞으면 한 번 더 눌러 저장합니다.', warnNoTarget:'⚠ 이 날짜 목표에 없는 품목입니다. 맞으면 한 번 더 눌러 저장합니다.', saveAnyway:'그래도 저장',
       scanBtn:'📷 명세서 사진으로 자동 입력', scanning:'사진을 읽는 중입니다… (10~20초)', scanDone:'✅ 사진에서 읽은 내용입니다. 아래 내용이 명세서와 같은지 꼭 확인해주세요.', scanFail:'사진을 읽지 못했습니다. 다시 찍어서 시도하거나 직접 입력해주세요.', scanNoKey:'자동 인식 기능이 아직 설정되지 않았습니다. 관리자에게 문의해주세요.', scanTotalMismatch:'⚠ 명세서 합계와 읽은 수량이 다릅니다 (명세서 {a}대 / 읽은 {b}대)', scanUnknownLine:'⚠ #{n}줄: 모델/용량을 읽지 못했습니다. 직접 선택해주세요.',
       unitPrice:'단가(원)', lineTotal:'금액', batchTotal:'명세서 합계', registerBatch:'명세서 등록', batchNeedLine:'품목을 한 줄 이상 입력해주세요',
       batchCheckLine:'{n}번째 줄을 확인해주세요 (모델/용량/수량)', cancelBatch:'명세서 전체 취소', statementOf:'명세서', lines:'{n}줄', batchSaved:'등록되었습니다 ✓',
@@ -630,6 +634,8 @@ function renderAdminView(){
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
       wonUnit:'韩元', sectionBackup:'备份', storeZhTitle:'门店中文名称（中文界面显示）', storeZhHint:'韩文界面显示韩文门店名，中文界面显示下方的中文名称。',
       modeBatch:'批量录入对账单', modeSingle:'单笔录入', batchLines:'明细', addLine:'+ 添加一行', removeLine:'删除',
+      targetTitle:'今日目标进度', targetNone:'尚未设置目标', targetLeft:'剩余', targetDone:'已完成', targetOver:'超出{n}台', targetSet:'设置目标', targetSave:'保存目标', targetClose:'关闭', targetAuto:'每30秒自动刷新 · 所有采购人员合计',
+      warnOver:'⚠ 剩余{a}台，但您输入了{b}台。请确认是否重复采购。如无误，请再点击一次保存。', warnNoTarget:'⚠ 该品项不在当天目标中。如无误，请再点击一次保存。', saveAnyway:'仍然保存',
       scanBtn:'📷 拍照自动录入对账单', scanning:'正在识别照片…（约10~20秒）', scanDone:'✅ 以下为照片识别结果，请务必与对账单核对。', scanFail:'无法识别照片，请重新拍照或手动录入。', scanNoKey:'自动识别功能尚未设置，请联系管理员。', scanTotalMismatch:'⚠ 对账单合计与识别数量不一致（对账单{a}台 / 识别{b}台）', scanUnknownLine:'⚠ 第{n}行：未能识别型号/容量，请手动选择。',
       unitPrice:'单价（韩元）', lineTotal:'金额', batchTotal:'对账单合计', registerBatch:'登记对账单', batchNeedLine:'请至少输入一行明细',
       batchCheckLine:'请检查第{n}行（型号/容量/数量）', cancelBatch:'取消整张对账单', statementOf:'对账单', lines:'{n}行', batchSaved:'已登记 ✓',
@@ -701,6 +707,7 @@ function renderAdminView(){
   }
 
   function drawDashboard(){
+    if(progressTimer){ clearInterval(progressTimer); progressTimer = null; }
     app.innerHTML = '';
     const top = h('div',{class:'topbar'},[
       h('div',{},[h('h1',{text:t('brand')}), h('div',{class:'sub',text:(myProfile&&myProfile.display_name)||session.user.email})]),
@@ -848,8 +855,82 @@ function renderAdminView(){
     return cell;
   }
 
+  function drawTargetCard(body){
+    const card = h('div',{class:'card'});
+    const canSet = !!(myProfile && myProfile.role === 'admin');
+    const head = h('div',{class:'flexbetween'});
+    head.appendChild(h('label',{text:t('targetTitle'),style:'margin:0'}));
+    const dInput = h('input',{type:'date',value:progressDate,style:'max-width:150px'});
+    head.appendChild(dInput); card.appendChild(head);
+    const list = h('div',{style:'margin-top:8px'}); card.appendChild(list);
+    const foot = h('div',{class:'muted',style:'margin-top:6px;font-size:12px',text:t('targetAuto')}); card.appendChild(foot);
+    const editorWrap = h('div'); card.appendChild(editorWrap);
+    let rows = [], editing = false;
+    async function load(){
+      const { data, error } = await sb.rpc('get_daily_progress', { p_date: dInput.value });
+      if(error) return;
+      rows = data || []; renderList();
+    }
+    function renderList(){
+      list.innerHTML = '';
+      if(!rows.length){ list.appendChild(h('div',{class:'muted',text:t('targetNone')})); return; }
+      rows.forEach(r=>{
+        const left = r.target - r.bought;
+        const spec = [r.model, r.capacity, r.color].filter(Boolean).join(' · ');
+        const status = left>0 ? t('targetLeft')+' '+left : (left===0 ? t('targetDone') : t('targetOver',{n:-left}));
+        list.appendChild(h('div',{class:'flexbetween',style:'padding:7px 0;border-bottom:1px solid var(--border);gap:8px'},[
+          h('span',{text:spec,style:'min-width:0'}),
+          h('span',{style:'font-weight:700;white-space:nowrap;'+(left<0?'color:var(--danger)':''),text:r.bought+' / '+r.target+'  ·  '+status})
+        ]));
+      });
+    }
+    dInput.onchange = ()=>{ progressDate = dInput.value; load(); };
+    if(canSet){
+      const setBtn = h('button',{type:'button',class:'btn-ghost btn-sm',text:t('targetSet'),style:'margin-top:8px'});
+      card.insertBefore(setBtn, editorWrap);
+      setBtn.onclick = ()=>{
+        if(editing){ editing=false; editorWrap.innerHTML=''; setBtn.textContent=t('targetSet'); return; }
+        editing = true; setBtn.textContent = t('targetClose');
+        const lines = rows.map(r=>({model:r.model,capacity:r.capacity,color:r.color,qty:String(r.target)}));
+        if(!lines.length) lines.push({model:'',capacity:'',color:'',qty:''});
+        const mk = (opts,val,ph,on)=>{ const sel=h('select',{}); sel.appendChild(h('option',{value:'',text:ph})); opts.forEach(o=>sel.appendChild(h('option',{value:o,text:o}))); sel.value=val||''; sel.onchange=()=>on(sel.value); return sel; };
+        const wrap = h('div',{style:'margin-top:8px'});
+        const msg = h('div',{class:'muted',style:'margin-top:6px'});
+        function draw(){
+          wrap.innerHTML='';
+          lines.forEach((l,i)=>{
+            const box = h('div',{style:'border:1px solid var(--border);border-radius:10px;padding:8px;margin-bottom:6px'});
+            box.appendChild(h('div',{class:'row'},[ mk(MODEL_OPTIONS,l.model,t('model'),v=>{ l.model=v; l.color=''; draw(); }), mk(CAPACITY_OPTIONS,l.capacity,t('capacity'),v=>{ l.capacity=v; }) ]));
+            const qi = h('input',{type:'number',min:'1',step:'1',placeholder:t('qty'),value:l.qty||''}); qi.oninput=()=>{ l.qty=qi.value; };
+            const rm = h('button',{type:'button',class:'btn-ghost btn-sm',text:t('removeLine')}); rm.onclick=()=>{ lines.splice(i,1); if(!lines.length) lines.push({model:'',capacity:'',color:'',qty:''}); draw(); };
+            box.appendChild(h('div',{style:'margin-top:6px'},[ mk(colorOptionsFor(l.model||MODEL_OPTIONS[0]),l.color,t('color'),v=>{ l.color=v; }) ]));
+            box.appendChild(h('div',{class:'row',style:'margin-top:6px'},[ qi, rm ]));
+            wrap.appendChild(box);
+          });
+        }
+        draw();
+        const add = h('button',{type:'button',class:'btn-ghost',text:t('addLine'),style:'width:100%'});
+        add.onclick = ()=>{ const last=lines[lines.length-1]; lines.push({model:last?last.model:'',capacity:'',color:'',qty:''}); draw(); };
+        const save = h('button',{type:'button',class:'btn-primary',text:t('targetSave'),style:'margin-top:8px'});
+        save.onclick = async ()=>{
+          save.disabled = true;
+          const items = lines.filter(l=>l.model&&l.capacity&&parseInt(l.qty)>0).map(l=>({model:l.model,capacity:l.capacity,color:l.color||'',qty:parseInt(l.qty)}));
+          const { error } = await sb.rpc('set_daily_targets', { p_date: dInput.value, p_items: items });
+          save.disabled = false;
+          if(error){ msg.className='err'; msg.textContent=error.message; return; }
+          editing=false; editorWrap.innerHTML=''; setBtn.textContent=t('targetSet'); load();
+        };
+        editorWrap.innerHTML=''; editorWrap.appendChild(wrap); editorWrap.appendChild(add); editorWrap.appendChild(save); editorWrap.appendChild(msg);
+      };
+    }
+    body.appendChild(card);
+    load();
+    progressTimer = setInterval(()=>{ if(!editing) load(); }, 30000);
+  }
+
   function drawMyPurchaseTab(body){
     const ed = editingPurchase; // snapshot; null when adding new
+    if(!ed) drawTargetCard(body);
     const card = h('div',{class:'card'});
     card.appendChild(h('label',{text: ed ? t('editPurchase') : t('store')}));
     if(ed) card.appendChild(h('label',{text:t('store'),style:'margin-top:8px'}));
@@ -891,6 +972,7 @@ function renderAdminView(){
 
     const err = h('div',{class:'err hidden'});
     card.appendChild(err);
+    let pendingWarn = null;
     const btn = h('button',{class:'btn-primary',text: ed ? t('editDone') : t('addPurchase')});
     btn.onclick = async ()=>{
       err.className='err hidden';
@@ -900,6 +982,23 @@ function renderAdminView(){
       if(!colorSel.value){ err.textContent=t('selectColor'); err.className='err'; return; }
       const qty = parseInt(qtyInput.value);
       if(!qty || qty < 1){ err.textContent=t('checkQty'); err.className='err'; return; }
+      // 목표 수량 초과/목표에 없는 품목이면 한 번 경고하고, 다시 누르면 저장 (막지는 않음)
+      try{
+        const { data: prog } = await sb.rpc('get_daily_progress', { p_date: dateInput.value });
+        if(prog && prog.length){
+          const m = prog.find(r=>r.model===modelSel.value && r.capacity===capSel.value && (r.color||'')===(colorSel.value||''));
+          let warnMsg = '';
+          if(!m) warnMsg = t('warnNoTarget');
+          else {
+            const sameKey = ed && ed.purchase_date===dateInput.value && ed.model===modelSel.value && ed.capacity===capSel.value && (ed.color||'')===(colorSel.value||'');
+            const left = m.target - m.bought + (sameKey ? ed.qty : 0);
+            if(qty > left) warnMsg = t('warnOver',{a:Math.max(left,0), b:qty});
+          }
+          if(warnMsg && pendingWarn !== warnMsg){
+            pendingWarn = warnMsg; err.textContent = warnMsg; err.className='err'; btn.textContent = t('saveAnyway'); return;
+          }
+        }
+      }catch(e){}
       btn.disabled=true; btn.textContent=t('saving');
       const params = {
         p_store_id: sel.value, p_model: modelSel.value, p_capacity: capSel.value,
