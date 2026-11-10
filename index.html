@@ -1328,7 +1328,6 @@ function renderAdminView(){
       if(!companyInput.value.trim()){ err.textContent=t('selectCompanyName'); err.className='err'; return; }
       if(!modelSel.value){ err.textContent=t('selectModel'); err.className='err'; return; }
       if(!capSel.value){ err.textContent=t('selectCapacity'); err.className='err'; return; }
-      if(!colorSel.value){ err.textContent=t('selectColor'); err.className='err'; return; }
       const qty = parseInt(qtyInput.value);
       if(!qty || qty < 1){ err.textContent=t('checkQty'); err.className='err'; return; }
       btn.disabled=true; btn.textContent=t('saving');
