@@ -487,6 +487,7 @@ function renderAdminView(){
   let myProfile = null; // {id, display_name, role}
   let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
   let editingPurchase = null; // the purchase row being edited, or null
+  let supplierMode = 'batch'; // 'batch' (명세서 일괄) | 'single'
   let editingSupplier = null; // the supplier-order row being edited, or null
   let myPurchaseDateFrom = new Date().toISOString().slice(0,10); // date range for "내가 입력한 기록" (구매 기록)
   let myPurchaseDateTo = new Date().toISOString().slice(0,10);
@@ -556,6 +557,9 @@ function renderAdminView(){
       companyName:'공급업체명', companyNamePh:'예: ○○무역', receivedDate:'받은 날짜', amount:'금액 (원)', amountPh:'예: 1200000',
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
       wonUnit:'원', sectionBackup:'백업',
+      modeBatch:'명세서 일괄 입력', modeSingle:'한 건 입력', batchLines:'품목', addLine:'+ 줄 추가', removeLine:'삭제',
+      unitPrice:'단가(원)', lineTotal:'금액', batchTotal:'명세서 합계', registerBatch:'명세서 등록', batchNeedLine:'품목을 한 줄 이상 입력해주세요',
+      batchCheckLine:'{n}번째 줄을 확인해주세요 (모델/용량/수량)', cancelBatch:'명세서 전체 취소', statementOf:'명세서', lines:'{n}줄', batchSaved:'등록되었습니다 ✓',
       backupTitle:'전체 기록 내려받기', backupDesc:'알바 기록 · 구매 기록 · 공급업체 · 삭제/취소된 기록까지 전부 파일로 저장합니다. 정기적으로 내려받아 보관해두세요.',
       backupFormat:'파일 형식', backupXlsx:'엑셀 (.xlsx) — 시트별로 정리', backupCsv:'CSV (.csv) — 항목별 파일',
       backupPeriod:'기간', backupAll:'전체 기간', backupRange:'기간 지정', backupDownload:'내려받기', backupPreparing:'파일 만드는 중...',
@@ -599,6 +603,9 @@ function renderAdminView(){
       companyName:'供应商名称', companyNamePh:'例：○○贸易', receivedDate:'收货日期', amount:'金额（韩元）', amountPh:'例：1200000',
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
       wonUnit:'韩元', sectionBackup:'备份',
+      modeBatch:'批量录入对账单', modeSingle:'单笔录入', batchLines:'明细', addLine:'+ 添加一行', removeLine:'删除',
+      unitPrice:'单价（韩元）', lineTotal:'金额', batchTotal:'对账单合计', registerBatch:'登记对账单', batchNeedLine:'请至少输入一行明细',
+      batchCheckLine:'请检查第{n}行（型号/容量/数量）', cancelBatch:'取消整张对账单', statementOf:'对账单', lines:'{n}行', batchSaved:'已登记 ✓',
       backupTitle:'下载全部记录', backupDesc:'将兼职记录 · 购买记录 · 供应商 · 已删除/已取消的记录全部保存为文件。请定期下载保存。',
       backupFormat:'文件格式', backupXlsx:'Excel (.xlsx) — 按工作表整理', backupCsv:'CSV (.csv) — 按项目分文件',
       backupPeriod:'期间', backupAll:'全部期间', backupRange:'指定期间', backupDownload:'下载', backupPreparing:'正在生成文件...',
@@ -1067,7 +1074,7 @@ function renderAdminView(){
           ['알바기록', (data.sessions||[]).map(r=>({'생성일시':fmtTime(r.created_at),'매장':r.store_name,'알바명':r.alba_name,'상태':r.status==='done'?'완료':'진행중','주문번호':r.orders||'','도착':r.arrive_time||'','완료':r.complete_time||'','제출내용(계좌/보고)':r.note||'','완료일시':fmtTime(r.completed_at),'송금완료':r.paid?'Y':'','송금일시':fmtTime(r.paid_at),'송금처리자':r.paid_by_name||''}))],
           ['알바품목', (data.session_items||[]).map(r=>({'생성일시':fmtTime(r.created_at),'매장':r.store_name,'알바명':r.alba_name,'모델':r.model,'용량':r.capacity||'','색상':r.color||'','수량':r.qty}))],
           ['구매기록', (data.purchases||[]).map(r=>({'구매일':r.purchase_date,'매장':r.store_name,'입력자':r.buyer_name||'','모델':r.model,'용량':r.capacity||'','색상':r.color||'','수량':r.qty,'카드회사':r.card_company||'','카드끝4자리':r.card_last4||'','메모':r.note||'','입력일시':fmtTime(r.created_at),'취소됨':r.voided?'Y':''}))],
-          ['공급업체', (data.supplier_orders||[]).map(r=>({'받은날짜':r.received_date,'공급업체':r.company_name,'입력자':r.buyer_name||'','모델':r.model,'용량':r.capacity||'','색상':r.color||'','수량':r.qty,'금액(원)':r.amount===null?'':Number(r.amount),'메모':r.note||'','입력일시':fmtTime(r.created_at),'취소됨':r.voided?'Y':''}))],
+          ['공급업체', (data.supplier_orders||[]).map(r=>({'받은날짜':r.received_date,'공급업체':r.company_name,'입력자':r.buyer_name||'','모델':r.model,'용량':r.capacity||'','색상':r.color||'','수량':r.qty,'단가(원)':r.unit_price===null||r.unit_price===undefined?'':Number(r.unit_price),'금액(원)':r.amount===null?'':Number(r.amount),'명세서ID':r.batch_id||'','메모':r.note||'','입력일시':fmtTime(r.created_at),'취소됨':r.voided?'Y':''}))],
           ['삭제된알바기록', (data.deleted_sessions||[]).map(r=>({'삭제일시':fmtTime(r.deleted_at),'삭제자':r.deleted_by_name||'','매장':r.store_name||'','알바명':r.alba_name||'','상태':r.status||'','생성일시':fmtTime(r.created_at),'제출내용':r.note||'','주문번호':r.orders||'','품목(원본)':r.items||''}))]
         ];
         const stamp = new Date().toISOString().slice(0,10);
@@ -1114,8 +1121,108 @@ function renderAdminView(){
     else drawAllSupplierTab(body);
   }
 
+  function drawSupplierBatchForm(body){
+    const card = h('div',{class:'card'});
+    card.appendChild(h('label',{text:t('companyName')}));
+    const companyInput = h('input',{placeholder:t('companyNamePh')});
+    card.appendChild(companyInput);
+    card.appendChild(h('label',{text:t('receivedDate'),style:'margin-top:8px'}));
+    const dateInput = h('input',{type:'date',value:new Date().toISOString().slice(0,10)});
+    card.appendChild(dateInput);
+    card.appendChild(h('label',{text:t('batchLines'),style:'margin-top:12px'}));
+
+    const linesWrap = h('div');
+    card.appendChild(linesWrap);
+    const totalBox = h('div',{style:'margin-top:10px;font-weight:700;text-align:right'});
+    const lines = []; // {model,capacity,color,qty,unit}
+    const mkSelect = (opts, val, placeholder, onchg)=>{
+      const sel = h('select',{});
+      sel.appendChild(h('option',{value:'',text:placeholder}));
+      opts.forEach(o=>sel.appendChild(h('option',{value:o,text:o})));
+      sel.value = val||''; sel.onchange = ()=>onchg(sel.value);
+      return sel;
+    };
+    function recalc(){
+      const q = lines.reduce((a,l)=>a+(parseInt(l.qty)||0),0);
+      const amt = lines.reduce((a,l)=>a+((parseInt(l.qty)||0)*(Number(l.unit)||0)),0);
+      totalBox.textContent = t('batchTotal')+': '+q+t('unit')+(amt?' · '+fmtWon(amt)+t('wonUnit'):'');
+      lines.forEach(l=>{ if(l._totalEl){ const v=(parseInt(l.qty)||0)*(Number(l.unit)||0); l._totalEl.textContent = v? t('lineTotal')+' '+fmtWon(v)+t('wonUnit') : ''; } });
+    }
+    function drawLines(){
+      linesWrap.innerHTML = '';
+      lines.forEach((l,i)=>{
+        const box = h('div',{style:'border:1px solid var(--border);border-radius:10px;padding:10px;margin-bottom:8px'});
+        const top = h('div',{class:'flexbetween',style:'margin-bottom:6px'});
+        top.appendChild(h('span',{class:'muted',style:'font-weight:700',text:'#'+(i+1)}));
+        if(lines.length>1){
+          const rm = h('button',{type:'button',class:'btn-ghost btn-sm',text:t('removeLine')});
+          rm.onclick = ()=>{ lines.splice(i,1); drawLines(); };
+          top.appendChild(rm);
+        }
+        box.appendChild(top);
+        const colorSel = mkSelect(colorOptionsFor(l.model||MODEL_OPTIONS[0]), l.color, t('color'), v=>{ l.color=v; });
+        box.appendChild(h('div',{class:'row'},[
+          mkSelect(MODEL_OPTIONS, l.model, t('model'), v=>{ l.model=v; l.color=''; drawLines(); }),
+          mkSelect(CAPACITY_OPTIONS, l.capacity, t('capacity'), v=>{ l.capacity=v; })
+        ]));
+        box.appendChild(h('div',{style:'margin-top:6px'},[colorSel]));
+        const qtyI = h('input',{type:'number',min:'1',step:'1',placeholder:t('qty'),value:l.qty||''});
+        qtyI.oninput = ()=>{ l.qty=qtyI.value; recalc(); };
+        const unitI = h('input',{type:'number',min:'0',step:'1',placeholder:t('unitPrice'),value:l.unit||''});
+        unitI.oninput = ()=>{ l.unit=unitI.value; recalc(); };
+        box.appendChild(h('div',{class:'row',style:'margin-top:6px'},[qtyI, unitI]));
+        l._totalEl = h('div',{class:'muted',style:'margin-top:4px;text-align:right'});
+        box.appendChild(l._totalEl);
+        linesWrap.appendChild(box);
+      });
+      recalc();
+    }
+    const addLine = (copyFrom)=>{
+      lines.push({model:copyFrom?copyFrom.model:'', capacity:'', color:'', qty:'', unit:copyFrom?copyFrom.unit:''});
+    };
+    addLine(); drawLines();
+    const addBtn = h('button',{type:'button',class:'btn-ghost',text:t('addLine'),style:'width:100%'});
+    addBtn.onclick = ()=>{ addLine(lines[lines.length-1]); drawLines(); };
+    card.appendChild(addBtn);
+    card.appendChild(totalBox);
+
+    card.appendChild(h('label',{text:t('noteOptional'),style:'margin-top:10px'}));
+    const noteInput = h('input',{placeholder:''});
+    card.appendChild(noteInput);
+    const err = h('div',{class:'err hidden'});
+    card.appendChild(err);
+    const btn = h('button',{class:'btn-primary',text:t('registerBatch')});
+    btn.onclick = async ()=>{
+      err.className='err hidden';
+      if(!companyInput.value.trim()){ err.textContent=t('selectCompanyName'); err.className='err'; return; }
+      const filled = lines.map((l,i)=>({l,i})).filter(({l})=>l.model||l.capacity||l.color||l.qty||l.unit);
+      if(filled.length===0){ err.textContent=t('batchNeedLine'); err.className='err'; return; }
+      for(const {l,i} of filled){
+        if(!l.model || !l.capacity || !(parseInt(l.qty)>0)){ err.textContent=t('batchCheckLine',{n:i+1}); err.className='err'; return; }
+      }
+      btn.disabled=true; btn.textContent=t('saving');
+      const items = filled.map(({l})=>({model:l.model, capacity:l.capacity, color:l.color||'', qty:parseInt(l.qty), unit_price:l.unit===''?null:Number(l.unit)}));
+      const { error } = await sb.rpc('add_supplier_batch', { p_company_name: companyInput.value.trim(), p_received_date: dateInput.value, p_note: noteInput.value.trim(), p_items: items });
+      btn.disabled=false; btn.textContent=t('registerBatch');
+      if(error){ err.textContent=error.message; err.className='err'; return; }
+      drawDashboard();
+    };
+    card.appendChild(btn);
+    body.appendChild(card);
+  }
+
   function drawMySupplierTab(body){
     const ed = editingSupplier; // snapshot; null when adding new
+    if(!ed){
+      const modeRow = h('div',{class:'chiprow',style:'margin-bottom:10px'});
+      [['batch',t('modeBatch')],['single',t('modeSingle')]].forEach(([k,label])=>{
+        const b = h('button',{type:'button',class:'chip-btn'+(supplierMode===k?' selected':''),text:label});
+        b.onclick = ()=>{ supplierMode = k; drawDashboard(); };
+        modeRow.appendChild(b);
+      });
+      body.appendChild(modeRow);
+      if(supplierMode==='batch') drawSupplierBatchForm(body);
+    }
     const card = h('div',{class:'card'});
     card.appendChild(h('label',{text: ed ? t('editSupplier') : t('companyName')}));
     if(ed) card.appendChild(h('label',{text:t('companyName'),style:'margin-top:8px'}));
@@ -1166,6 +1273,7 @@ function renderAdminView(){
         p_color: colorSel.value, p_qty: qty, p_amount: amountInput.value===''?null:Number(amountInput.value),
         p_received_date: dateInput.value, p_note: noteInput.value.trim()
       };
+      if(ed) params.p_unit_price = null;
       const { error } = ed
         ? await sb.rpc('update_supplier_order', { p_order_id: ed.id, ...params })
         : await sb.rpc('add_supplier_order', params);
@@ -1180,7 +1288,7 @@ function renderAdminView(){
       cancelBtn.onclick = ()=>{ editingSupplier = null; drawDashboard(); };
       card.appendChild(cancelBtn);
     }
-    body.appendChild(card);
+    if(ed || supplierMode==='single') body.appendChild(card);
 
     // "내가 입력한 기록" — selectable date range, same pattern as 구매 기록 (any past
     // day's entry can be pulled up and edited/취소, not just today's).
@@ -1207,26 +1315,54 @@ function renderAdminView(){
       if(error){ listWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
       const list = data || [];
       if(list.length===0){ listWrap.appendChild(h('div',{class:'muted',text:t('noRecordsYet')})); return; }
+      // 같은 명세서(batch_id)로 등록한 줄은 한 카드에 모아서 보여준다
+      const groups = []; const idx = {};
       list.forEach(p=>{
+        const key = p.batch_id || ('single:'+p.id);
+        if(!(key in idx)){ idx[key] = groups.length; groups.push({key, batch_id:p.batch_id, rows:[]}); }
+        groups[idx[key]].rows.push(p);
+      });
+      groups.forEach(g=>{
+        const first = g.rows[0];
+        const totalQty = g.rows.reduce((a,r)=>a+r.qty,0);
+        const totalAmt = g.rows.reduce((a,r)=>a+(Number(r.amount)||0),0);
         const c = h('div',{class:'card'});
         c.appendChild(h('div',{class:'flexbetween'},[
-          h('div',{text:`${p.company_name} · ${p.model} ${p.capacity||''} ${p.color||''}`.replace(/\s+/g,' ').trim()}),
-          h('span',{class:'pill',text:'x'+p.qty})
+          h('div',{style:'font-weight:700',text:first.company_name}),
+          h('span',{class:'pill',text:totalQty+t('unit')})
         ]));
-        c.appendChild(h('div',{class:'muted',text:[fmtShortDate(p.received_date), p.amount!=null?fmtWon(p.amount)+t('wonUnit'):''].filter(Boolean).join(' · ')}));
-        const editBtn = h('button',{class:'btn-ghost btn-sm',text:t('edit'),style:'margin-top:6px'});
-        editBtn.onclick = ()=>{ editingSupplier = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
-        c.appendChild(editBtn);
-        const voidBtn = h('button',{class:'btn-danger btn-sm',text:t('cancel'),style:'margin-top:6px;margin-left:6px'});
-        const voidConfirm = h('span',{class:'hidden muted',text:' '+t('confirmVoid')});
-        let armed = false;
-        voidBtn.onclick = async ()=>{
-          if(!armed){ armed=true; voidConfirm.className='muted'; setTimeout(()=>{armed=false; voidConfirm.className='hidden';},3000); return; }
-          await sb.rpc('void_supplier_order', { p_order_id: p.id });
-          drawDashboard();
-        };
-        c.appendChild(voidBtn);
-        c.appendChild(voidConfirm);
+        c.appendChild(h('div',{class:'muted',text:[fmtShortDate(first.received_date), g.rows.length>1?t('lines',{n:g.rows.length}):'', totalAmt?fmtWon(totalAmt)+t('wonUnit'):''].filter(Boolean).join(' · ')}));
+        g.rows.slice().sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||'')).forEach(p=>{
+          const line = h('div',{class:'itemline',style:'align-items:center;gap:6px;flex-wrap:wrap'});
+          const label = `${p.model} ${p.capacity||''} ${p.color||''}`.replace(/\s+/g,' ').trim();
+          const priceTxt = p.amount!=null ? ' · '+(p.unit_price!=null?fmtWon(p.unit_price)+'×'+p.qty+' = ':'')+fmtWon(p.amount)+t('wonUnit') : '';
+          line.appendChild(h('span',{text:label+priceTxt}));
+          const right = h('span',{style:'margin-left:auto;display:inline-flex;gap:6px;align-items:center'});
+          right.appendChild(h('span',{class:'pill',text:'x'+p.qty}));
+          const editBtn = h('button',{class:'btn-ghost btn-sm',text:t('edit')});
+          editBtn.onclick = ()=>{ editingSupplier = p; drawDashboard(); window.scrollTo({top:0,behavior:'smooth'}); };
+          right.appendChild(editBtn);
+          const vb = h('button',{class:'btn-danger btn-sm',text:t('cancel')});
+          let armedL = false;
+          vb.onclick = async ()=>{
+            if(!armedL){ armedL=true; vb.textContent=t('confirmVoid'); setTimeout(()=>{armedL=false; vb.textContent=t('cancel');},3000); return; }
+            await sb.rpc('void_supplier_order', { p_order_id: p.id });
+            drawDashboard();
+          };
+          right.appendChild(vb);
+          line.appendChild(right);
+          c.appendChild(line);
+        });
+        if(g.batch_id && g.rows.length>1){
+          const vbAll = h('button',{class:'btn-danger btn-sm',text:t('cancelBatch'),style:'margin-top:8px'});
+          let armedB = false;
+          vbAll.onclick = async ()=>{
+            if(!armedB){ armedB=true; vbAll.textContent=t('confirmVoid'); setTimeout(()=>{armedB=false; vbAll.textContent=t('cancelBatch');},3000); return; }
+            await sb.rpc('void_supplier_batch', { p_batch_id: g.batch_id });
+            drawDashboard();
+          };
+          c.appendChild(vbAll);
+        }
         listWrap.appendChild(c);
       });
     }
@@ -1299,12 +1435,24 @@ function renderAdminView(){
             h('div',{style:'font-weight:600',text:buyerName}),
             h('span',{class:'pill',text:buyerTotal+t('unit')})
           ]));
+          const bGroups = []; const bIdx = {};
           buyerItems.forEach(it=>{
-            const amountStr = it.amount!=null ? fmtWon(it.amount)+t('wonUnit') : '';
-            companyCard.appendChild(h('div',{class:'itemline'},[
-              h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + ' · ' + it.received_date + (amountStr?' · '+amountStr:'')},[]),
-              h('span',{class:'pill',text:'x'+it.qty})
-            ]));
+            const key = it.batch_id || ('single:'+it.id);
+            if(!(key in bIdx)){ bIdx[key]=bGroups.length; bGroups.push([]); }
+            bGroups[bIdx[key]].push(it);
+          });
+          bGroups.forEach(grp=>{
+            const gAmt = grp.reduce((a,r)=>a+(Number(r.amount)||0),0);
+            const gQty = grp.reduce((a,r)=>a+r.qty,0);
+            companyCard.appendChild(h('div',{class:'muted',style:'margin-top:8px;font-size:12px;font-weight:700',
+              text:[fmtShortDate(grp[0].received_date), grp.length>1?t('statementOf')+' '+t('lines',{n:grp.length}):'', gQty+t('unit'), gAmt?fmtWon(gAmt)+t('wonUnit'):''].filter(Boolean).join(' · ')}));
+            grp.slice().sort((a,b)=>(a.created_at||'').localeCompare(b.created_at||'')).forEach(it=>{
+              const priceStr = it.amount!=null ? ' · '+(it.unit_price!=null?fmtWon(it.unit_price)+'×'+it.qty+' = ':'')+fmtWon(it.amount)+t('wonUnit') : '';
+              companyCard.appendChild(h('div',{class:'itemline'},[
+                h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + priceStr},[]),
+                h('span',{class:'pill',text:'x'+it.qty})
+              ]));
+            });
           });
         });
         resultWrap.appendChild(companyCard);
