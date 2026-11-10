@@ -562,6 +562,7 @@ function renderAdminView(){
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
       wonUnit:'원', sectionBackup:'백업', storeZhTitle:'매장 중문 이름 (중문 화면에서 표시)', storeZhHint:'한글 화면에서는 한글 매장명, 중문 화면에서는 아래 중문 이름이 표시됩니다.',
       modeBatch:'명세서 일괄 입력', modeSingle:'한 건 입력', batchLines:'품목', addLine:'+ 줄 추가', removeLine:'삭제',
+      scanBtn:'📷 명세서 사진으로 자동 입력', scanning:'사진을 읽는 중입니다… (10~20초)', scanDone:'✅ 사진에서 읽은 내용입니다. 아래 내용이 명세서와 같은지 꼭 확인해주세요.', scanFail:'사진을 읽지 못했습니다. 다시 찍어서 시도하거나 직접 입력해주세요.', scanNoKey:'자동 인식 기능이 아직 설정되지 않았습니다. 관리자에게 문의해주세요.', scanTotalMismatch:'⚠ 명세서 합계와 읽은 수량이 다릅니다 (명세서 {a}대 / 읽은 {b}대)', scanUnknownLine:'⚠ #{n}줄: 모델/용량을 읽지 못했습니다. 직접 선택해주세요.',
       unitPrice:'단가(원)', lineTotal:'금액', batchTotal:'명세서 합계', registerBatch:'명세서 등록', batchNeedLine:'품목을 한 줄 이상 입력해주세요',
       batchCheckLine:'{n}번째 줄을 확인해주세요 (모델/용량/수량)', cancelBatch:'명세서 전체 취소', statementOf:'명세서', lines:'{n}줄', batchSaved:'등록되었습니다 ✓',
       backupTitle:'전체 기록 내려받기', backupDesc:'알바 기록 · 구매 기록 · 공급업체 · 삭제/취소된 기록까지 전부 파일로 저장합니다. 정기적으로 내려받아 보관해두세요.',
@@ -608,6 +609,7 @@ function renderAdminView(){
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
       wonUnit:'韩元', sectionBackup:'备份', storeZhTitle:'门店中文名称（中文界面显示）', storeZhHint:'韩文界面显示韩文门店名，中文界面显示下方的中文名称。',
       modeBatch:'批量录入对账单', modeSingle:'单笔录入', batchLines:'明细', addLine:'+ 添加一行', removeLine:'删除',
+      scanBtn:'📷 拍照自动录入对账单', scanning:'正在识别照片…（约10~20秒）', scanDone:'✅ 以下为照片识别结果，请务必与对账单核对。', scanFail:'无法识别照片，请重新拍照或手动录入。', scanNoKey:'自动识别功能尚未设置，请联系管理员。', scanTotalMismatch:'⚠ 对账单合计与识别数量不一致（对账单{a}台 / 识别{b}台）', scanUnknownLine:'⚠ 第{n}行：未能识别型号/容量，请手动选择。',
       unitPrice:'单价（韩元）', lineTotal:'金额', batchTotal:'对账单合计', registerBatch:'登记对账单', batchNeedLine:'请至少输入一行明细',
       batchCheckLine:'请检查第{n}行（型号/容量/数量）', cancelBatch:'取消整张对账单', statementOf:'对账单', lines:'{n}行', batchSaved:'已登记 ✓',
       backupTitle:'下载全部记录', backupDesc:'将兼职记录 · 购买记录 · 供应商 · 已删除/已取消的记录全部保存为文件。请定期下载保存。',
@@ -1187,6 +1189,11 @@ function renderAdminView(){
 
   function drawSupplierBatchForm(body){
     const card = h('div',{class:'card'});
+    const scanFile = h('input',{type:'file',accept:'image/*',style:'display:none'});
+    const scanBtn = h('button',{type:'button',class:'btn-primary',text:t('scanBtn'),style:'width:100%;margin-bottom:10px'});
+    const scanMsg = h('div',{class:'muted',style:'margin-bottom:10px;white-space:pre-line'});
+    card.appendChild(scanFile); card.appendChild(scanBtn); card.appendChild(scanMsg);
+    scanBtn.onclick = ()=>scanFile.click();
     card.appendChild(h('label',{text:t('companyName')}));
     const companyInput = h('input',{placeholder:t('companyNamePh')});
     card.appendChild(companyInput);
@@ -1245,6 +1252,43 @@ function renderAdminView(){
       lines.push({model:copyFrom?copyFrom.model:'', capacity:'', color:'', qty:'', unit:copyFrom?copyFrom.unit:''});
     };
     addLine(); drawLines();
+    const shrinkImage = (file)=>new Promise((resolve,reject)=>{
+      const url = URL.createObjectURL(file); const img = new Image();
+      img.onload = ()=>{
+        const max = 2000, r = Math.min(1, max/Math.max(img.width,img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width*r); c.height = Math.round(img.height*r);
+        c.getContext('2d').drawImage(img,0,0,c.width,c.height); URL.revokeObjectURL(url);
+        resolve(c.toDataURL('image/jpeg',0.85).split(',')[1]);
+      };
+      img.onerror = ()=>{ URL.revokeObjectURL(url); reject(new Error('img')); };
+      img.src = url;
+    });
+    scanFile.onchange = async ()=>{
+      const f = scanFile.files && scanFile.files[0]; if(!f) return;
+      scanBtn.disabled = true; scanMsg.className='muted'; scanMsg.textContent = t('scanning');
+      try{
+        const image = await shrinkImage(f);
+        const { data, error } = await sb.functions.invoke('parse-statement', { body: { image, media_type:'image/jpeg' } });
+        if(error || !data || !data.result){
+          let noKey = false;
+          try{ const j = await error.context.json(); noKey = j && j.error==='NO_API_KEY'; }catch(e){}
+          scanMsg.className='err'; scanMsg.textContent = noKey ? t('scanNoKey') : t('scanFail'); return;
+        }
+        const r = data.result, warn = (r.warnings||[]).slice();
+        if(r.company_name) companyInput.value = r.company_name;
+        if(r.date && /^\d{4}-\d{2}-\d{2}$/.test(r.date)) dateInput.value = r.date;
+        lines.length = 0;
+        (r.items||[]).forEach(it=>lines.push({model:it.model||'', capacity:it.capacity||'', color:it.color||'', qty:it.qty?String(it.qty):'', unit:(it.unit_price==null?'':String(it.unit_price))}));
+        if(lines.length===0) addLine();
+        lines.forEach((l,i)=>{ if(!l.model||!l.capacity) warn.push(t('scanUnknownLine',{n:i+1})); });
+        const sumQ = lines.reduce((a,l)=>a+(parseInt(l.qty)||0),0);
+        if(r.total_qty && r.total_qty!==sumQ) warn.push(t('scanTotalMismatch',{a:r.total_qty,b:sumQ}));
+        drawLines();
+        scanMsg.className = warn.length ? 'err' : 'muted';
+        scanMsg.textContent = t('scanDone') + (warn.length ? '\n'+warn.join('\n') : '');
+      }catch(e){ scanMsg.className='err'; scanMsg.textContent = t('scanFail'); }
+      finally{ scanBtn.disabled = false; scanFile.value=''; }
+    };
     const addBtn = h('button',{type:'button',class:'btn-ghost',text:t('addLine'),style:'width:100%'});
     addBtn.onclick = ()=>{ addLine(lines[lines.length-1]); drawLines(); };
     card.appendChild(addBtn);
