@@ -585,6 +585,7 @@ function renderAdminView(){
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
       wonUnit:'원', sectionBackup:'백업', storeZhTitle:'매장 중문 이름 (중문 화면에서 표시)', storeZhHint:'한글 화면에서는 한글 매장명, 중문 화면에서는 아래 중문 이름이 표시됩니다.',
       modeBatch:'명세서 일괄 입력', modeSingle:'한 건 입력', batchLines:'품목', addLine:'+ 줄 추가', removeLine:'삭제',
+      targetAllTitle:'날짜별 목표 달성 현황', targetAchieved:'✓ 달성',
       targetTitle:'오늘 목표 현황', targetNone:'등록된 목표가 없습니다', targetLeft:'잔여', targetDone:'완료', targetOver:'{n}대 초과', targetSet:'목표 설정', targetSave:'목표 저장', targetClose:'닫기', targetAuto:'30초마다 자동 갱신 · 전체 구매자 합산',
       warnOver:'⚠ 잔여 {a}대인데 {b}대를 입력하셨습니다. 중복 구매가 아닌지 확인해주세요. 맞으면 한 번 더 눌러 저장합니다.', warnNoTarget:'⚠ 이 날짜 목표에 없는 품목입니다. 맞으면 한 번 더 눌러 저장합니다.', saveAnyway:'그래도 저장',
       scanBtn:'📷 명세서 사진으로 자동 입력', scanning:'사진을 읽는 중입니다… (10~20초)', scanDone:'✅ 사진에서 읽은 내용입니다. 아래 내용이 명세서와 같은지 꼭 확인해주세요.', scanFail:'사진을 읽지 못했습니다. 다시 찍어서 시도하거나 직접 입력해주세요.', scanNoKey:'자동 인식 기능이 아직 설정되지 않았습니다. 관리자에게 문의해주세요.', scanTotalMismatch:'⚠ 명세서 합계와 읽은 수량이 다릅니다 (명세서 {a}대 / 읽은 {b}대)', scanUnknownLine:'⚠ #{n}줄: 모델/용량을 읽지 못했습니다. 직접 선택해주세요.',
@@ -634,6 +635,7 @@ function renderAdminView(){
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
       wonUnit:'韩元', sectionBackup:'备份', storeZhTitle:'门店中文名称（中文界面显示）', storeZhHint:'韩文界面显示韩文门店名，中文界面显示下方的中文名称。',
       modeBatch:'批量录入对账单', modeSingle:'单笔录入', batchLines:'明细', addLine:'+ 添加一行', removeLine:'删除',
+      targetAllTitle:'按日期目标达成情况', targetAchieved:'✓ 已达成',
       targetTitle:'今日目标进度', targetNone:'尚未设置目标', targetLeft:'剩余', targetDone:'已完成', targetOver:'超出{n}台', targetSet:'设置目标', targetSave:'保存目标', targetClose:'关闭', targetAuto:'每30秒自动刷新 · 所有采购人员合计',
       warnOver:'⚠ 剩余{a}台，但您输入了{b}台。请确认是否重复采购。如无误，请再点击一次保存。', warnNoTarget:'⚠ 该品项不在当天目标中。如无误，请再点击一次保存。', saveAnyway:'仍然保存',
       scanBtn:'📷 拍照自动录入对账单', scanning:'正在识别照片…（约10~20秒）', scanDone:'✅ 以下为照片识别结果，请务必与对账单核对。', scanFail:'无法识别照片，请重新拍照或手动录入。', scanNoKey:'自动识别功能尚未设置，请联系管理员。', scanTotalMismatch:'⚠ 对账单合计与识别数量不一致（对账单{a}台 / 识别{b}台）', scanUnknownLine:'⚠ 第{n}行：未能识别型号/容量，请手动选择。',
@@ -1141,10 +1143,35 @@ function renderAdminView(){
     async function load(){
       resultWrap.innerHTML = '';
       resultWrap.appendChild(h('div',{class:'muted',text:t('loading')}));
-      const { data, error } = await sb.rpc('admin_list_purchases', {
-        p_date_from: fromInput.value, p_date_to: toInput.value, p_store_id: storeSel.value || null
-      });
+      const [{ data, error }, { data: progData }] = await Promise.all([
+        sb.rpc('admin_list_purchases', { p_date_from: fromInput.value, p_date_to: toInput.value, p_store_id: storeSel.value || null }),
+        sb.rpc('get_daily_progress_range', { p_from: fromInput.value, p_to: toInput.value })
+      ]);
       resultWrap.innerHTML = '';
+      // 날짜별 목표 달성 현황 (목표가 등록된 날짜만 표시, 매장 필터와 상관없이 전체 구매 합산)
+      if(progData && progData.length){
+        const progCard = h('div',{class:'card'});
+        progCard.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:t('targetAllTitle')}));
+        const byDay = new Map();
+        progData.forEach(r=>{ if(!byDay.has(r.target_date)) byDay.set(r.target_date, []); byDay.get(r.target_date).push(r); });
+        byDay.forEach((list, day)=>{
+          const allDone = list.every(r=>r.bought>=r.target);
+          progCard.appendChild(h('div',{class:'flexbetween',style:'margin-top:8px'},[
+            h('span',{style:'font-weight:600',text:fmtShortDate(day)}),
+            h('span',{class:'pill',text: allDone ? t('targetAchieved') : list.reduce((a,r)=>a+Math.min(r.bought,r.target),0)+' / '+list.reduce((a,r)=>a+r.target,0)+t('unit')})
+          ]));
+          list.forEach(r=>{
+            const left = r.target - r.bought;
+            const spec = [r.model, r.capacity, r.color].filter(Boolean).join(' · ');
+            const status = left>0 ? t('targetLeft')+' '+left : (left===0 ? t('targetAchieved') : t('targetOver',{n:-left}));
+            progCard.appendChild(h('div',{class:'flexbetween',style:'padding:6px 0;border-bottom:1px solid var(--border);gap:8px'},[
+              h('span',{text:spec,style:'min-width:0'}),
+              h('span',{style:'font-weight:700;white-space:nowrap;'+(left<0?'color:var(--danger)':''),text:r.bought+' / '+r.target+'  ·  '+status})
+            ]));
+          });
+        });
+        resultWrap.appendChild(progCard);
+      }
       if(error){ resultWrap.appendChild(h('div',{class:'err',text:error.message})); return; }
       const rows = data || [];
       if(rows.length===0){ resultWrap.appendChild(h('div',{class:'muted',text:t('noRecordsInPeriod')})); return; }
