@@ -230,6 +230,12 @@ function buildCopyText(list, groupBy){
 }
 
 // iPhone Duo is the priority item right now, so it leads the list.
+// 딩톡 내보내기용 단가표 (모델 · 용량별, 색상 무관). 금액 칸 = 수량 x 단가
+const DING_UNIT_PRICE = {
+  'iPhone 18 Pro':     { '256GB':1990000, '512GB':2290000, '1TB':2890000, '2TB':3790000 },
+  'iPhone 18 Pro Max': { '256GB':2190000, '512GB':2490000, '1TB':3090000, '2TB':3990000 },
+  'iPhone Duo':        { '256GB':3290000, '512GB':3590000, '1TB':4190000, '2TB':5090000 }
+};
 // 명세서 사진 자동 인식: Supabase에 ANTHROPIC_API_KEY를 등록한 뒤 true로 바꾸면 버튼이 다시 나타납니다.
 const SCAN_ENABLED = false;
 const MODEL_OPTIONS = ['iPhone Duo', 'iPhone 18 Pro', 'iPhone 18 Pro Max'];
@@ -585,7 +591,8 @@ function renderAdminView(){
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
       wonUnit:'원', sectionBackup:'백업', storeZhTitle:'매장 중문 이름 (중문 화면에서 표시)', storeZhHint:'한글 화면에서는 한글 매장명, 중문 화면에서는 아래 중문 이름이 표시됩니다.',
       modeBatch:'명세서 일괄 입력', modeSingle:'한 건 입력', batchLines:'품목', addLine:'+ 줄 추가', removeLine:'삭제',
-      dingTitle:'딩톡 업로드용 내보내기', dingDesc:'조회한 기록을 딩톡 일괄등록 칸(모델 · 수량 · 금액 · 뱅크코드 · 카드번호)에 맞춰 만듭니다. 매장은 빼고 같은 카드·모델·용량·색상은 수량을 합칩니다.', dingCards:'카드 전체번호 목록 (한 줄에 하나)', dingCardsHint:'끝 4자리가 같은 줄과 자동 연결됩니다. 이 브라우저에만 저장되고 서버로 보내지 않습니다.', dingCopy:'표 복사 (딩톡에 붙여넣기)', dingXlsx:'엑셀 다운로드', dingMissing:'⚠ 전체번호가 없는 카드: {n} (끝 4자리만 표시됩니다)', dingMulti:'⚠ 여러 날짜가 섞여 있습니다. 딩톡에는 하루씩 조회해서 올리는 것을 권장합니다.', dingDupCard:'⚠ 끝 4자리가 같은 카드번호가 여러 개입니다: {n} (첫 번째 번호를 사용)',
+      dingNoPrice:'⚠ 단가표에 없는 품목: {n} (금액이 비어 있습니다)',
+      dingTitle:'딩톡 업로드용 내보내기', dingDesc:'조회한 기록을 딩톡 일괄등록 칸(모델 · 수량 · 금액 · 뱅크코드 · 카드번호)에 맞춰 만듭니다. 금액은 수량 × 단가입니다. 매장은 빼고 같은 카드·모델·용량·색상은 수량을 합칩니다.', dingCards:'카드 전체번호 목록 (한 줄에 하나)', dingCardsHint:'끝 4자리가 같은 줄과 자동 연결됩니다. 이 브라우저에만 저장되고 서버로 보내지 않습니다.', dingCopy:'표 복사 (딩톡에 붙여넣기)', dingXlsx:'엑셀 다운로드', dingMissing:'⚠ 전체번호가 없는 카드: {n} (끝 4자리만 표시됩니다)', dingMulti:'⚠ 여러 날짜가 섞여 있습니다. 딩톡에는 하루씩 조회해서 올리는 것을 권장합니다.', dingDupCard:'⚠ 끝 4자리가 같은 카드번호가 여러 개입니다: {n} (첫 번째 번호를 사용)',
       targetAllTitle:'날짜별 목표 달성 현황', targetAchieved:'✓ 달성',
       targetTitle:'오늘 목표 현황', targetNone:'등록된 목표가 없습니다', targetLeft:'잔여', targetDone:'완료', targetOver:'{n}대 초과', targetSet:'목표 설정', targetSave:'목표 저장', targetClose:'닫기', targetAuto:'30초마다 자동 갱신 · 전체 구매자 합산',
       warnOver:'⚠ 잔여 {a}대인데 {b}대를 입력하셨습니다. 중복 구매가 아닌지 확인해주세요. 맞으면 한 번 더 눌러 저장합니다.', warnNoTarget:'⚠ 이 날짜 목표에 없는 품목입니다. 맞으면 한 번 더 눌러 저장합니다.', saveAnyway:'그래도 저장',
@@ -636,6 +643,7 @@ function renderAdminView(){
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
       wonUnit:'韩元', sectionBackup:'备份', storeZhTitle:'门店中文名称（中文界面显示）', storeZhHint:'韩文界面显示韩文门店名，中文界面显示下方的中文名称。',
       modeBatch:'批量录入对账单', modeSingle:'单笔录入', batchLines:'明细', addLine:'+ 添加一行', removeLine:'删除',
+      dingNoPrice:'⚠ 价目表中没有的品项：{n}（金额为空）',
       dingTitle:'导出为钉钉上传格式', dingDesc:'按钉钉批量录入栏位（型号 · 数量 · 金额 · 银行授权码 · 卡号）生成。不含门店，相同卡/型号/容量/颜色的数量合并。', dingCards:'银行卡完整卡号列表（每行一个）', dingCardsHint:'按后4位自动匹配。仅保存在本浏览器，不会上传到服务器。', dingCopy:'复制表格（粘贴到钉钉）', dingXlsx:'下载Excel', dingMissing:'⚠ 缺少完整卡号的卡：{n}（仅显示后4位）', dingMulti:'⚠ 包含多个日期。建议按单日查询后再上传钉钉。', dingDupCard:'⚠ 后4位相同的卡号有多个：{n}（使用第一个）',
       targetAllTitle:'按日期目标达成情况', targetAchieved:'✓ 已达成',
       targetTitle:'今日目标进度', targetNone:'尚未设置目标', targetLeft:'剩余', targetDone:'已完成', targetOver:'超出{n}台', targetSet:'设置目标', targetSave:'保存目标', targetClose:'关闭', targetAuto:'每30秒自动刷新 · 所有采购人员合计',
@@ -1212,17 +1220,19 @@ function renderAdminView(){
             const mdl = /duo/i.test(r.model||'') ? 'iphone duo' : (r.model||'').toLowerCase().replace(/\s+/g,'');
             const label = [mdl, r.capacity, (r.color||'').toLowerCase(), 'kr spec'].filter(Boolean).join(' ');
             const key = l4+'|'+label;
-            if(!agg.has(key)) agg.set(key,{l4,label,qty:0});
+            if(!agg.has(key)) agg.set(key,{l4,label,qty:0,unit:((DING_UNIT_PRICE[r.model]||{})[r.capacity])||null,name:[r.model,r.capacity].join(' ')});
             agg.get(key).qty += r.qty;
           });
-          const missing = new Set();
+          const missing = new Set(), noPrice = new Set();
           const out = [...agg.values()].sort((a,b)=>a.l4.localeCompare(b.l4)||a.label.localeCompare(b.label)).map(x=>{
             let card = '';
             if(x.l4){ card = map[x.l4] || ''; if(!card){ missing.add(x.l4); card = '****'+x.l4; } }
-            return [x.label, x.qty, '', '', card];
+            if(x.unit==null) noPrice.add(x.name);
+            return [x.label, x.qty, x.unit==null ? '' : x.unit*x.qty, '', card];
           });
           const warn = [];
           if(missing.size) warn.push(t('dingMissing',{n:[...missing].join(', ')}));
+          if(noPrice.size) warn.push(t('dingNoPrice',{n:[...noPrice].join(', ')}));
           if(dups.length) warn.push(t('dingDupCard',{n:[...new Set(dups)].join(', ')}));
           if(fromInput.value !== toInput.value) warn.push(t('dingMulti'));
           msg.textContent = warn.join('\n');
