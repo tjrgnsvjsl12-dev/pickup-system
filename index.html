@@ -692,8 +692,10 @@ function renderAdminView(){
     ]);
     app.appendChild(top);
 
+    const isPart = !!(myProfile && myProfile.role === 'part'); // 시간제 알바 계정: 구매 기록만 사용
+    if(isPart) section = 'purchase';
     const sectionRow = h('div',{class:'tabs',style:'margin-bottom:6px'});
-    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')],['supplier',t('sectionSupplier')],['backup',t('sectionBackup')]].forEach(([key,label])=>{
+    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')],['supplier',t('sectionSupplier')],['backup',t('sectionBackup')]].filter(([key])=>!isPart||key==='purchase').forEach(([key,label])=>{
       const tb = h('div',{class:'tab'+(section===key?' active':''), text:label, onclick:()=>{ section=key; drawDashboard(); }});
       sectionRow.appendChild(tb);
     });
