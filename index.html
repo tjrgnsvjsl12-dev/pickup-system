@@ -1208,7 +1208,9 @@ function renderAdminView(){
           const agg = new Map();
           rows.forEach(r=>{
             const l4 = (r.card_last4||'').replace(/\D/g,'').slice(-4);
-            const label = [r.model, r.capacity, r.color].filter(Boolean).join(' ');
+            // 딩톡 모델명 형식: iphone18pro 512GB burgundy kr spec / iphone duo 256GB night sky kr spec
+            const mdl = /duo/i.test(r.model||'') ? 'iphone duo' : (r.model||'').toLowerCase().replace(/\s+/g,'');
+            const label = [mdl, r.capacity, (r.color||'').toLowerCase(), 'kr spec'].filter(Boolean).join(' ');
             const key = l4+'|'+label;
             if(!agg.has(key)) agg.set(key,{l4,label,qty:0});
             agg.get(key).qty += r.qty;
