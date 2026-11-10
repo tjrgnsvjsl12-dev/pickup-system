@@ -318,7 +318,7 @@ function renderAlbaView(){
     app.innerHTML = '';
 
     const top = h('div',{class:'topbar'},[
-      h('div',{},[ h('h1',{text:t.title}), h('div',{class:'sub',text: session.store_name}) ]),
+      h('div',{},[ h('h1',{text:t.title}), h('div',{class:'sub',text: (lang==='zh' && session.store_name_zh) ? session.store_name_zh : session.store_name}) ]),
       h('div',{class:'langsw'},[
         h('button',{class:'btn-ghost'+(lang==='ko'?' btn-primary':''), text:'한국어', onclick:()=>{lang='ko';draw();}}),
         h('button',{class:'btn-ghost'+(lang==='zh'?' btn-primary':''), text:'中文', onclick:()=>{lang='zh';draw();}})
@@ -479,6 +479,8 @@ function renderAlbaView(){
 function renderAdminView(){
   let session = null;
   let stores = [];
+  let storeZh = {}; // 한글 매장명 -> 중문 매장명 (중문 모드에서 표시용)
+  const sn = (name)=> (lang==='zh' && storeZh[name]) ? storeZh[name] : name;
   let section = 'alba'; // 'alba' | 'purchase' | 'supplier'
   let activeTab = 'send';
   let purchaseTab = 'mine'; // 'mine' | 'all'
@@ -556,7 +558,7 @@ function renderAdminView(){
       qtySummary:'수량 집계 (매장별 · 용량별)', grandTotal:'전체 합계',
       companyName:'공급업체명', companyNamePh:'예: ○○무역', receivedDate:'받은 날짜', amount:'금액 (원)', amountPh:'예: 1200000',
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
-      wonUnit:'원', sectionBackup:'백업',
+      wonUnit:'원', sectionBackup:'백업', storeZhTitle:'매장 중문 이름 (중문 화면에서 표시)', storeZhHint:'한글 화면에서는 한글 매장명, 중문 화면에서는 아래 중문 이름이 표시됩니다.',
       modeBatch:'명세서 일괄 입력', modeSingle:'한 건 입력', batchLines:'품목', addLine:'+ 줄 추가', removeLine:'삭제',
       unitPrice:'단가(원)', lineTotal:'금액', batchTotal:'명세서 합계', registerBatch:'명세서 등록', batchNeedLine:'품목을 한 줄 이상 입력해주세요',
       batchCheckLine:'{n}번째 줄을 확인해주세요 (모델/용량/수량)', cancelBatch:'명세서 전체 취소', statementOf:'명세서', lines:'{n}줄', batchSaved:'등록되었습니다 ✓',
@@ -602,7 +604,7 @@ function renderAdminView(){
       qtySummary:'数量汇总（按门店 · 按容量）', grandTotal:'总计',
       companyName:'供应商名称', companyNamePh:'例：○○贸易', receivedDate:'收货日期', amount:'金额（韩元）', amountPh:'例：1200000',
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
-      wonUnit:'韩元', sectionBackup:'备份',
+      wonUnit:'韩元', sectionBackup:'备份', storeZhTitle:'门店中文名称（中文界面显示）', storeZhHint:'韩文界面显示韩文门店名，中文界面显示下方的中文名称。',
       modeBatch:'批量录入对账单', modeSingle:'单笔录入', batchLines:'明细', addLine:'+ 添加一行', removeLine:'删除',
       unitPrice:'单价（韩元）', lineTotal:'金额', batchTotal:'对账单合计', registerBatch:'登记对账单', batchNeedLine:'请至少输入一行明细',
       batchCheckLine:'请检查第{n}行（型号/容量/数量）', cancelBatch:'取消整张对账单', statementOf:'对账单', lines:'{n}行', batchSaved:'已登记 ✓',
@@ -667,6 +669,7 @@ function renderAdminView(){
       sb.rpc('list_stores'), sb.rpc('get_my_profile'), sb.rpc('get_app_settings')
     ]);
     if(!storeErr) stores = storeData || [];
+    storeZh = {}; stores.forEach(s=>{ if(s.name_zh) storeZh[s.name] = s.name_zh; });
     if(!profErr) myProfile = profData;
     if(!settingsErr && settingsData) appSettings = settingsData;
     drawDashboard();
@@ -743,6 +746,36 @@ function renderAdminView(){
     };
     card.appendChild(btn);
     body.appendChild(card);
+
+    const zhCard = h('div',{class:'card'});
+    zhCard.appendChild(h('label',{text:t('storeZhTitle')}));
+    zhCard.appendChild(h('div',{class:'muted',style:'margin:-2px 0 10px',text:t('storeZhHint')}));
+    const zhInputs = {};
+    stores.forEach(st=>{
+      zhCard.appendChild(h('label',{text:st.name,style:'margin-top:6px'}));
+      const inp = h('input',{placeholder:'中文', value: st.name_zh || ''});
+      zhInputs[st.id] = inp; zhCard.appendChild(inp);
+    });
+    const zhMsg = h('div',{class:'ok hidden'});
+    zhCard.appendChild(zhMsg);
+    const zhBtn = h('button',{class:'btn-primary',text:t('save')});
+    zhBtn.onclick = async ()=>{
+      zhMsg.className='hidden'; zhBtn.disabled=true; const old=zhBtn.textContent; zhBtn.textContent=t('saving');
+      let failed = null;
+      for(const st of stores){
+        const v = zhInputs[st.id].value.trim();
+        if((st.name_zh||'') === v) continue;
+        const { error } = await sb.rpc('update_store_name_zh', { p_store_id: st.id, p_name_zh: v });
+        if(error){ failed = error; break; }
+        st.name_zh = v || null;
+        if(v) storeZh[st.name] = v; else delete storeZh[st.name];
+      }
+      zhBtn.disabled=false; zhBtn.textContent=old;
+      if(failed){ zhMsg.className='err'; zhMsg.textContent=failed.message; return; }
+      zhMsg.className='ok'; zhMsg.textContent=t('storeSaveDone');
+    };
+    zhCard.appendChild(zhBtn);
+    body.appendChild(zhCard);
   }
 
   function drawPurchaseSection(){
@@ -767,7 +800,7 @@ function renderAdminView(){
     card.appendChild(h('label',{text: ed ? t('editPurchase') : t('store')}));
     if(ed) card.appendChild(h('label',{text:t('store'),style:'margin-top:8px'}));
     const sel = h('select',{});
-    stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
+    stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:sn(s.name)})));
     if(ed) sel.value = ed.store_id;
     card.appendChild(sel);
 
@@ -900,7 +933,7 @@ function renderAdminView(){
       list.forEach(p=>{
         const c = h('div',{class:'card'});
         c.appendChild(h('div',{class:'flexbetween'},[
-          h('div',{text:`${p.store_name} · ${p.model} ${p.capacity||''} ${p.color||''}`.replace(/\s+/g,' ').trim()}),
+          h('div',{text:`${sn(p.store_name)} · ${p.model} ${p.capacity||''} ${p.color||''}`.replace(/\s+/g,' ').trim()}),
           h('span',{class:'pill',text:'x'+p.qty})
         ]));
         if(p.card_company || p.card_last4) c.appendChild(h('div',{class:'muted',text:[p.card_company,p.card_last4].filter(Boolean).join(' · ')}));
@@ -941,7 +974,7 @@ function renderAdminView(){
     ctrl.appendChild(h('label',{text:t('store')}));
     const storeSel = h('select',{});
     storeSel.appendChild(h('option',{value:'',text:t('allStores')}));
-    stores.forEach(s=>storeSel.appendChild(h('option',{value:s.id,text:s.name})));
+    stores.forEach(s=>storeSel.appendChild(h('option',{value:s.id,text:sn(s.name)})));
     ctrl.appendChild(storeSel);
     const loadBtn = h('button',{class:'btn-primary',text:t('query')});
     ctrl.appendChild(loadBtn);
@@ -978,7 +1011,7 @@ function renderAdminView(){
         const storeTotal = Object.values(buyers).flat().reduce((a,r)=>a+r.qty,0);
         const storeCard = h('div',{class:'card'});
         storeCard.appendChild(h('div',{class:'flexbetween'},[
-          h('div',{style:'font-weight:700',text:storeName}),
+          h('div',{style:'font-weight:700',text:sn(storeName)}),
           h('span',{class:'pill',text:storeTotal+t('unit')})
         ]));
         Object.keys(buyers).forEach(buyerName=>{
@@ -1501,7 +1534,7 @@ function renderAdminView(){
 
     const card = h('div',{class:'card'});
     const sel = h('select',{});
-    stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:s.name})));
+    stores.forEach(s=>sel.appendChild(h('option',{value:s.id,text:sn(s.name)})));
     const nameInput = h('input',{placeholder:t('albaNamePh')});
     card.appendChild(h('div',{class:'row'},[
       (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('store')})); d.appendChild(sel); return d; })(),
@@ -1561,7 +1594,7 @@ ${orderLines}
 
 ---
 
-[${info.store.name}] 取货指南
+[${info.store.name_zh||info.store.name}] 取货指南
 
 姓名: ${info.albaName || '-'}
 
@@ -1654,7 +1687,7 @@ ${orderLines}
       chipBtns['__all__'] = allChip;
       filterRow.appendChild(allChip);
       storeNames.forEach(name=>{
-        const chip = h('button',{type:'button', class:'chip-btn', text:name});
+        const chip = h('button',{type:'button', class:'chip-btn', text:sn(name)});
         chip.onclick = ()=>{ listStoreFilter = name; applyFilter(); };
         chipBtns[name] = chip;
         filterRow.appendChild(chip);
@@ -1672,7 +1705,7 @@ ${orderLines}
       const card = h('div',{class:'card'});
       card.appendChild(h('div',{class:'flexbetween'},[
         h('div',{},[
-          h('div',{class:'muted',style:'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em',text:s.store_name}),
+          h('div',{class:'muted',style:'font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.03em',text:sn(s.store_name)}),
           h('div',{style:'font-weight:700;font-size:16px;margin-top:2px',text:s.alba_name||t('noName')}),
           h('div',{class:'muted',style:'margin-top:2px',text:fmtDate(s.created_at, lang==='zh')})
         ]),
@@ -1821,7 +1854,7 @@ ${orderLines}
         const rowTotal = Object.values(caps).reduce((a,n)=>a+n,0);
         const sw = COLOR_SWATCH[colorName];
         tbody.appendChild(h('tr',{},[
-          h('td',{class:'storecell', text: idx===0 ? storeName : ''}),
+          h('td',{class:'storecell', text: idx===0 ? sn(storeName) : ''}),
           h('td',{},[
             sw ? h('span',{class:'colorsw',style:'background:'+sw}) : null,
             h('span',{text:colorName})
