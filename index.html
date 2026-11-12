@@ -1226,7 +1226,7 @@ function renderAdminView(){
           const missing = new Set(), noPrice = new Set();
           const out = [...agg.values()].sort((a,b)=>a.l4.localeCompare(b.l4)||a.label.localeCompare(b.label)).map(x=>{
             let card = '';
-            if(x.l4){ card = map[x.l4] || ''; if(!card){ missing.add(x.l4); card = '****'+x.l4; } }
+            if(x.l4){ card = map[x.l4] ? map[x.l4].replace(/(\d{4})(?=\d)/g,'$1-') : ''; if(!card){ missing.add(x.l4); card = '****'+x.l4; } }  // 1234-5678-9012-3456 형식
             if(x.unit==null) noPrice.add(x.name);
             return [x.label, x.qty, x.unit==null ? '' : x.unit*x.qty, '', card];
           });
