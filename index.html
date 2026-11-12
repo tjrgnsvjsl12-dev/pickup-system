@@ -1740,10 +1740,6 @@ function renderAdminView(){
 
       const totalQty = rows.reduce((a,r)=>a+r.qty,0);
       const totalAmount = rows.reduce((a,r)=>a+(Number(r.amount)||0),0);
-      resultWrap.appendChild(h('div',{class:'card'},[
-        h('div',{style:'font-weight:700',text:t('totalCount',{n:rows.length,q:totalQty})}),
-        h('div',{class:'muted',style:'margin-top:4px',text:t('totalAmount')+': '+fmtWon(totalAmount)+t('wonUnit')})
-      ]));
 
       // group by company -> by buyer
       const byCompany = {};
@@ -1807,6 +1803,8 @@ function renderAdminView(){
       });
       const grandQty = Object.values(byModel).reduce((a,b)=>a+b,0);
       modelCard.appendChild(h('div',{class:'itemline',style:'font-weight:700'},[h('span',{text:t('grandTotal')}), h('span',{class:'pill',text:grandQty+t('unit')})]));
+      modelCard.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:t('totalCount',{n:rows.length,q:grandQty})}));
+      modelCard.appendChild(h('div',{style:'font-weight:700;margin-top:2px',text:t('totalAmount')+': '+fmtWon(totalAmount)+t('wonUnit')}));
       resultWrap.appendChild(modelCard);
     }
     loadBtn.onclick = load;
