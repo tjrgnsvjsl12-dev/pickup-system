@@ -1239,9 +1239,7 @@ function renderAdminView(){
           return out;
         }
         const btns = h('div',{class:'row'});
-        const copyBtn = h('button',{type:'button',class:'btn-primary',text:t('dingCopy')});
-        copyBtn.onclick = ()=>{ const out = build(); copyText(out.map(r=>r.join('\t')).join('\n'), copyBtn); };
-        const xlsxBtn = h('button',{type:'button',class:'btn-ghost',text:t('dingXlsx')});
+        const xlsxBtn = h('button',{type:'button',class:'btn-primary',text:t('dingXlsx')});
         xlsxBtn.onclick = async ()=>{
           const out = build();
           try{
@@ -1252,7 +1250,7 @@ function renderAdminView(){
             X.writeFile(wb, 'dingtalk_'+fromInput.value+(fromInput.value!==toInput.value?'_'+toInput.value:'')+'.xlsx');
           }catch(e){ msg.textContent = t('backupLibFail'); }
         };
-        btns.appendChild(copyBtn); btns.appendChild(xlsxBtn);
+        btns.appendChild(xlsxBtn);
         exp.appendChild(msg); exp.appendChild(btns);
         resultWrap.appendChild(exp);
       })();
