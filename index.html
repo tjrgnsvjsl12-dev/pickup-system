@@ -1257,38 +1257,49 @@ function renderAdminView(){
         resultWrap.appendChild(exp);
       })();
 
-      // group by store -> by buyer
-      const byStore = {};
-      rows.forEach(r=>{
-        byStore[r.store_name] = byStore[r.store_name] || {};
-        byStore[r.store_name][r.buyer_name] = byStore[r.store_name][r.buyer_name] || [];
-        byStore[r.store_name][r.buyer_name].push(r);
-      });
-      Object.keys(byStore).forEach(storeName=>{
-        const buyers = byStore[storeName];
-        const storeTotal = Object.values(buyers).flat().reduce((a,r)=>a+r.qty,0);
-        const storeCard = h('div',{class:'card'});
-        storeCard.appendChild(h('div',{class:'flexbetween'},[
-          h('div',{style:'font-weight:700',text:sn(storeName)}),
-          h('span',{class:'pill',text:storeTotal+t('unit')})
+      // 날짜별 -> 매장별 -> 구매자별로 묶어서 표시 (날짜 구분이 한눈에 보이도록)
+      const WD_KO = ['일','월','화','수','목','금','토'], WD_ZH = ['周日','周一','周二','周三','周四','周五','周六'];
+      const dateLabel = (iso)=>{ try{ const wd = new Date(iso+'T00:00:00').getDay(); return iso+' ('+(lang==='zh'?WD_ZH[wd]:WD_KO[wd])+')'; }catch(e){ return iso; } };
+      const byDate = new Map();
+      rows.forEach(r=>{ if(!byDate.has(r.purchase_date)) byDate.set(r.purchase_date, []); byDate.get(r.purchase_date).push(r); });
+      byDate.forEach((dayRows, day)=>{
+        const dayTotal = dayRows.reduce((a,r)=>a+r.qty,0);
+        resultWrap.appendChild(h('div',{class:'flexbetween',style:'margin:14px 4px 6px;padding:8px 12px;border-radius:10px;background:var(--surface-2)'},[
+          h('div',{style:'font-weight:800;font-size:15px',text:dateLabel(day)}),
+          h('span',{class:'pill',text:dayTotal+t('unit')})
         ]));
-        Object.keys(buyers).forEach(buyerName=>{
-          const items = buyers[buyerName];
-          const buyerTotal = items.reduce((a,r)=>a+r.qty,0);
-          storeCard.appendChild(h('hr',{}));
-          storeCard.appendChild(h('div',{class:'flexbetween'},[
-            h('div',{style:'font-weight:600',text:buyerName}),
-            h('span',{class:'pill',text:buyerTotal+t('unit')})
-          ]));
-          items.forEach(it=>{
-            const cardInfo = [it.card_company, it.card_last4].filter(Boolean).join(' ');
-            storeCard.appendChild(h('div',{class:'itemline'},[
-              h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + ' · ' + it.purchase_date + (cardInfo?' · '+cardInfo:'')},[]),
-              rowRightCell(it,'purchase',load)
-            ]));
-          });
+        const byStore = {};
+        dayRows.forEach(r=>{
+          byStore[r.store_name] = byStore[r.store_name] || {};
+          byStore[r.store_name][r.buyer_name] = byStore[r.store_name][r.buyer_name] || [];
+          byStore[r.store_name][r.buyer_name].push(r);
         });
-        resultWrap.appendChild(storeCard);
+        Object.keys(byStore).forEach(storeName=>{
+          const buyers = byStore[storeName];
+          const storeTotal = Object.values(buyers).flat().reduce((a,r)=>a+r.qty,0);
+          const storeCard = h('div',{class:'card'});
+          storeCard.appendChild(h('div',{class:'flexbetween'},[
+            h('div',{style:'font-weight:700',text:sn(storeName)}),
+            h('span',{class:'pill',text:storeTotal+t('unit')})
+          ]));
+          Object.keys(buyers).forEach(buyerName=>{
+            const items = buyers[buyerName];
+            const buyerTotal = items.reduce((a,r)=>a+r.qty,0);
+            storeCard.appendChild(h('hr',{}));
+            storeCard.appendChild(h('div',{class:'flexbetween'},[
+              h('div',{style:'font-weight:600',text:buyerName}),
+              h('span',{class:'pill',text:buyerTotal+t('unit')})
+            ]));
+            items.forEach(it=>{
+              const cardInfo = [it.card_company, it.card_last4].filter(Boolean).join(' ');
+              storeCard.appendChild(h('div',{class:'itemline'},[
+                h('span',{text:`${it.model} ${it.capacity||''} ${it.color||''}`.replace(/\s+/g,' ').trim() + (cardInfo?' · '+cardInfo:'')},[]),
+                rowRightCell(it,'purchase',load)
+              ]));
+            });
+          });
+          resultWrap.appendChild(storeCard);
+        });
       });
 
       // model summary
