@@ -232,15 +232,16 @@ function buildCopyText(list, groupBy){
 // 전체현황용: 기록 목록 + 모델별 합계 + 총수량까지 한 번에 복사할 수 있는 텍스트
 function buildDayReportText(list, labels){
   const body = buildCopyText(list, 'day');
+  // 화면의 '모델별 합계' 카드와 같은 형태: 모델 용량 색상 + 대수, 마지막에 총계
   const by = {};
   list.forEach(p=>{
-    const k = [p.model, p.capacity, p.color].filter(Boolean).join(' · ') || '-';
+    const k = [p.model, p.capacity, p.color].filter(Boolean).join(' ') || '-';
     by[k] = (by[k]||0) + p.qty;
   });
   const total = Object.values(by).reduce((a,b)=>a+b,0);
   const out = [body, '', `▣ ${labels.modelTotal}`];
-  Object.keys(by).sort().forEach(k=>out.push(`${k} ${by[k]}${labels.unit}`));
-  out.push(`━━━━━━━━`, `${labels.grandTotal} ${total}${labels.unit}`);
+  Object.keys(by).forEach(k=>out.push(`${k}  ${by[k]}${labels.unit}`));
+  out.push(`${labels.grandTotal}  ${total}${labels.unit}`);
   return out.join('\n').trim();
 }
 
@@ -1299,7 +1300,7 @@ function renderAdminView(){
           h('div',{style:'font-weight:800;font-size:15px',text:dateLabel(day)}),
           h('div',{class:'row',style:'gap:6px;align-items:center'},[
             h('span',{class:'pill',text:dayTotal+t('unit')}),
-            (()=>{ const b=h('button',{type:'button',class:'btn-ghost btn-sm',text:t('copyDay')}); b.onclick=()=>copyText(buildDayReportText(dayRows,{modelTotal:t('modelTotal'),grandTotal:t('grandTotal'),unit:t('unit')}), b); return b; })()
+            (()=>{ const b=h('button',{type:'button',class:'btn-ghost btn-sm',text:t('copyDay')}); b.onclick=()=>copyText(buildDayReportText(dayRows,{modelTotal:t('modelTotal'),grandTotal:(lang==='zh'?'总计':'총계'),unit:t('unit')}), b); return b; })()
           ])
         ]));
         const byStore = {};
@@ -1350,7 +1351,7 @@ function renderAdminView(){
       const grandQty = Object.values(byModel).reduce((a,b)=>a+b,0);
       modelCard.appendChild(h('div',{class:'itemline',style:'font-weight:700'},[h('span',{text:t('grandTotal')}), h('span',{class:'pill',text:grandQty+t('unit')})]));
       const allCopyBtn = h('button',{type:'button',class:'btn-primary',style:'margin-top:10px;width:100%',text:t('copyAllRange')});
-      allCopyBtn.onclick = ()=>copyText(buildDayReportText(rows,{modelTotal:t('modelTotal'),grandTotal:t('grandTotal'),unit:t('unit')}), allCopyBtn);
+      allCopyBtn.onclick = ()=>copyText(buildDayReportText(rows,{modelTotal:t('modelTotal'),grandTotal:(lang==='zh'?'总计':'총계'),unit:t('unit')}), allCopyBtn);
       modelCard.appendChild(allCopyBtn);
       resultWrap.appendChild(modelCard);
     }
