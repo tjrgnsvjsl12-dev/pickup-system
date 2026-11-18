@@ -229,6 +229,21 @@ function buildCopyText(list, groupBy){
   return lines.join('\n').trim();
 }
 
+// 전체현황용: 기록 목록 + 모델별 합계 + 총수량까지 한 번에 복사할 수 있는 텍스트
+function buildDayReportText(list, labels){
+  const body = buildCopyText(list, 'day');
+  const by = {};
+  list.forEach(p=>{
+    const k = [p.model, p.capacity, p.color].filter(Boolean).join(' · ') || '-';
+    by[k] = (by[k]||0) + p.qty;
+  });
+  const total = Object.values(by).reduce((a,b)=>a+b,0);
+  const out = [body, '', `▣ ${labels.modelTotal}`];
+  Object.keys(by).sort().forEach(k=>out.push(`${k} ${by[k]}${labels.unit}`));
+  out.push(`━━━━━━━━`, `${labels.grandTotal} ${total}${labels.unit}`);
+  return out.join('\n').trim();
+}
+
 // iPhone Duo is the priority item right now, so it leads the list.
 // 딩톡 내보내기용 단가표 (모델 · 용량별, 색상 무관). 금액 칸 = 수량 x 단가
 const DING_UNIT_PRICE = {
@@ -586,7 +601,7 @@ function renderAdminView(){
       accountId:'아이디', accountPw:'비밀번호', pickupLink:'픽업 링크 (URL)',
       storeSaveDone:'저장되었습니다 ✓', storeSaveHint:'여기에 입력한 정보는 알바 안내 메시지의 ①번에 자동으로 들어갑니다.',
       copyLinkOnly:'④번 기록 링크만 복사', copyLinkHint:'하이퍼링크는 받는 앱(카톡/위챗)이 실제로 "전송"된 메시지에서만 자동으로 만들어줍니다. 전체 메시지에 섞여 있으면 인식이 안 될 때가 있으니, 링크만 따로 복사해서 별도 메시지로 보내면 확실하게 클릭 가능한 링크로 뜹니다.',
-      qtySummary:'수량 집계 (매장별 · 용량별)', grandTotal:'전체 합계',
+      copyDay:'복사', copyAllRange:'조회한 기록 복사 (합계 포함)', qtySummary:'수량 집계 (매장별 · 용량별)', grandTotal:'전체 합계',
       companyName:'공급업체명', companyNamePh:'예: ○○무역', receivedDate:'받은 날짜', amount:'금액 (원)', amountPh:'예: 1200000',
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
       wonUnit:'원', sectionBackup:'백업', storeZhTitle:'매장 중문 이름 (중문 화면에서 표시)', storeZhHint:'한글 화면에서는 한글 매장명, 중문 화면에서는 아래 중문 이름이 표시됩니다.',
@@ -638,7 +653,7 @@ function renderAdminView(){
       accountId:'账号', accountPw:'密码', pickupLink:'取货链接 (URL)',
       storeSaveDone:'已保存 ✓', storeSaveHint:'这里输入的信息会自动填入兼职指南消息的①步骤中。',
       copyLinkOnly:'只复制④记录链接', copyLinkHint:'超链接只有在消息被"实际发送"后，由接收方应用（微信/KakaoTalk）自动生成。混在整段消息里有时无法识别，单独复制链接并作为单独消息发送，才能确保显示为可点击链接。',
-      qtySummary:'数量汇总（按门店 · 按容量）', grandTotal:'总计',
+      copyDay:'复制', copyAllRange:'复制查询记录（含合计）', qtySummary:'数量汇总（按门店 · 按容量）', grandTotal:'总计',
       companyName:'供应商名称', companyNamePh:'例：○○贸易', receivedDate:'收货日期', amount:'金额（韩元）', amountPh:'例：1200000',
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
       wonUnit:'韩元', sectionBackup:'备份', storeZhTitle:'门店中文名称（中文界面显示）', storeZhHint:'韩文界面显示韩文门店名，中文界面显示下方的中文名称。',
@@ -1282,7 +1297,10 @@ function renderAdminView(){
         const dayTotal = dayRows.reduce((a,r)=>a+r.qty,0);
         resultWrap.appendChild(h('div',{class:'flexbetween',style:'margin:14px 4px 6px;padding:8px 12px;border-radius:10px;background:var(--surface-2)'},[
           h('div',{style:'font-weight:800;font-size:15px',text:dateLabel(day)}),
-          h('span',{class:'pill',text:dayTotal+t('unit')})
+          h('div',{class:'row',style:'gap:6px;align-items:center'},[
+            h('span',{class:'pill',text:dayTotal+t('unit')}),
+            (()=>{ const b=h('button',{type:'button',class:'btn-ghost btn-sm',text:t('copyDay')}); b.onclick=()=>copyText(buildDayReportText(dayRows,{modelTotal:t('modelTotal'),grandTotal:t('grandTotal'),unit:t('unit')}), b); return b; })()
+          ])
         ]));
         const byStore = {};
         dayRows.forEach(r=>{
@@ -1331,6 +1349,9 @@ function renderAdminView(){
       });
       const grandQty = Object.values(byModel).reduce((a,b)=>a+b,0);
       modelCard.appendChild(h('div',{class:'itemline',style:'font-weight:700'},[h('span',{text:t('grandTotal')}), h('span',{class:'pill',text:grandQty+t('unit')})]));
+      const allCopyBtn = h('button',{type:'button',class:'btn-primary',style:'margin-top:10px;width:100%',text:t('copyAllRange')});
+      allCopyBtn.onclick = ()=>copyText(buildDayReportText(rows,{modelTotal:t('modelTotal'),grandTotal:t('grandTotal'),unit:t('unit')}), allCopyBtn);
+      modelCard.appendChild(allCopyBtn);
       resultWrap.appendChild(modelCard);
     }
     loadBtn.onclick = load;
