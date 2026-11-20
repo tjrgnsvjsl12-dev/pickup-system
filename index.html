@@ -605,7 +605,7 @@ function renderAdminView(){
       copyDay:'복사', copyAllRange:'조회한 기록 복사 (합계 포함)', qtySummary:'수량 집계 (매장별 · 용량별)', grandTotal:'전체 합계',
       companyName:'공급업체명', companyNamePh:'예: ○○무역', receivedDate:'받은 날짜', amount:'금액 (원)', amountPh:'예: 1200000',
       addSupplier:'입고 기록 추가', editSupplier:'입고 기록 수정', totalAmount:'총 금액', selectCompanyName:'공급업체명을 입력해주세요',
-      wonUnit:'원', sectionBackup:'백업', sectionOnline:'온라인구매', storeZhTitle:'매장 중문 이름 (중문 화면에서 표시)', storeZhHint:'한글 화면에서는 한글 매장명, 중문 화면에서는 아래 중문 이름이 표시됩니다.',
+      wonUnit:'원', sectionBackup:'백업', storeZhTitle:'매장 중문 이름 (중문 화면에서 표시)', storeZhHint:'한글 화면에서는 한글 매장명, 중문 화면에서는 아래 중문 이름이 표시됩니다.',
       modeBatch:'명세서 일괄 입력', modeSingle:'한 건 입력', batchLines:'품목', addLine:'+ 줄 추가', removeLine:'삭제',
       dingNoPrice:'⚠ 단가표에 없는 품목: {n} (금액이 비어 있습니다)',
       dingTitle:'딩톡 업로드용 내보내기', dingDesc:'조회한 기록을 딩톡 일괄등록 칸(모델 · 수량 · 금액 · 뱅크코드 · 주문번호 · 카드번호)에 맞춰 만듭니다. 금액은 수량 × 단가입니다. 매장은 빼고 같은 카드·모델·용량·색상은 수량을 합칩니다.', dingCards:'카드 전체번호 목록 (한 줄에 하나)', dingCardsHint:'끝 4자리가 같은 줄과 자동 연결됩니다. 직원 계정만 볼 수 있게 서버에 저장되어 어느 기기에서나 그대로 불러옵니다.', dingCopy:'표 복사 (딩톡에 붙여넣기)', dingXlsx:'엑셀 다운로드', dingMissing:'⚠ 전체번호가 없는 카드: {n} (끝 4자리만 표시됩니다)', dingMulti:'⚠ 여러 날짜가 섞여 있습니다. 딩톡에는 하루씩 조회해서 올리는 것을 권장합니다.', dingDupCard:'⚠ 끝 4자리가 같은 카드번호가 여러 개입니다: {n} (첫 번째 번호를 사용)',
@@ -657,7 +657,7 @@ function renderAdminView(){
       copyDay:'复制', copyAllRange:'复制查询记录（含合计）', qtySummary:'数量汇总（按门店 · 按容量）', grandTotal:'总计',
       companyName:'供应商名称', companyNamePh:'例：○○贸易', receivedDate:'收货日期', amount:'金额（韩元）', amountPh:'例：1200000',
       addSupplier:'添加入库记录', editSupplier:'编辑入库记录', totalAmount:'总金额', selectCompanyName:'请输入供应商名称',
-      wonUnit:'韩元', sectionBackup:'备份', sectionOnline:'线上采购', storeZhTitle:'门店中文名称（中文界面显示）', storeZhHint:'韩文界面显示韩文门店名，中文界面显示下方的中文名称。',
+      wonUnit:'韩元', sectionBackup:'备份', storeZhTitle:'门店中文名称（中文界面显示）', storeZhHint:'韩文界面显示韩文门店名，中文界面显示下方的中文名称。',
       modeBatch:'批量录入对账单', modeSingle:'单笔录入', batchLines:'明细', addLine:'+ 添加一行', removeLine:'删除',
       dingNoPrice:'⚠ 价目表中没有的品项：{n}（金额为空）',
       dingTitle:'导出为钉钉上传格式', dingDesc:'按钉钉批量录入栏位（型号 · 数量 · 金额 · 银行授权码 · 订单号 · 卡号）生成。不含门店，相同卡/型号/容量/颜色的数量合并。', dingCards:'银行卡完整卡号列表（每行一个）', dingCardsHint:'按后4位自动匹配。仅员工账号可见，保存在服务器，任何设备登录都会自动加载。', dingCopy:'复制表格（粘贴到钉钉）', dingXlsx:'下载Excel', dingMissing:'⚠ 缺少完整卡号的卡：{n}（仅显示后4位）', dingMulti:'⚠ 包含多个日期。建议按单日查询后再上传钉钉。', dingDupCard:'⚠ 后4位相同的卡号有多个：{n}（使用第一个）',
@@ -749,7 +749,7 @@ function renderAdminView(){
     const isPart = !!(myProfile && myProfile.role === 'part'); // 시간제 알바 계정: 구매 기록만 사용
     if(isPart) section = 'purchase';
     const sectionRow = h('div',{class:'tabs',style:'margin-bottom:6px'});
-    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')],['supplier',t('sectionSupplier')],['online',t('sectionOnline')],['backup',t('sectionBackup')]].filter(([key])=>(!isPart||key==='purchase') && (key!=='online'||(myProfile&&myProfile.role==='admin'))).forEach(([key,label])=>{
+    [['alba',t('sectionAlba')],['purchase',t('sectionPurchase')],['supplier',t('sectionSupplier')],['backup',t('sectionBackup')]].filter(([key])=>!isPart||key==='purchase').forEach(([key,label])=>{
       const tb = h('div',{class:'tab'+(section===key?' active':''), text:label, onclick:()=>{ section=key; drawDashboard(); }});
       sectionRow.appendChild(tb);
     });
@@ -758,7 +758,6 @@ function renderAdminView(){
     if(section==='alba') drawAlbaSection();
     else if(section==='purchase') drawPurchaseSection();
     else if(section==='supplier') drawSupplierSection();
-    else if(section==='online') drawOnlineSection();
     else drawBackupSection();
   }
 
@@ -1446,320 +1445,6 @@ function renderAdminView(){
       btn.disabled = false; btn.textContent = old;
     };
     app.appendChild(card);
-  }
-
-  // ===================== 온라인구매 현황판 (관리자 전용) =====================
-  const OL_COMPANIES = ['CH','부강','성신','에잇싱크'];
-  const OL_STEPS = ['주문 접수','처리 중','출고 준비 중','출고됨','배송됨'];
-  const OL_GROUP_LABEL = {wait:'주문대기', ship:'배송중', done:'배송완료', late:'지연'};
-  let olFilter = {company:'', group:'', q:''};
-  let olShown = 100;
-
-  function olGroup(o){ return o.apple_status==='배송됨' ? 'done' : (o.apple_status==='출고됨' ? 'ship' : 'wait'); }
-  function olToday(){ const d=new Date(); return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
-  function olLate(o){ return olGroup(o)!=='done' && !!o.window_to && o.window_to < olToday(); }
-
-  function olPrettyModel(raw){
-    if(!raw) return '';
-    try{
-      const tk = String(raw).trim().split(/\s+/);
-      const m = /^iphone(\d+)(promax|pro|plus|air|mini|e)?$/i.exec(tk[0]);
-      if(!m) return String(raw);
-      const names = {promax:'Pro Max', pro:'Pro', plus:'Plus', air:'Air', mini:'Mini', e:'e'};
-      let out = 'iPhone ' + m[1] + (m[2] ? ' ' + names[m[2].toLowerCase()] : '');
-      const sm = tk.map(x=>/^(\d+)\s*(gb|tb)$/i.exec(x)).find(Boolean);
-      if(sm){
-        let n = parseInt(sm[1],10), u = sm[2].toUpperCase();
-        if(u==='GB' && n>=1024){ n = n/1024; u = 'TB'; }
-        out += ' ' + n + u;
-      }
-      const color = tk.slice(1).find(x=>!/^(\d+)\s*(gb|tb)$/i.test(x) && !/^(kr|spec)$/i.test(x));
-      if(color) out += ' ' + color.charAt(0).toUpperCase() + color.slice(1);
-      return out;
-    }catch(e){ return String(raw); }
-  }
-
-  function olIso(v){
-    if(v==null || v==='') return null;
-    if(typeof v==='number') return new Date(Math.round((v-25569)*86400000)).toISOString().slice(0,10);
-    const m = /(\d{4})[-./](\d{1,2})[-./](\d{1,2})/.exec(String(v));
-    return m ? m[1]+'-'+m[2].padStart(2,'0')+'-'+m[3].padStart(2,'0') : null;
-  }
-  function olParseWindow(text, orderIso){
-    // 예: '11월 12 - 11월 14' / '11월 28 - 12월 2' / '11월 12'
-    const s = String(text||'');
-    const m = /(\d{1,2})\s*월\s*(\d{1,2})(?:\s*[-~–]\s*(?:(\d{1,2})\s*월\s*)?(\d{1,2}))?/.exec(s);
-    if(!m) return {from:null, to:null};
-    const year = orderIso ? parseInt(orderIso.slice(0,4),10) : new Date().getFullYear();
-    const m1 = parseInt(m[1],10), d1 = parseInt(m[2],10);
-    const m2 = m[4] ? (m[3] ? parseInt(m[3],10) : m1) : m1, d2 = m[4] ? parseInt(m[4],10) : d1;
-    const p = n=>String(n).padStart(2,'0');
-    const y2 = (m2 < m1) ? year + 1 : year;
-    return {from: year+'-'+p(m1)+'-'+p(d1), to: y2+'-'+p(m2)+'-'+p(d2)};
-  }
-  function olChecked(v){
-    const s = String(v||'').trim();
-    const m = /^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/.exec(s);
-    return m ? m[1]+'T'+m[2]+':00+09:00' : null;
-  }
-
-  // 엑셀(자동주문 원본 또는 수집기 결과)을 읽어 개인정보 없이 필요한 열만 뽑는다.
-  function olParseWorkbook(XLSX, buf){
-    const wb = XLSX.read(buf, {type:'array'});
-    const ORDER_H = ['订单号','주문번호'];
-    let main = null, headers = null, hrow = -1;
-    for(const name of wb.SheetNames){
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:true, defval:null});
-      for(let i=0;i<Math.min(rows.length,5);i++){
-        const hdr = (rows[i]||[]).map(x=>x==null?'':String(x).trim());
-        if(hdr.some(x=>ORDER_H.includes(x))){ main = rows; headers = hdr; hrow = i; break; }
-      }
-      if(main) break;
-    }
-    if(!main) throw new Error("주문번호 열('订单号' 또는 '주문번호')을 찾지 못했습니다. 자동주문 원본이나 수집기 결과 엑셀을 올려주세요.");
-    const col = (...names)=>{ for(const n of names){ const i = headers.indexOf(n); if(i>=0) return i; } return -1; };
-    const c = {
-      order: col('订单号','주문번호'), model: col('型号','모델원문'), qty: col('数量','수량'),
-      odate: col('下单日期','주문일'), win: col('日期','배송예정'),
-      card: col('卡号','카드끝4'), cref: col('카드참조'),
-      astat: col('automation_status'),
-      status: col('상태'), track: col('운송장번호'), carrier: col('택배사'), link: col('추적링크'), chk: col('확인시각')
-    };
-    // 카드 참조 이름(ch-busan01 등): 원본의 두 번째 시트(Excel任务对账)에서 주문번호별로 가져옴
-    const refByOrder = {};
-    for(const name of wb.SheetNames){
-      const rows = XLSX.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:true, defval:null});
-      const hdr = (rows[0]||[]).map(x=>x==null?'':String(x).trim());
-      const io = hdr.indexOf('订单号'), ir = hdr.indexOf('卡引用');
-      if(io>=0 && ir>=0 && wb.Sheets[name]!==null && rows !== main){
-        rows.slice(1).forEach(r=>{ if(r[io] && r[ir]) refByOrder[String(r[io]).trim()] = String(r[ir]).trim(); });
-      }
-    }
-    const out = []; let skipped = 0;
-    for(let i=hrow+1;i<main.length;i++){
-      const r = main[i]; if(!r) continue;
-      const no = String(r[c.order]==null?'':r[c.order]).trim();
-      if(!/^W\d{8,}$/.test(no)){ if(no) skipped++; continue; }
-      if(c.astat>=0 && r[c.astat] && String(r[c.astat]).toLowerCase()!=='submitted'){ skipped++; continue; }
-      const odate = c.odate>=0 ? olIso(r[c.odate]) : null;
-      const winText = c.win>=0 && r[c.win]!=null ? String(r[c.win]).trim() : '';
-      const w = olParseWindow(winText, odate);
-      const last4 = c.card>=0 && r[c.card]!=null ? String(r[c.card]).replace(/\D/g,'').slice(-4) : '';
-      let cref = c.cref>=0 && r[c.cref] ? String(r[c.cref]).trim() : (refByOrder[no] || '');
-      let st = c.status>=0 && r[c.status]!=null ? String(r[c.status]).trim() : '';
-      st = OL_STEPS.includes(st) ? st : '';
-      const get = idx => (idx>=0 && r[idx]!=null && String(r[idx]).trim()!=='') ? String(r[idx]).trim() : '';
-      out.push({
-        order_no:no, model_raw:get(c.model), qty: c.qty>=0 && r[c.qty]!=null && r[c.qty]!=='' ? parseInt(r[c.qty],10) || null : null,
-        order_date:odate, window_from:w.from, window_to:w.to, window_text:winText,
-        card_last4:last4, card_key: cref || last4,
-        apple_status:st, tracking:get(c.track), carrier:get(c.carrier), track_link:get(c.link), checked_at: c.chk>=0 ? olChecked(r[c.chk]) : null
-      });
-    }
-    return {rows: out, skipped};
-  }
-
-  async function drawOnlineSection(){
-    const wrap = h('div',{});
-    app.appendChild(wrap);
-    wrap.appendChild(h('div',{class:'muted',text:'불러오는 중…'}));
-    let orders = [], cardMap = {};
-    async function reload(){
-      const [o, c] = await Promise.all([sb.rpc('list_online_orders'), sb.rpc('list_card_companies')]);
-      if(o.error) throw new Error(o.error.message);
-      if(c.error) throw new Error(c.error.message);
-      orders = o.data || [];
-      cardMap = {}; (c.data||[]).forEach(x=>{ cardMap[x.card_key] = x.company; });
-    }
-    try{ await reload(); }catch(e){ wrap.innerHTML=''; wrap.appendChild(h('div',{class:'err',text:'불러오기 실패: '+(e.message||e)})); return; }
-
-    const upCard = h('div',{class:'card'});
-    const boardBox = h('div',{});
-    function draw(){ wrap.innerHTML=''; wrap.appendChild(upCard); wrap.appendChild(boardBox); drawUpload(); drawBoard(); }
-
-    // ---------- 엑셀 올리기 ----------
-    function drawUpload(){
-      upCard.innerHTML = '';
-      upCard.appendChild(h('div',{style:'font-weight:700;font-size:16px',text:'엑셀 올리기'}));
-      upCard.appendChild(h('div',{class:'muted',style:'margin:6px 0 10px',text:'자동주문 원본 엑셀, 또는 운송장 수집기 결과 엑셀(운송장_결과_….xlsx)을 올리세요. 이름·전화·주소 같은 개인정보 열은 읽지 않고 버립니다.'}));
-      const file = h('input',{type:'file',accept:'.xlsx,.xls'});
-      const info = h('div',{class:'muted',style:'margin-bottom:8px'});
-      const pick = h('div',{});
-      const msg = h('div',{class:'ok hidden'});
-      const go = h('button',{class:'btn-primary hidden',text:'올리기'});
-      upCard.appendChild(file); upCard.appendChild(info); upCard.appendChild(pick); upCard.appendChild(go); upCard.appendChild(msg);
-      let parsed = null; const pending = {};
-      function showPick(){
-        pick.innerHTML = '';
-        const keys = {};
-        parsed.rows.forEach(r=>{ if(r.card_key && !cardMap[r.card_key] && !pending[r.card_key]) { keys[r.card_key] = (keys[r.card_key]||0)+1; } });
-        const allNew = {};
-        parsed.rows.forEach(r=>{ if(r.card_key && !cardMap[r.card_key]) allNew[r.card_key] = (allNew[r.card_key]||0)+1; });
-        Object.keys(allNew).forEach(k=>{
-          pick.appendChild(h('label',{text:'처음 보는 카드 '+k+' ('+allNew[k]+'건) — 어느 회사인가요?'}));
-          const row = h('div',{class:'chiprow'});
-          OL_COMPANIES.forEach(cn=>{
-            row.appendChild(h('button',{type:'button',class:'chip-btn'+(pending[k]===cn?' selected':''),text:cn,onclick:()=>{ pending[k]=cn; showPick(); }}));
-          });
-          pick.appendChild(row);
-        });
-      }
-      file.onchange = async ()=>{
-        msg.className='hidden'; go.className='btn-primary hidden'; pick.innerHTML=''; info.textContent=''; parsed=null;
-        const f = file.files[0]; if(!f) return;
-        try{
-          const X = await loadSheetJS();
-          parsed = olParseWorkbook(X, await f.arrayBuffer());
-          const withStatus = parsed.rows.filter(r=>r.apple_status).length;
-          const withTrack = parsed.rows.filter(r=>r.tracking).length;
-          info.textContent = parsed.rows.length+'건 읽음' + (withStatus?' · 상태 '+withStatus+'건':'') + (withTrack?' · 운송장 '+withTrack+'건':'') + (parsed.skipped?' · 제외 '+parsed.skipped+'건(주문번호 없음/실패)':'');
-          showPick();
-          go.className = 'btn-primary';
-        }catch(e){ info.textContent=''; msg.className='err'; msg.textContent = e.message || String(e); }
-      };
-      go.onclick = async ()=>{
-        if(!parsed) return;
-        go.disabled = true; const old = go.textContent; go.textContent = '올리는 중…'; msg.className='hidden';
-        try{
-          for(const k of Object.keys(pending)){
-            const { error } = await sb.rpc('set_card_company',{p_key:k,p_company:pending[k]});
-            if(error) throw new Error(error.message);
-            cardMap[k] = pending[k];
-          }
-          const rows = parsed.rows.map(r=>({...r, company: cardMap[r.card_key] || null}));
-          let n = 0;
-          for(let i=0;i<rows.length;i+=200){
-            const { data, error } = await sb.rpc('upsert_online_orders',{p_rows: rows.slice(i,i+200)});
-            if(error) throw new Error(error.message);
-            n += data || 0;
-          }
-          await reload();
-          draw();
-          const m2 = h('div',{class:'ok',text:n+'건 반영했습니다.'}); upCard.appendChild(m2);
-          return;
-        }catch(e){ msg.className='err'; msg.textContent = e.message || String(e); }
-        go.disabled = false; go.textContent = old;
-      };
-    }
-
-    // ---------- 현황 ----------
-    function drawBoard(){
-      boardBox.innerHTML = '';
-      if(!orders.length){ boardBox.appendChild(h('div',{class:'card muted',text:'아직 올린 주문이 없습니다. 위에서 엑셀을 올려주세요.'})); return; }
-      const compKeys = OL_COMPANIES.slice();
-      if(orders.some(o=>!o.company)) compKeys.push('(미지정)');
-      const cname = o => o.company || '(미지정)';
-      const sum = {}; compKeys.forEach(k=>{ sum[k] = {wait:[0,0], ship:[0,0], done:[0,0], late:[0,0]}; });
-      orders.forEach(o=>{
-        const k = cname(o); if(!sum[k]) sum[k] = {wait:[0,0], ship:[0,0], done:[0,0], late:[0,0]};
-        const g = olGroup(o); sum[k][g][0]++; sum[k][g][1] += (o.qty||0);
-        if(olLate(o)){ sum[k].late[0]++; sum[k].late[1] += (o.qty||0); }
-      });
-      const keys = Object.keys(sum).filter(k=>Object.values(sum[k]).some(v=>v[0]>0));
-      const card = h('div',{class:'card'});
-      const lastChk = orders.map(o=>o.checked_at).filter(Boolean).sort().slice(-1)[0];
-      card.appendChild(h('div',{class:'flexbetween'},[
-        h('div',{style:'font-weight:700;font-size:16px',text:'회사별 현황'}),
-        h('span',{class:'muted',text:'애플 기준'+(lastChk?' · 마지막 확인 '+new Date(lastChk).toLocaleString('ko-KR',{month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit'}):'')})
-      ]));
-      const tbl = h('div',{style:'overflow-x:auto;margin-top:10px'});
-      const t1 = h('table',{style:'width:100%;border-collapse:collapse;font-size:13px'});
-      const head = h('tr',{});
-      ['회사','주문대기','배송중','배송완료','지연'].forEach((x,i)=>head.appendChild(h('th',{style:'text-align:'+(i?'right':'left')+';padding:6px 4px;color:var(--muted);font-weight:600;border-bottom:1px solid var(--border)',text:x})));
-      t1.appendChild(head);
-      const tot = {wait:[0,0], ship:[0,0], done:[0,0], late:[0,0]};
-      const cellOf = (v, comp, g, bad)=>{
-        const td = h('td',{style:'text-align:right;padding:8px 4px;border-bottom:1px solid var(--border);cursor:pointer;'+(bad&&v[0]?'color:var(--danger);font-weight:700':'')});
-        td.appendChild(h('div',{text:String(v[0])+'건',style:'font-weight:700'}));
-        td.appendChild(h('div',{class:'muted',text:v[1]+'대'}));
-        td.onclick = ()=>{ olFilter.company = comp==='전체'?'':comp; olFilter.group = g; olShown = 100; drawBoard(); };
-        return td;
-      };
-      keys.forEach(k=>{
-        const tr = h('tr',{});
-        tr.appendChild(h('td',{style:'padding:8px 4px;border-bottom:1px solid var(--border);font-weight:700',text:k}));
-        ['wait','ship','done','late'].forEach(g=>{ tr.appendChild(cellOf(sum[k][g], k, g, g==='late')); tot[g][0]+=sum[k][g][0]; tot[g][1]+=sum[k][g][1]; });
-        t1.appendChild(tr);
-      });
-      const trT = h('tr',{});
-      trT.appendChild(h('td',{style:'padding:8px 4px;font-weight:700',text:'전체'}));
-      ['wait','ship','done','late'].forEach(g=>trT.appendChild(cellOf(tot[g],'전체',g,g==='late')));
-      t1.appendChild(trT);
-      tbl.appendChild(t1); card.appendChild(tbl);
-      card.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'지연 = 배송 예정 기간이 지났는데 배송완료가 아닌 주문(주문대기·배송중에 포함된 건). 숫자를 누르면 아래 목록이 걸러집니다.'}));
-      boardBox.appendChild(card);
-
-      // 필터
-      const fcard = h('div',{class:'card'});
-      const row = h('div',{class:'row'});
-      const selC = h('select',{});
-      [['','전체 회사']].concat(keys.map(k=>[k,k])).forEach(([v,l])=>{ const op = h('option',{value:v,text:l}); if(olFilter.company===v) op.selected = true; selC.appendChild(op); });
-      const selG = h('select',{});
-      [['','전체 상태'],['wait','주문대기'],['ship','배송중'],['done','배송완료'],['late','지연']].forEach(([v,l])=>{ const op = h('option',{value:v,text:l}); if(olFilter.group===v) op.selected = true; selG.appendChild(op); });
-      row.appendChild(selC); row.appendChild(selG);
-      const q = h('input',{placeholder:'주문번호·운송장·모델 검색',value:olFilter.q});
-      fcard.appendChild(row); fcard.appendChild(q);
-      const listBox = h('div',{});
-      fcard.appendChild(listBox);
-      boardBox.appendChild(fcard);
-      selC.onchange = ()=>{ olFilter.company = selC.value; olShown = 100; drawList(); };
-      selG.onchange = ()=>{ olFilter.group = selG.value; olShown = 100; drawList(); };
-      q.oninput = ()=>{ olFilter.q = q.value; olShown = 100; drawList(); };
-
-      function drawList(){
-        listBox.innerHTML = '';
-        const qq = olFilter.q.trim().toLowerCase();
-        const list = orders.filter(o=>{
-          if(olFilter.company && cname(o)!==olFilter.company) return false;
-          if(olFilter.group==='late' ? !olLate(o) : (olFilter.group && olGroup(o)!==olFilter.group)) return false;
-          if(qq && !(o.order_no.toLowerCase().includes(qq) || (o.tracking||'').toLowerCase().includes(qq) || (o.model_raw||'').toLowerCase().includes(qq))) return false;
-          return true;
-        });
-        const qtySum = list.reduce((a,o)=>a+(o.qty||0),0);
-        listBox.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'목록 '+list.length+'건 · '+qtySum+'대'}));
-        list.slice(0, olShown).forEach(o=>{
-          const g = olGroup(o);
-          const stTxt = o.apple_status || '확인 전';
-          const line = h('div',{style:'padding:9px 0;border-bottom:1px solid var(--border)'});
-          const top = h('div',{class:'flexbetween'},[
-            h('span',{class:'mono',style:'font-weight:700',text:o.order_no}),
-            h('span',{},[
-              olLate(o) ? h('span',{class:'pill',style:'background:var(--danger);color:var(--danger-fg)',text:'지연'}) : null,
-              h('span',{class:'pill',style:g==='done'?'background:var(--success);color:var(--success-fg)':'',text:stTxt})
-            ])
-          ]);
-          line.appendChild(top);
-          line.appendChild(h('div',{class:'muted',text:[olPrettyModel(o.model_raw)+(o.qty?' × '+o.qty:''), o.company||'미지정', o.order_date?'주문 '+o.order_date.slice(5):'', o.window_text?'예정 '+o.window_text:''].filter(Boolean).join(' · ')}));
-          if(o.tracking) line.appendChild(h('div',{class:'mono',style:'font-size:12.5px;margin-top:2px',text:(o.carrier?o.carrier+' ':'')+o.tracking}));
-          listBox.appendChild(line);
-        });
-        if(list.length > olShown){
-          const more = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'더 보기 ('+(list.length-olShown)+'건 남음)',onclick:()=>{ olShown += 100; drawList(); }});
-          listBox.appendChild(more);
-        }
-      }
-      drawList();
-
-      // 카드·회사 설정
-      const keysC = Object.keys(cardMap);
-      if(keysC.length){
-        const sc = h('div',{class:'card'});
-        sc.appendChild(h('div',{style:'font-weight:700;font-size:15px;margin-bottom:6px',text:'카드 · 회사 설정'}));
-        sc.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'바꾸면 그 카드로 주문한 건의 회사가 모두 바뀝니다.'}));
-        keysC.sort().forEach(k=>{
-          const s = h('select',{style:'margin-bottom:0;width:auto;min-width:110px'});
-          OL_COMPANIES.forEach(cn=>{ const op = h('option',{value:cn,text:cn}); if(cardMap[k]===cn) op.selected=true; s.appendChild(op); });
-          s.onchange = async ()=>{
-            const { error } = await sb.rpc('set_card_company',{p_key:k,p_company:s.value});
-            if(error){ alert(error.message); return; }
-            await reload(); draw();
-          };
-          sc.appendChild(h('div',{class:'flexbetween',style:'padding:6px 0;border-bottom:1px solid var(--border)'},[h('span',{class:'mono',text:k}), s]));
-        });
-        boardBox.appendChild(sc);
-      }
-    }
-    draw();
   }
 
   function drawSupplierSection(){
