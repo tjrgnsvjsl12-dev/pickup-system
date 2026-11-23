@@ -533,7 +533,7 @@ function renderAdminView(){
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
   let onlineMe = null; // {perms:[...], companies:[...]} 온라인 주문 권한
-  let onlineTab = 'sum'; let onlineCompany = ''; let onlineRows = null;
+  let onlineTab = 'sum'; let onlineCompany = ''; let onlineAlertKind = ''; let onlineRows = null;
   let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
   let editFromAll = false; // 전체 현황에서 수정 버튼으로 들어왔는지 (저장/취소 후 전체 현황으로 복귀)
   const canEditAll = ()=> !!(myProfile && myProfile.can_edit_all);
@@ -836,10 +836,11 @@ function renderAdminView(){
 
   async function drawOnlineSummary(body){
     body.appendChild(h('div',{class:'muted',text:t('loading')}));
-    let sumRows;
+    let sumRows, overdue = [];
     try{
       const { data, error } = await sb.rpc('online_summary', { p_company: null });
       if(error) throw error; sumRows = data || [];
+      const oc = await sb.rpc('online_overdue_counts'); overdue = oc.error ? [] : (oc.data||[]);
     }catch(e){ body.innerHTML=''; body.appendChild(h('div',{class:'err',text:e.message||String(e)})); return; }
     body.innerHTML = '';
     const st = statsFromSummary(sumRows);
@@ -870,6 +871,24 @@ function renderAdminView(){
     });
     tbl.appendChild(tb); kpi.appendChild(tbl); body.appendChild(kpi);
 
+    // 지연 경고: 도착 지연(송장 있는데 예정일 지나도 미스캔) / 출고 지연 의심(예정일 지나도 송장 없음)
+    const ov = (kind)=> overdue.filter(r=>r.kind===kind && (!onlineCompany || r.company===onlineCompany)).reduce((a,r)=>({n:a.n+Number(r.orders),u:a.u+Number(r.units)}),{n:0,u:0});
+    const oa = ov('arr'), os = ov('ship');
+    const alertCard = h('div',{class:'card',style:(oa.n||os.n)?'border-color:var(--danger)':''});
+    alertCard.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:(oa.n||os.n)?'⚠ 지연 경고':'✓ 지연 건 없음'}));
+    const mkAlert = (kind, label, hint, v)=>{
+      if(!v.n) return;
+      const b = h('button',{type:'button',class:'btn-ghost',style:'width:100%;text-align:left;margin-bottom:6px;'+(onlineAlertKind===kind?'border-color:var(--danger);':''),onclick:()=>{ onlineAlertKind = onlineAlertKind===kind?'':kind; drawDashboard(); }},[
+        h('div',{style:'font-weight:800;color:var(--danger)',text:label+' '+v.n+'건 · '+v.u+'대'}),
+        h('div',{class:'muted',text:hint})
+      ]);
+      alertCard.appendChild(b);
+    };
+    mkAlert('arr','도착 지연','송장은 등록됐는데 도착 예정일이 지나도록 스캔이 안 됨 (미도착 또는 스캔 누락)',oa);
+    mkAlert('ship','출고 지연 의심','도착 예정일이 지나도록 송장이 없음 (출고가 안 됐거나 송장 파일 미등록)',os);
+    if(oa.n||os.n) alertCard.appendChild(h('div',{class:'muted',text:'위 항목을 누르면 아래 목록이 해당 건만 보입니다. 다시 누르면 전체로 돌아갑니다.'}));
+    body.appendChild(alertCard);
+
     if(!onlineCompany && companies.length>1){
       const c2 = h('div',{class:'card'});
       c2.appendChild(h('h2',{text:'회사별'}));
@@ -884,7 +903,7 @@ function renderAdminView(){
 
     // 수령 전 주문: 서버에서 검색·페이지 처리 (50건씩)
     const lc = h('div',{class:'card'});
-    const title = h('h2',{text:'아직 배송완료 전 주문'});
+    const title = h('h2',{text:onlineAlertKind==='arr'?'도착 지연 주문':onlineAlertKind==='ship'?'출고 지연 의심 주문':'아직 배송완료 전 주문'});
     lc.appendChild(title);
     const q = h('input',{type:'search',placeholder:'주문번호 / 송장번호 검색'});
     lc.appendChild(q);
@@ -896,15 +915,17 @@ function renderAdminView(){
     async function load(reset){
       if(reset){ offset = 0; list.innerHTML=''; }
       const my = ++seq;
-      const { data, error } = await sb.rpc('online_pending', { p_company: onlineCompany||null, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset });
+      const { data, error } = onlineAlertKind
+        ? await sb.rpc('online_overdue', { p_company: onlineCompany||null, p_kind: onlineAlertKind, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset })
+        : await sb.rpc('online_pending', { p_company: onlineCompany||null, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset });
       if(my!==seq) return;
       if(error){ list.appendChild(h('div',{class:'err',text:error.message})); more.classList.add('hidden'); return; }
       const rows = data||[];
       const total = rows.length ? Number(rows[0].total) : (reset?0:Number(title.dataset.total||0));
-      title.dataset.total = total; title.textContent = '아직 배송완료 전 주문 ('+total+'건)';
+      title.dataset.total = total; title.textContent = (onlineAlertKind==='arr'?'도착 지연 주문':onlineAlertKind==='ship'?'출고 지연 의심 주문':'아직 배송완료 전 주문')+' ('+total+'건)';
       rows.forEach(r=>{
         list.appendChild(h('div',{class:'itemline'},[
-          h('div',{},[h('div',{class:'mono',text:r.order_no}),h('div',{class:'muted',text:[r.company,r.ship_to,r.window_text,r.tracking?('송장 '+r.tracking):'송장 없음'].filter(Boolean).join(' · ')})]),
+          h('div',{},[h('div',{class:'mono',text:r.order_no}),h('div',{class:'muted',text:[r.company,r.ship_to,r.window_text,r.tracking?('송장 '+r.tracking):'송장 없음',(r.days_late!=null?('예정일 '+r.days_late+'일 경과'):'')].filter(Boolean).join(' · ')})]),
           h('span',{class:'statusbadge '+(r.stage==='배송중'?'in_progress':'done'),text:r.stage})
         ]));
       });
