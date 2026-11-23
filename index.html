@@ -1060,7 +1060,7 @@ function renderAdminView(){
 
     const dingCard = h('div',{class:'card'});
     dingCard.appendChild(h('div',{style:'font-weight:700;margin-bottom:4px',text:'딩톡 입력용 복사'}));
-    dingCard.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'오늘 내가 스캔한 송장을 딩톡 빠른 입력(快速填报) 칸에 그대로 붙여넣을 수 있는 형식(운송장 번호 · 운영사 · 주소코드)으로 복사합니다. 주소코드는 비워 둡니다.'}));
+    dingCard.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'오늘 내가 스캔한 운송장번호만 한 줄에 하나씩 복사합니다. 딩톡 빠른 입력(快速填报)의 운송장 번호 칸에 붙여넣으면 나머지는 딩톡이 채웁니다.'}));
     const dingMsg = h('div',{class:'muted',style:'margin-top:6px'});
     const dingBtn = h('button',{class:'btn-ghost',style:'width:100%',text:'오늘 스캔분 복사 (선택한 사무실만)'});
     dingBtn.onclick = async ()=>{
@@ -1069,7 +1069,7 @@ function renderAdminView(){
       if(error){ dingMsg.textContent = error.message; return; }
       const rows = data||[];
       if(!rows.length){ dingMsg.textContent = office+' 사무실로 오늘 스캔한 송장이 없습니다.'; return; }
-      const txt = rows.map(r=>[r.tracking, r.carrier||'', ''].join('\t')).join('\n');
+      const txt = rows.map(r=>r.tracking).join('\n');
       try{ await navigator.clipboard.writeText(txt); dingMsg.textContent = '✓ '+rows.length+'건 복사됨. 딩톡 빠른 입력 표에 붙여넣기(Ctrl+V) 하세요.'; }
       catch(e){ dingMsg.textContent = '복사 권한이 없어 아래 내용을 직접 복사하세요.'; const box = h('div',{class:'copybox'}); box.textContent = txt; dingCard.appendChild(box); }
     };
