@@ -900,7 +900,9 @@ function renderAdminView(){
 
     const ORD = ['주문번호','订单号','订单','order_no','orderno','order'];
     const TRK = ['송장','运单','物流','tracking','waybill','단号','单号'];
-    const CAR = ['택배','快递','carrier'];
+    const CAR = ['택배사','快递公司','carrier'];
+    const LNK = ['링크','link','url','跟踪'];
+    const carrierOf = u=> /cjlogistics/i.test(u)?'CJ대한통운':/hanjin/i.test(u)?'한진':/lotte/i.test(u)?'롯데':/logen/i.test(u)?'로젠':/epost|koreapost/i.test(u)?'우체국':'';
     const findCol = (hdr, keys, skip)=> hdr.findIndex((x,i)=> i!==skip && keys.some(k=> String(x).toLowerCase().replace(/\s/g,'').includes(k.toLowerCase())));
     async function readFile(f){
       const X = await loadSheetJS();
@@ -913,8 +915,8 @@ function renderAdminView(){
           if(oi<0) continue;
           const ti = findCol(hdr, TRK.filter(k=>k!=='单号'||true), oi); // 주문번호 열은 제외
           if(ti<0) continue;
-          const ci = findCol(hdr, CAR, -1);
-          aoa.slice(hi+1).forEach(r=>{ if(r[oi]&&r[ti]) out.push({order_no:String(r[oi]).trim(), tracking:String(r[ti]).trim(), carrier: ci>=0?String(r[ci]).trim():''}); });
+          const ci = findCol(hdr, CAR, -1), li = findCol(hdr, LNK, oi);
+          aoa.slice(hi+1).forEach(r=>{ if(r[oi]&&r[ti]){ const lk = li>=0?String(r[li]).trim():''; out.push({order_no:String(r[oi]).trim(), tracking:String(r[ti]).trim(), carrier: ci>=0?String(r[ci]).trim():carrierOf(lk), link: /^https?:\/\//i.test(lk)?lk:''}); } });
           break;
         }
       }
@@ -957,7 +959,7 @@ function renderAdminView(){
           const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:'신규 '+newRows.length+'건 저장 (배송중으로 변경)'});
           ok.onclick = async ()=>{
             ok.disabled = true;
-            const { data:d2, error:e2 } = await sb.rpc('online_attach_tracking', { p_rows: newRows.map(r=>({order_no:r.order_no,tracking:r.tracking,carrier:(rows.find(x=>x.order_no===r.order_no)||{}).carrier||''})), p_apply: true });
+            const { data:d2, error:e2 } = await sb.rpc('online_attach_tracking', { p_rows: newRows.map(r=>((()=>{ const x = rows.find(y=>y.order_no===r.order_no)||{}; return {order_no:r.order_no,tracking:r.tracking,carrier:x.carrier||'',link:x.link||''}; })())), p_apply: true });
             if(e2){ err.textContent=e2.message; err.className='err'; ok.disabled=false; return; }
             const saved = (d2||[]).filter(r=>r.status==='new').length;
             out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+saved+'건 저장했습니다. 지금부터 해당 송장은 수령(스캔) 화면에서 조회됩니다.'}));
