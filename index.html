@@ -785,6 +785,7 @@ function renderAdminView(){
     const defs = [];
     if(onlineHas('view')) defs.push(['sum','집계']);
     if(onlineHas('receive')) defs.push(['recv','수령']);
+    if(onlineHas('admin')) defs.push(['orders','주문 등록']);
     if(onlineHas('admin')) defs.push(['track','송장 등록']);
     if(onlineHas('view')) defs.push(['export','내보내기']);
     if(!defs.length){ app.appendChild(h('div',{class:'lockmsg',text:'온라인 주문 권한이 없습니다.'})); return; }
@@ -797,6 +798,7 @@ function renderAdminView(){
     if(onlineTab==='sum') drawOnlineSummary(body);
     else if(onlineTab==='recv') drawOnlineReceive(body);
     else if(onlineTab==='track') drawOnlineTracking(body);
+    else if(onlineTab==='orders') drawOnlineOrders(body);
     else drawOnlineExport(body);
   }
 
@@ -936,6 +938,109 @@ function renderAdminView(){
     more.onclick = ()=>load(false);
     let tm = null; q.addEventListener('input',()=>{ clearTimeout(tm); tm = setTimeout(()=>load(true), 300); });
     load(true);
+  }
+
+  function drawOnlineOrders(body){
+    const card = h('div',{class:'card'});
+    card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'주문 등록'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'자동주문 프로그램이 내려준 주문 엑셀(总单 시트)을 그대로 올립니다. 이미 등록된 주문번호는 건너뛰고 새 주문만 저장합니다. 이름·전화·주소·이메일·카드 전체번호는 읽지도, 저장하지도 않습니다.'}));
+    card.appendChild(h('label',{text:'주문 엑셀 파일'}));
+    const file = h('input',{type:'file',accept:'.xlsx,.xls'});
+    card.appendChild(file);
+    const err = h('div',{class:'err hidden'});
+    const prevBtn = h('button',{class:'btn-primary',text:'미리보기'});
+    card.append(err, prevBtn);
+    body.appendChild(card);
+    const out = h('div',{class:'card hidden'}); body.appendChild(out);
+
+    const hasH = (hdr, name)=> hdr.map(x=>String(x).trim()).indexOf(name);
+    const monthDay = (txt, base)=>{
+      const m = String(txt||'').match(/(\d+)\s*월\s*(\d+)\s*-\s*(\d+)\s*월\s*(\d+)/); if(!m || !base) return {};
+      const y0 = Number(base.slice(0,4)), bm = Number(base.slice(5,7));
+      const mk = (mo,d)=>{ const y = mo<bm ? y0+1 : y0; return y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'); };
+      return { window_from: mk(+m[1],+m[2]), window_to: mk(+m[3],+m[4]) };
+    };
+    async function readOrders(f){
+      const X = await loadSheetJS();
+      const wb = X.read(await f.arrayBuffer(), {type:'array'});
+      const main = wb.Sheets['总单'] ? '总单' : wb.SheetNames[0];
+      const aoa = X.utils.sheet_to_json(wb.Sheets[main], {header:1, raw:false, defval:''});
+      const hdr = aoa[0]||[];
+      const io = hasH(hdr,'订单号'), im = hasH(hdr,'型号'), iq = hasH(hdr,'数量'), id = hasH(hdr,'下单日期'), iw = hasH(hdr,'日期');
+      if(io<0 || im<0) throw new Error('"订单号"(주문번호)와 "型号"(모델) 열이 있는 시트를 찾지 못했습니다. 자동주문 프로그램 엑셀의 总单 시트를 올려 주세요.');
+      const cardCols = hdr.map((x,i)=>String(x).trim()==='卡号'?i:-1).filter(i=>i>=0);
+      const ip = hdr.findIndex(x=>['省、市、地区','省、市'].includes(String(x).trim()));
+      // 대조 시트: 결제 실패 등 정상 완료가 아닌 주문은 제외
+      const bad = {};
+      const rs = wb.SheetNames.find(n=>/对账/.test(n));
+      if(rs){ const ra = X.utils.sheet_to_json(wb.Sheets[rs],{header:1,raw:false,defval:''}); const rh = ra[0]||[]; const ro = rh.indexOf('订单号'), rt = rh.indexOf('状态');
+        if(ro>=0 && rt>=0) ra.slice(1).forEach(r=>{ if(r[ro] && r[rt] && r[rt]!=='writeback_done') bad[String(r[ro]).trim()] = r[rt]; }); }
+      const rows = []; let skipped = 0;
+      aoa.slice(1).forEach(r=>{
+        const on = String(r[io]||'').trim(); if(!on) return;
+        if(bad[on]){ skipped++; return; }
+        let l4 = ''; for(const ci of cardCols){ const d = String(r[ci]||'').replace(/\D/g,''); if(d.length>=4){ l4 = d.slice(-4); break; } }
+        const prov = ip>=0 ? String(r[ip]||'') : '';
+        const dm = id>=0 ? String(r[id]||'').match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/) : null;
+        const od = dm ? dm[1]+'-'+dm[2].padStart(2,'0')+'-'+dm[3].padStart(2,'0') : '';
+        const wt = iw>=0 ? String(r[iw]||'').trim() : '';
+        rows.push({ order_no:on, model_raw:String(r[im]||'').trim(), qty: iq>=0 ? (parseInt(r[iq],10)||2) : 2, order_date: /^\d{4}-\d{2}-\d{2}$/.test(od)?od:'', window_text:wt, ...monthDay(wt, od), card_last4:l4, ship_to: prov.includes('서울')?'서울':prov.includes('부산')?'부산':'' });
+      });
+      if(!rows.length) throw new Error('등록할 주문을 찾지 못했습니다.');
+      return { rows, skipped };
+    }
+    const LABEL = {new:['ok','신규 등록'], exists:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'], unknown_card:['err','회사가 정해지지 않은 카드 (저장 안 함)'], bad_row:['err','주문번호 형식 오류 (건너뜀)']};
+    async function preview(){
+      err.className='err hidden'; out.className='card hidden'; out.innerHTML=''; prevBtn.disabled = true;
+      try{
+        if(!file.files[0]) throw new Error('파일을 선택해 주세요.');
+        const { rows, skipped } = await readOrders(file.files[0]);
+        const { data, error } = await sb.rpc('online_import_orders', { p_rows: rows, p_apply: false });
+        if(error) throw error;
+        const res = data||[]; const cnt = {}; res.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
+        out.className='card';
+        out.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:'미리보기 · 파일 '+rows.length+'건'+(skipped?(' (결제 미완료로 제외 '+skipped+'건)'):'')}));
+        Object.keys(LABEL).forEach(k=>{ if(cnt[k]) out.appendChild(h('div',{class:LABEL[k][0],style:'margin:2px 0',text:LABEL[k][1]+' '+cnt[k]+'건'})); });
+        const newRows = res.filter(r=>r.status==='new');
+        const byCo = {}; newRows.forEach(r=>byCo[r.company]=(byCo[r.company]||0)+1);
+        if(newRows.length) out.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:'신규 회사별: '+Object.keys(byCo).map(c=>c+' '+byCo[c]+'건').join(' · ')+' · 수량 '+rows.filter(r=>newRows.some(n=>n.order_no===r.order_no)).reduce((a,r)=>a+r.qty,0)+'대'}));
+        const noShip = rows.filter(r=>!r.ship_to && newRows.some(n=>n.order_no===r.order_no)).length;
+        if(noShip) out.appendChild(h('div',{class:'err',style:'margin-top:6px',text:'⚠ 배송지(서울/부산)를 읽지 못한 신규 주문 '+noShip+'건 — 저장은 되지만 사무실 불일치 확인이 되지 않습니다.'}));
+        // 회사가 정해지지 않은 카드: 바로 지정
+        const unk = Array.from(new Set(res.filter(r=>r.status==='unknown_card').map(r=>r.card_last4||'')));
+        unk.forEach(l4=>{
+          const n = res.filter(r=>r.status==='unknown_card' && (r.card_last4||'')===l4).length;
+          const box = h('div',{style:'border:1px solid var(--danger);border-radius:10px;padding:10px;margin-top:10px'});
+          box.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:l4?('카드 끝 '+l4+' ('+n+'건)은 어느 회사 카드입니까?'):('카드 정보가 없는 주문 '+n+'건')}));
+          if(l4){
+            const sel = h('select',{}); ['','CH','부강','성신','에잇싱크'].forEach(c=>sel.appendChild(h('option',{value:c,text:c||'회사 선택'})));
+            const b = h('button',{class:'btn-ghost',text:'이 카드를 이 회사로 등록',onclick:async()=>{
+              if(!sel.value) return; b.disabled = true;
+              const { error } = await sb.rpc('online_set_card', { p_last4:l4, p_company:sel.value });
+              if(error){ err.textContent = error.message; err.className='err'; b.disabled=false; return; }
+              preview();
+            }});
+            box.append(sel, b);
+          } else box.appendChild(h('div',{class:'muted',text:'파일의 卡号 열을 확인해 주세요.'}));
+          out.appendChild(box);
+        });
+        if(newRows.length){
+          const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:'신규 '+newRows.length+'건 저장'});
+          ok.onclick = async ()=>{
+            ok.disabled = true;
+            const keep = new Set(newRows.map(r=>r.order_no));
+            const { data:d2, error:e2 } = await sb.rpc('online_import_orders', { p_rows: rows.filter(r=>keep.has(r.order_no)), p_apply: true });
+            if(e2){ err.textContent=e2.message; err.className='err'; ok.disabled=false; return; }
+            const saved = (d2||[]).filter(r=>r.status==='new').length;
+            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ 주문 '+saved+'건을 저장했습니다. 집계에서 확인하세요. 이제 송장 등록 탭에서 송장 파일을 올릴 수 있습니다.'}));
+            file.value='';
+          };
+          out.appendChild(ok);
+        } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 저장할 주문이 없습니다.'}));
+      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; }
+      prevBtn.disabled = false;
+    }
+    prevBtn.onclick = preview;
   }
 
   function drawOnlineTracking(body){
