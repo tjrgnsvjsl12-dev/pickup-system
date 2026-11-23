@@ -776,6 +776,7 @@ function renderAdminView(){
     const defs = [];
     if(onlineHas('view')) defs.push(['sum','집계']);
     if(onlineHas('receive')) defs.push(['recv','수령']);
+    if(onlineHas('admin')) defs.push(['track','송장 등록']);
     if(onlineHas('view')) defs.push(['export','내보내기']);
     if(!defs.length){ app.appendChild(h('div',{class:'lockmsg',text:'온라인 주문 권한이 없습니다.'})); return; }
     if(!defs.some(d=>d[0]===onlineTab)) onlineTab = defs[0][0];
@@ -786,6 +787,7 @@ function renderAdminView(){
     app.appendChild(body);
     if(onlineTab==='sum') drawOnlineSummary(body);
     else if(onlineTab==='recv') drawOnlineReceive(body);
+    else if(onlineTab==='track') drawOnlineTracking(body);
     else drawOnlineExport(body);
   }
 
@@ -800,8 +802,8 @@ function renderAdminView(){
     rows.forEach(r=>{
       const c = st[r.company] = st[r.company] || { total:0, done:0, wait:0, nt:0, tu:0, du:0, wu:0, nu:0 };
       c.total++; c.tu += r.qty||0;
-      if(r.stage==='수령 완료'){ c.done++; c.du += r.qty||0; }
-      else if(r.stage==='수령 대기'){ c.wait++; c.wu += r.qty||0; }
+      if(r.stage==='배송완료'){ c.done++; c.du += r.qty||0; }
+      else if(r.stage==='배송중'){ c.wait++; c.wu += r.qty||0; }
       else { c.nt++; c.nu += r.qty||0; }
     });
     return st;
@@ -836,7 +838,7 @@ function renderAdminView(){
     const tbl = h('table',{class:'sumtable'});
     tbl.appendChild(h('thead',{html:'<tr><th>구분</th><th>건</th><th>대</th></tr>'}));
     const tb = h('tbody');
-    [['수령 완료',agg.done,agg.du],['수령 대기 (송장 있음)',agg.wait,agg.wu],['송장 미수집',agg.nt,agg.nu]].forEach(([l,n,u])=>{
+    [['배송완료',agg.done,agg.du],['배송중 (송장 등록됨)',agg.wait,agg.wu],['송장 대기',agg.nt,agg.nu]].forEach(([l,n,u])=>{
       tb.appendChild(h('tr',{},[h('td',{text:l,class:'storecell'}),h('td',{text:String(n),class:'qtycell'+(n?'':' zero')}),h('td',{text:String(u),class:'qtycell'+(u?'':' zero')})]));
     });
     tbl.appendChild(tb);
@@ -847,7 +849,7 @@ function renderAdminView(){
       const c2 = h('div',{class:'card'});
       c2.appendChild(h('h2',{text:'회사별'}));
       const t2 = h('table',{class:'sumtable'});
-      t2.appendChild(h('thead',{html:'<tr><th>회사</th><th>주문</th><th>완료</th><th>대기</th><th>미수집</th></tr>'}));
+      t2.appendChild(h('thead',{html:'<tr><th>회사</th><th>주문</th><th>완료</th><th>배송중</th><th>송장대기</th></tr>'}));
       const b2 = h('tbody');
       companies.forEach(c=>{ const s=st[c];
         b2.appendChild(h('tr',{},[h('td',{text:c,class:'storecell'}),h('td',{text:s.total+'건'}),h('td',{text:s.done+'건'}),h('td',{text:s.wait+'건'}),h('td',{text:s.nt+'건'})])); });
@@ -855,9 +857,9 @@ function renderAdminView(){
     }
     if(rows.some(r=>r.company==='미분류')) body.appendChild(h('div',{class:'err',text:'⚠ 회사가 지정되지 않은 주문이 있습니다. 카드 등록이 필요합니다.'}));
 
-    const pend = sel.filter(r=>r.stage!=='수령 완료');
+    const pend = sel.filter(r=>r.stage!=='배송완료');
     const lc = h('div',{class:'card'});
-    lc.appendChild(h('h2',{text:'아직 수령 전 주문 ('+pend.length+'건)'}));
+    lc.appendChild(h('h2',{text:'아직 배송완료 전 주문 ('+pend.length+'건)'}));
     const q = h('input',{type:'search',placeholder:'주문번호 / 송장번호 검색'});
     lc.appendChild(q);
     const list = h('div',{});
@@ -869,7 +871,7 @@ function renderAdminView(){
       f.slice(0,100).forEach(r=>{
         list.appendChild(h('div',{class:'itemline'},[
           h('div',{},[h('div',{class:'mono',text:r.order_no}),h('div',{class:'muted',text:[r.company,r.ship_to,r.window_text,r.tracking?('송장 '+r.tracking):'송장 없음'].filter(Boolean).join(' · ')})]),
-          h('span',{class:'statusbadge '+(r.stage==='수령 대기'?'in_progress':'done'),text:r.stage})
+          h('span',{class:'statusbadge '+(r.stage==='배송중'?'in_progress':'done'),text:r.stage})
         ]));
       });
       if(f.length>100) list.appendChild(h('div',{class:'muted',style:'padding-top:8px',text:'… 외 '+(f.length-100)+'건 (검색하거나 내보내기를 이용하세요)'}));
@@ -877,6 +879,95 @@ function renderAdminView(){
     };
     q.addEventListener('input',draw); draw();
     body.appendChild(lc);
+  }
+
+  function drawOnlineTracking(body){
+    const card = h('div',{class:'card'});
+    card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'송장 등록'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'배송이 온 만큼만 올려도 됩니다. 이미 등록된 송장은 건너뛰고 새 송장만 저장하며, 저장된 주문은 "배송중"이 됩니다. 파일에는 주문번호와 송장번호 열이 있어야 합니다.'}));
+    card.appendChild(h('label',{text:'엑셀/CSV 파일 선택'}));
+    const file = h('input',{type:'file',accept:'.xlsx,.xls,.csv'});
+    card.appendChild(file);
+    card.appendChild(h('label',{text:'또는 붙여넣기 (한 줄에 "주문번호 송장번호")'}));
+    const ta = h('textarea',{placeholder:'W1773466477  123456789012'});
+    card.appendChild(ta);
+    const err = h('div',{class:'err hidden'});
+    const prevBtn = h('button',{class:'btn-primary',text:'미리보기'});
+    card.append(err, prevBtn);
+    body.appendChild(card);
+    const out = h('div',{class:'card hidden'});
+    body.appendChild(out);
+
+    const ORD = ['주문번호','订单号','订单','order_no','orderno','order'];
+    const TRK = ['송장','运单','物流','tracking','waybill','단号','单号'];
+    const CAR = ['택배','快递','carrier'];
+    const findCol = (hdr, keys, skip)=> hdr.findIndex((x,i)=> i!==skip && keys.some(k=> String(x).toLowerCase().replace(/\s/g,'').includes(k.toLowerCase())));
+    async function readFile(f){
+      const X = await loadSheetJS();
+      const wb = X.read(await f.arrayBuffer(), {type:'array'});
+      const out = [];
+      for(const name of wb.SheetNames){
+        const aoa = X.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:false, defval:''});
+        for(let hi=0; hi<Math.min(aoa.length,10); hi++){
+          const hdr = aoa[hi]; const oi = findCol(hdr, ORD, -1);
+          if(oi<0) continue;
+          const ti = findCol(hdr, TRK.filter(k=>k!=='单号'||true), oi); // 주문번호 열은 제외
+          if(ti<0) continue;
+          const ci = findCol(hdr, CAR, -1);
+          aoa.slice(hi+1).forEach(r=>{ if(r[oi]&&r[ti]) out.push({order_no:String(r[oi]).trim(), tracking:String(r[ti]).trim(), carrier: ci>=0?String(r[ci]).trim():''}); });
+          break;
+        }
+      }
+      if(!out.length) throw new Error('주문번호 열과 송장번호 열을 찾지 못했습니다. 첫 줄 제목에 "주문번호", "송장번호"가 있는지 확인해 주세요.');
+      return out;
+    }
+    function readText(txt){
+      const rows = [];
+      txt.split(/\r?\n/).forEach(line=>{
+        const tk = line.split(/[\s,;\t]+/).filter(Boolean);
+        const o = tk.find(x=>/^W\d{6,}$/i.test(x));
+        const tr = tk.find(x=>x!==o && /^[A-Za-z0-9-]{8,}$/.test(x));
+        if(o && tr) rows.push({order_no:o, tracking:tr, carrier:''});
+      });
+      if(!rows.length) throw new Error('붙여넣은 내용에서 "주문번호 송장번호" 쌍을 찾지 못했습니다.');
+      return rows;
+    }
+    const LABEL = {new:['ok','신규 등록'], same:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'], order_has_other:['err','주문에 다른 송장이 이미 있음 (건너뜀)'], tracking_used:['err','다른 주문에 쓰인 송장 (건너뜀)'], not_found:['err','등록되지 않은 주문번호 (건너뜀)']};
+    prevBtn.onclick = async ()=>{
+      err.className='err hidden'; out.className='card hidden'; out.innerHTML='';
+      prevBtn.disabled = true;
+      try{
+        let rows = file.files[0] ? await readFile(file.files[0]) : readText(ta.value);
+        rows = rows.filter(r=>r.order_no && r.tracking);
+        const { data, error } = await sb.rpc('online_attach_tracking', { p_rows: rows, p_apply: false });
+        if(error) throw error;
+        const res = data||[];
+        const cnt = {}; res.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
+        out.className='card';
+        out.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:'미리보기 · 총 '+res.length+'건'}));
+        Object.keys(LABEL).forEach(k=>{ if(cnt[k]) out.appendChild(h('div',{class:LABEL[k][0],style:'margin:2px 0',text:LABEL[k][1]+' '+cnt[k]+'건'})); });
+        const bad = res.filter(r=>r.status!=='new' && r.status!=='same');
+        if(bad.length){
+          const box = h('div',{class:'copybox',style:'margin-top:8px'});
+          box.textContent = bad.slice(0,100).map(r=>r.order_no+'  '+r.tracking+'  → '+LABEL[r.status][1]+(r.other?(' ('+r.other+')'):'')).join('\n')+(bad.length>100?'\n… 외 '+(bad.length-100)+'건':'');
+          out.appendChild(box);
+        }
+        const newRows = res.filter(r=>r.status==='new');
+        if(newRows.length){
+          const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:'신규 '+newRows.length+'건 저장 (배송중으로 변경)'});
+          ok.onclick = async ()=>{
+            ok.disabled = true;
+            const { data:d2, error:e2 } = await sb.rpc('online_attach_tracking', { p_rows: newRows.map(r=>({order_no:r.order_no,tracking:r.tracking,carrier:(rows.find(x=>x.order_no===r.order_no)||{}).carrier||''})), p_apply: true });
+            if(e2){ err.textContent=e2.message; err.className='err'; ok.disabled=false; return; }
+            const saved = (d2||[]).filter(r=>r.status==='new').length;
+            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+saved+'건 저장했습니다. 지금부터 해당 송장은 수령(스캔) 화면에서 조회됩니다.'}));
+            file.value=''; ta.value='';
+          };
+          out.appendChild(ok);
+        } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 저장할 송장이 없습니다.'}));
+      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; }
+      prevBtn.disabled = false;
+    };
   }
 
   function drawOnlineReceive(body){
@@ -999,7 +1090,7 @@ function renderAdminView(){
         const X = await loadSheetJS();
         const wb = X.utils.book_new();
         const st = onlineStats(data);
-        const sum = Object.keys(st).sort().map(c=>({'회사':c,'주문(건)':st[c].total,'수량(대)':st[c].tu,'수령완료(건)':st[c].done,'수령완료(대)':st[c].du,'수령대기(건)':st[c].wait,'송장미수집(건)':st[c].nt}));
+        const sum = Object.keys(st).sort().map(c=>({'회사':c,'주문(건)':st[c].total,'수량(대)':st[c].tu,'배송완료(건)':st[c].done,'배송완료(대)':st[c].du,'배송중(건)':st[c].wait,'송장대기(건)':st[c].nt}));
         const addSheet = (name, list)=>{ const ws = X.utils.json_to_sheet(list); ws['!cols']=Object.keys(list[0]).map(k=>({wch:Math.max(10,k.length*2+2)})); X.utils.book_append_sheet(wb, ws, name.slice(0,31)); };
         addSheet('요약', sum);
         const cs = Object.keys(st).sort();
@@ -1017,7 +1108,7 @@ function renderAdminView(){
       const sm = Object.keys(st).sort().map(c=>'<tr><td>'+onlineEsc(c)+'</td><td>'+st[c].total+'건 / '+st[c].tu+'대</td><td>'+st[c].done+'건 / '+st[c].du+'대</td><td>'+st[c].wait+'건</td><td>'+st[c].nt+'건</td></tr>').join('');
       const w = window.open('','_blank');
       if(!w){ err.textContent='팝업이 차단되었습니다. 팝업을 허용해 주세요.'; err.className='err'; return; }
-      w.document.write('<!doctype html><meta charset="utf-8"><title>온라인 주문 '+onlineEsc(sel.value||'전체')+'</title><style>body{font-family:sans-serif;font-size:11px;margin:16px}h1{font-size:16px}table{border-collapse:collapse;width:100%;margin-bottom:14px}th,td{border:1px solid #999;padding:3px 5px;text-align:left}th{background:#eee}</style><h1>온라인 주문 수령 내역 · '+onlineEsc(sel.value||'전체')+'</h1><div>출력일 '+new Date().toLocaleDateString('ko-KR')+'</div><br><table><tr><th>회사</th><th>주문</th><th>수령 완료</th><th>수령 대기</th><th>송장 미수집</th></tr>'+sm+'</table><table>'+th+tr+'</table><script>window.onload=function(){window.print()}<\/script>');
+      w.document.write('<!doctype html><meta charset="utf-8"><title>온라인 주문 '+onlineEsc(sel.value||'전체')+'</title><style>body{font-family:sans-serif;font-size:11px;margin:16px}h1{font-size:16px}table{border-collapse:collapse;width:100%;margin-bottom:14px}th,td{border:1px solid #999;padding:3px 5px;text-align:left}th{background:#eee}</style><h1>온라인 주문 수령 내역 · '+onlineEsc(sel.value||'전체')+'</h1><div>출력일 '+new Date().toLocaleDateString('ko-KR')+'</div><br><table><tr><th>회사</th><th>주문</th><th>배송완료</th><th>배송중</th><th>송장 대기</th></tr>'+sm+'</table><table>'+th+tr+'</table><script>window.onload=function(){window.print()}<\/script>');
       w.document.close();
     };
   }
