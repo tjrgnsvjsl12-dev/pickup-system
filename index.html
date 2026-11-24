@@ -945,7 +945,7 @@ function renderAdminView(){
     body.appendChild(h('div',{class:'muted',style:'margin:10px 0 4px;font-weight:700',text:'주문한 달'}));
     const pendOf = rows => rows.filter(r=>r.stage!=='배송완료').reduce((a,r)=>a+Number(r.units),0);
     const msel = h('select',{style:'width:100%;max-width:340px;font-size:15px;font-weight:700',onchange:(e)=>{ onlineMonth=e.target.value; onlineStage=''; onlineAlertKind=''; onlineDay=''; drawDashboard(); }});
-    const addOpt = (val,label,pend)=>{ const o = h('option',{value:val,text:label+(pend>0?' · 아직 안 온 '+nf(pend)+'대':' · ✓ 전량 도착')}); if(onlineMonth===val) o.selected=true; msel.appendChild(o); };
+    const addOpt = (val,label,pend)=>{ const o = h('option',{value:val,text:label}); if(onlineMonth===val) o.selected=true; msel.appendChild(o); };
     addOpt('','전체 기간',pendOf(mrows.filter(byCo)));
     months.forEach(ym=> addOpt(ym, ymLabel(ym), pendOf(mrows.filter(r=>byCo(r)&&r.ym===ym))));
     body.appendChild(msel);
@@ -958,7 +958,7 @@ function renderAdminView(){
       h('div',{class:'bignum',html:nf(agg.tu)+'<span class="u">대</span>'})
     ]));
     const left = agg.nt+agg.wait;
-    flow.appendChild(h('div',{class:'compare'+(left?'':' alldone'),text: !agg.total ? '주문 없음' : left ? ('도착 '+nf(agg.du)+'대 / 주문 '+nf(agg.tu)+'대 ('+pct(agg.du,agg.tu)+'%) · 아직 안 온 '+nf(agg.nu+agg.wu)+'대') : '✓ 전량 수령 완료 — '+nf(agg.tu)+'대 모두 도착'}));
+    flow.appendChild(h('div',{class:'compare'+(left?'':' alldone'),text: !agg.total ? '주문 없음' : left ? ('주문 '+nf(agg.tu)+'대 → 도착 '+nf(agg.du)+'대 ('+pct(agg.du,agg.tu)+'%)') : '✓ 전량 수령 완료 — '+nf(agg.tu)+'대 모두 도착'}));
     const bar = h('div',{class:'stagebar'});
     [['var(--muted)',agg.nu],['var(--accent)',agg.wu],['var(--success)',agg.du]].forEach(([c,u])=>{ if(u&&agg.tu) bar.appendChild(h('div',{style:'width:'+(u/agg.tu*100)+'%;background:'+c})); });
     flow.appendChild(bar);
@@ -3294,7 +3294,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-162105';
+const BUILD = 'b20261124-162457';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
