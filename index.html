@@ -1529,6 +1529,34 @@ function renderAdminView(){
     const submitBtn = h('button',{class:'btn-primary',text:'제출'});
     const clearBtn = h('button',{class:'btn-ghost',text:'제출 전 목록 모두 지우기',style:'flex:none'});
     actions.append(submitBtn, clearBtn); card.appendChild(actions);
+    const outRow = h('div',{class:'row',style:'margin-top:8px'});
+    const copyBtn = h('button',{class:'btn-ghost',text:'운송장번호만 복사'});
+    const xlsBtn = h('button',{class:'btn-ghost',text:'엑셀로 내보내기'});
+    outRow.append(copyBtn, xlsBtn); card.appendChild(outRow);
+    const outMsg = h('div',{class:'muted',style:'margin-top:6px'}); card.appendChild(outMsg);
+    const listed = ()=> rows.filter(r=>r.status!=='voided' && r.status!=='checking');
+    copyBtn.onclick = async ()=>{
+      const list = listed(); outMsg.style.color=''; 
+      if(!list.length){ outMsg.textContent = '표에 복사할 운송장이 없습니다.'; return; }
+      const txt = list.map(r=>r.tracking).join('\n');
+      try{ await navigator.clipboard.writeText(txt); outMsg.textContent = '✓ 운송장번호 '+list.length+'건 복사됨 (한 줄에 하나씩). 딩톡이나 엑셀에 붙여넣기(Ctrl+V) 하세요.'; }
+      catch(e){ outMsg.textContent = '복사 권한이 없어 아래 내용을 직접 복사하세요.'; const box = h('div',{class:'copybox'}); box.textContent = txt; outMsg.appendChild(box); }
+      inp.focus();
+    };
+    xlsBtn.onclick = async ()=>{
+      const list = listed(); outMsg.style.color='';
+      if(!list.length){ outMsg.textContent = '표에 내보낼 내용이 없습니다.'; return; }
+      try{
+        const X = await loadSheetJS();
+        const data = list.map((r,i)=>{ const f = r.info||{}; return {'번호':i+1,'운송장번호':r.tracking,'주문코드':f.order_no||'','모델':modelText(r),'수량(대)':r.qty||'','회사':f.company||'','배송지':f.ship_to||'','수령 사무실':r.office||'','상태':STATUS[r.status][0]+(r.msg?' · '+r.msg:'')}; });
+        const ws = X.utils.json_to_sheet(data); ws['!cols'] = [{wch:6},{wch:18},{wch:14},{wch:34},{wch:9},{wch:8},{wch:8},{wch:12},{wch:30}];
+        const wb = X.utils.book_new(); X.utils.book_append_sheet(wb, ws, '수령 스캔');
+        const d = new Date(Date.now()+9*3600*1000).toISOString();
+        X.writeFile(wb, 'scan_'+d.slice(0,10)+'_'+d.slice(11,16).replace(':','')+'.xlsx');
+        outMsg.textContent = '✓ '+list.length+'건 엑셀로 저장했습니다.';
+      }catch(e){ outMsg.style.color='var(--danger)'; outMsg.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); }
+      inp.focus();
+    };
     const msg = h('div',{style:'margin-top:8px;font-weight:700'}); card.appendChild(msg);
     const sndLbl = h('label',{style:'display:flex;gap:6px;align-items:center;font-weight:400;margin:10px 0 0'});
     const sndChk = h('input',{type:'checkbox',checked:'checked',style:'width:auto;margin:0'}); sndChk.onchange = ()=>{ sound = sndChk.checked; };
@@ -3356,7 +3384,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-163504';
+const BUILD = 'b20261124-173439';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
