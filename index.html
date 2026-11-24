@@ -1551,7 +1551,33 @@ function renderAdminView(){
       try{ await navigator.clipboard.writeText(txt); dingMsg.textContent = '✓ '+list.length+'건 복사됨. 딩톡 빠른 입력 표에 붙여넣기(Ctrl+V) 하세요.'; }
       catch(e){ dingMsg.textContent = '복사 권한이 없어 아래 내용을 직접 복사하세요.'; const box = h('div',{class:'copybox'}); box.textContent = txt; dingCard.appendChild(box); }
     };
-    dingCard.append(dingBtn, dingMsg); body.appendChild(dingCard);
+    const xlsBtn = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'오늘 제출분 엑셀로 내보내기 (선택한 사무실만)'});
+    xlsBtn.onclick = async ()=>{
+      dingMsg.style.color=''; dingMsg.textContent = '';
+      const { data, error } = await sb.rpc('online_my_today_export', { p_office: office });
+      if(error){ dingMsg.textContent = error.message; return; }
+      const list = data||[];
+      if(!list.length){ dingMsg.textContent = office+' 사무실로 오늘 제출한 운송장이 없습니다.'; return; }
+      try{
+        const X = await loadSheetJS();
+        const fmt = v=> new Date(v).toLocaleString('ko-KR',{hour12:false,timeZone:'Asia/Seoul'});
+        const wb = X.utils.book_new();
+        // 시트1: 딩톡 快速填报에 그대로 붙여넣을 운송장번호 한 열
+        const s1 = X.utils.aoa_to_sheet([['운송장번호']].concat(list.map(r=>[String(r.tracking)])));
+        s1['!cols'] = [{wch:20}];
+        X.utils.book_append_sheet(wb, s1, '딩톡용');
+        // 시트2: 대조·기록용 상세
+        const head = ['제출일시','운송장번호','주문번호','택배사','모델','용량','색상','수량(대)','회사','배송지'];
+        const rows = list.map(r=>{ const mp = onlineModelParts(r.model_raw||''); return [fmt(r.received_at), String(r.tracking), r.order_no||'', r.carrier||'', mp.model||'', mp.cap||'', mp.color||'', r.qty, r.company||'', r.ship_to||'']; });
+        const s2 = X.utils.aoa_to_sheet([head].concat(rows));
+        s2['!cols'] = [{wch:20},{wch:18},{wch:14},{wch:12},{wch:18},{wch:8},{wch:12},{wch:8},{wch:10},{wch:10}];
+        X.utils.book_append_sheet(wb, s2, '상세');
+        const d = new Date(Date.now()+9*3600*1000).toISOString().slice(0,10);
+        X.writeFile(wb, '수령_'+d+'_'+office+'.xlsx');
+        dingMsg.style.color='var(--success)'; dingMsg.textContent = '✓ '+list.length+'건 엑셀로 내보냈습니다.';
+      }catch(e){ dingMsg.textContent = '엑셀 만들기 실패: '+(e.message||e); }
+    };
+    dingCard.append(dingBtn, xlsBtn, dingMsg); body.appendChild(dingCard);
     const todayCard = h('div',{class:'card'}); const todayBox = h('div',{}); todayCard.appendChild(todayBox); body.appendChild(todayCard);
 
     // --- 수령 취소 (관리): 다른 사람·지난 날짜 건도 운송장번호로 찾아 취소 ---
