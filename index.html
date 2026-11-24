@@ -1530,12 +1530,12 @@ function renderAdminView(){
     const clearBtn = h('button',{class:'btn-ghost',text:'제출 전 목록 모두 지우기',style:'flex:none'});
     actions.append(submitBtn, clearBtn); card.appendChild(actions);
     const outRow = h('div',{class:'row',style:'margin-top:8px'});
-    const copyBtn = h('button',{class:'btn-ghost',text:'운송장번호만 복사'});
-    const xlsBtn = h('button',{class:'btn-ghost',text:'엑셀로 내보내기'});
-    outRow.append(copyBtn, xlsBtn); card.appendChild(outRow);
+    const scanCopyBtn = h('button',{class:'btn-ghost',text:'운송장번호만 복사'});
+    const scanXlsBtn = h('button',{class:'btn-ghost',text:'엑셀로 내보내기'});
+    outRow.append(scanCopyBtn, scanXlsBtn); card.appendChild(outRow);
     const outMsg = h('div',{class:'muted',style:'margin-top:6px'}); card.appendChild(outMsg);
     const listed = ()=> rows.filter(r=>r.status!=='voided' && r.status!=='checking');
-    copyBtn.onclick = async ()=>{
+    scanCopyBtn.onclick = async ()=>{
       const list = listed(); outMsg.style.color=''; 
       if(!list.length){ outMsg.textContent = '표에 복사할 운송장이 없습니다.'; return; }
       const txt = list.map(r=>r.tracking).join('\n');
@@ -1543,7 +1543,7 @@ function renderAdminView(){
       catch(e){ outMsg.textContent = '복사 권한이 없어 아래 내용을 직접 복사하세요.'; const box = h('div',{class:'copybox'}); box.textContent = txt; outMsg.appendChild(box); }
       inp.focus();
     };
-    xlsBtn.onclick = async ()=>{
+    scanXlsBtn.onclick = async ()=>{
       const list = listed(); outMsg.style.color='';
       if(!list.length){ outMsg.textContent = '표에 내보낼 내용이 없습니다.'; return; }
       try{
@@ -3384,7 +3384,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-173439';
+const BUILD = 'b20261124-173507';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
