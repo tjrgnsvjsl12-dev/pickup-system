@@ -109,6 +109,16 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .ptable td{padding:8px;border-top:1px solid var(--border);font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .ptable tbody tr:nth-child(even){background:var(--surface-2)}
 .ptable td.none{color:var(--muted)}
+
+.flowguide{padding:12px}
+.fgtitle{font-size:12.5px;font-weight:800;color:var(--muted);margin-bottom:8px}
+.fggrid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.fgbox{border:1px solid var(--border);border-radius:10px;padding:9px 10px;background:var(--surface-2);display:flex;flex-direction:column;gap:3px}
+.fgbox.cur{border:2px solid var(--accent);background:var(--chip)}
+.fgt{font-weight:800;font-size:13.5px}.fgd{font-size:11.5px;color:var(--muted);line-height:1.4;flex:1}
+.fgs{font-size:12px;font-weight:800;color:var(--accent)}
+.fgb{display:flex;gap:6px;flex-wrap:wrap;margin-top:4px}
+@media(max-width:560px){.fggrid{grid-template-columns:1fr}}
 .trklink{color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:2px}.trklink:hover{opacity:.75}.ptable td.late{color:var(--danger);font-weight:700}
 .statusbadge.before{background:var(--chip);color:var(--muted)}
 .monthchip{display:inline-flex;flex-direction:column;align-items:center;gap:1px;line-height:1.25;padding:7px 14px}
@@ -1095,7 +1105,43 @@ function renderAdminView(){
     load(true);
   }
 
+  // 업로드한 파일 종류 판별 (엉뚱한 탭에 올리는 실수 방지)
+  const sniffKind = (X, wb)=>{
+    const name = wb.SheetNames.join(' ');
+    const aoa = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''});
+    const head = aoa.slice(0,3).map(r=>r.join(' ')).join(' ');
+    if(/提货单|delivery|pickup/i.test(name) || /录入批次|子表单/.test(head)) return 'delivery';
+    if(/总单/.test(name) || (/订单码/.test(head) && /型号/.test(head) && /银行卡|卡号/.test(head))) return 'order';
+    if(/链接|link|追踪|추적/i.test(head) && /订单码|주문/.test(head)) return 'tracking';
+    return '';
+  };
+  const wrongTab = (msg, tab, label)=> Object.assign(new Error(msg), {goTab:tab, goLabel:label});
+  const WRONG = {
+    delivery: ['이 파일은 "배송 온 건"(딩톡 수령 내역)입니다. 도착한 건은 [딩톡 가져오기]에 올려 주세요.','ding','딩톡 가져오기로 이동'],
+    tracking: ['이 파일은 운송장 파일입니다 (배송중 등록용). 도착 확인이 아니므로 [운송장 등록]에 올려 주세요.','track','운송장 등록으로 이동'],
+    order: ['이 파일은 주문 파일입니다. [주문 등록]에 올려 주세요.','orders','주문 등록으로 이동']
+  };
+  // 탭 맨 위 업무 순서 안내
+  function flowGuide(cur){
+    const wrap = h('div',{class:'card flowguide'});
+    wrap.appendChild(h('div',{class:'fgtitle',text:'처리 순서 — 지금 하려는 일에 맞는 화면을 고르세요'}));
+    const grid = h('div',{class:'fggrid'});
+    const go = k => ()=>{ onlineTab = k; drawDashboard(); };
+    const box = (on, title, desc, state, btns)=>{
+      const b = h('div',{class:'fgbox'+(on?' cur':'')},[ h('div',{class:'fgt',text:title}), h('div',{class:'fgd',text:desc}), h('div',{class:'fgs',text:state}) ]);
+      if(btns && btns.length){ const r = h('div',{class:'fgb'}); btns.forEach(([k,l])=>{ if(onlineHas(k==='ding'||k==='track'||k==='orders'?'admin':'receive')) r.appendChild(h('button',{type:'button',class:'btn-ghost btn-sm'+(cur===k?' selected':''),text:l,onclick:go(k)})); }); b.appendChild(r); }
+      return b;
+    };
+    grid.append(
+      box(cur==='orders','① 주문 등록','주문한 내역(주문 엑셀)을 올립니다','→ 배송 전',[['orders','주문 등록']]),
+      box(cur==='track','② 운송장 등록','택배 운송장번호가 나온 건을 올립니다 (아직 도착한 건 아님)','→ 배송중',[['track','운송장 등록']]),
+      box(cur==='recv'||cur==='ding','③ 도착 확인','박스가 실제로 도착한 것을 입력합니다. 현장에서 스캔하거나 딩톡 수령 내역을 가져옵니다','→ 배송완료',[['recv','수령 (스캔)'],['ding','딩톡 가져오기']])
+    );
+    wrap.appendChild(grid); return wrap;
+  }
+
   function drawOnlineOrders(body){
+    body.appendChild(flowGuide('orders'));
     const card = h('div',{class:'card'});
     card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'주문 등록'}));
     card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'자동주문 프로그램이 내려준 주문 엑셀(总单 시트)을 그대로 올립니다. 이미 등록된 주문번호는 건너뛰고 새 주문만 저장합니다. 이름·전화·주소·이메일·카드 전체번호는 읽지도, 저장하지도 않습니다.'}));
@@ -1118,6 +1164,7 @@ function renderAdminView(){
     async function readOrders(f){
       const X = await loadSheetJS();
       const wb = X.read(await f.arrayBuffer(), {type:'array', cellDates:true, dateNF:'yyyy-mm-dd'});
+      { const k = sniffKind(X, wb); if(k==='delivery'||k==='tracking') throw wrongTab(...WRONG[k]); }
       const main = wb.Sheets['总单'] ? '总单' : wb.SheetNames[0];
       const aoa = X.utils.sheet_to_json(wb.Sheets[main], {header:1, raw:false, defval:'', dateNF:'yyyy-mm-dd'});
       let hdr = aoa[0]||[];
@@ -1200,16 +1247,17 @@ function renderAdminView(){
           };
           out.appendChild(ok);
         } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 저장할 주문이 없습니다.'}));
-      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; }
+      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; if(e.goTab) err.appendChild(h('div',{},[h('button',{class:'btn-primary',style:'margin-top:8px',text:e.goLabel,onclick:()=>{ onlineTab=e.goTab; drawDashboard(); }})])); }
       prevBtn.disabled = false;
     }
     prevBtn.onclick = preview;
   }
 
   function drawOnlineDingImport(body){
+    body.appendChild(flowGuide('ding'));
     const card = h('div',{class:'card'});
     card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'딩톡 수령 내역 가져오기'}));
-    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'딩톡에서 이미 수령 처리된 내역(제货单/pickup 표단 엑셀)을 올려 운송장 등록과 수령 처리를 한 번에 합니다. 가져온 건은 "딩톡 가져옴"으로 표시되어 현장 스캔 수령과 구분됩니다. 우리 시스템에 주문이 없는 건(예: 켄 주문)은 "주문 기록 없음"으로 표시해 함께 넣습니다.'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'실제로 도착한 건을 입력하는 화면입니다 (배송 중인 운송장 파일은 [운송장 등록]에). 딩톡에서 이미 수령 처리된 내역(제货单/pickup 표단 엑셀)을 올려 운송장 등록과 수령 처리를 한 번에 합니다. 가져온 건은 "딩톡 가져옴"으로 표시되어 현장 스캔 수령과 구분됩니다. 우리 시스템에 주문이 없는 건(예: 켄 주문)은 "주문 기록 없음"으로 표시해 함께 넣습니다.'}));
     card.appendChild(h('label',{text:'딩톡 수령 내역 엑셀'}));
     const file = h('input',{type:'file',accept:'.xlsx,.xls'});
     card.appendChild(file);
@@ -1233,6 +1281,9 @@ function renderAdminView(){
     async function readDing(f){
       const X = await loadSheetJS();
       const wb = X.read(await f.arrayBuffer(), {type:'array'});
+      { const k = sniffKind(X, wb);
+        if(k==='tracking'||k==='order') throw wrongTab(...WRONG[k]);
+        if(k!=='delivery') throw wrongTab('딩톡 수령 내역(제货单/pickup) 파일이 아닌 것 같습니다. 도착한 건이 맞는지 확인해 주세요. 운송장만 있는 파일이면 [운송장 등록]에 올려 주세요.','track','운송장 등록으로 이동'); }
       const aoa = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''});
       const hdr = aoa[0].map((_,i)=> String(aoa[0][i]||'')+' '+String((aoa[1]||[])[i]||''));
       const find = (...keys)=> hdr.findIndex(x=>keys.some(k=>x.includes(k)));
@@ -1294,15 +1345,16 @@ function renderAdminView(){
           };
           out.appendChild(ok);
         } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 가져올 건이 없습니다.'}));
-      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; }
+      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; if(e.goTab) err.appendChild(h('div',{},[h('button',{class:'btn-primary',style:'margin-top:8px',text:e.goLabel,onclick:()=>{ onlineTab=e.goTab; drawDashboard(); }})])); }
       prevBtn.disabled = false;
     };
   }
 
   function drawOnlineTracking(body){
+    body.appendChild(flowGuide('track'));
     const card = h('div',{class:'card'});
     card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'운송장 등록'}));
-    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'배송이 온 만큼만 올려도 됩니다. 이미 등록된 운송장은 건너뛰고 새 운송장만 저장하며, 저장된 주문은 "배송중"이 됩니다. 파일에는 주문번호와 운송장번호 열이 있어야 합니다.'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'택배 운송장번호가 나온 건(배송중)을 올리는 화면입니다. 도착을 확인하는 화면이 아닙니다 — 도착한 건은 [수령] 스캔이나 [딩톡 가져오기]로 처리하세요. 나온 만큼만 올려도 되고, 이미 등록된 운송장은 건너뛰며, 저장된 주문은 "배송중"이 됩니다. 파일에는 주문번호와 운송장번호 열이 있어야 합니다.'}));
     card.appendChild(h('label',{text:'엑셀/CSV 파일 선택'}));
     const file = h('input',{type:'file',accept:'.xlsx,.xls,.csv'});
     card.appendChild(file);
@@ -1325,6 +1377,7 @@ function renderAdminView(){
     async function readFile(f){
       const X = await loadSheetJS();
       const wb = X.read(await f.arrayBuffer(), {type:'array'});
+      { const k = sniffKind(X, wb); if(k==='delivery'||k==='order') throw wrongTab(...WRONG[k]); }
       const out = [];
       for(const name of wb.SheetNames){
         const aoa = X.utils.sheet_to_json(wb.Sheets[name], {header:1, raw:false, defval:''});
@@ -1385,12 +1438,13 @@ function renderAdminView(){
           };
           out.appendChild(ok);
         } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 저장할 운송장이 없습니다.'}));
-      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; }
+      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; if(e.goTab) err.appendChild(h('div',{},[h('button',{class:'btn-primary',style:'margin-top:8px',text:e.goLabel,onclick:()=>{ onlineTab=e.goTab; drawDashboard(); }})])); }
       prevBtn.disabled = false;
     };
   }
 
   function drawOnlineReceive(body){
+    body.appendChild(flowGuide('recv'));
     document.body.style.maxWidth = '980px';
     let qty = 2, sound = true;
     let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
@@ -1680,7 +1734,7 @@ function renderAdminView(){
         if(sel.value || cs.length===1) addSheet('주문목록', data.map(toRow));
         else cs.forEach(c=> addSheet(c, data.filter(r=>r.company===c).map(toRow)));
         X.writeFile(wb, 'online_orders_'+(sel.value||'all')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
-      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; }
+      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; if(e.goTab) err.appendChild(h('div',{},[h('button',{class:'btn-primary',style:'margin-top:8px',text:e.goLabel,onclick:()=>{ onlineTab=e.goTab; drawDashboard(); }})])); }
     };
     bp.onclick = ()=>{
       err.className='err hidden';
@@ -3217,7 +3271,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-152122';
+const BUILD = 'b20261124-152311';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
