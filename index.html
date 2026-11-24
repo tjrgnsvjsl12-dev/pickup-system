@@ -1236,7 +1236,7 @@ function renderAdminView(){
       const aoa = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''});
       const hdr = aoa[0].map((_,i)=> String(aoa[0][i]||'')+' '+String((aoa[1]||[])[i]||''));
       const find = (...keys)=> hdr.findIndex(x=>keys.some(k=>x.includes(k)));
-      const it = find('快递单号'), io = find('订单码'), im = find('产品型号'), iq = find('数量数量'), id = find('日期'), iw = find('仓库'), ic = find('运营公司','运营');
+      const it = find('快递单号'), io = find('订单码'), im = find('产品型号'), iq = hdr.findIndex(x=>x.includes('数量') && !x.includes('快递数量')), id = find('日期'), iw = find('仓库'), ic = find('运营公司','运营');
       const coOf = v=>{ v=String(v||'').trim(); if(/^CH\b/i.test(v)||/^CH/i.test(v)) return 'CH'; if(/부강|bugang|bu\s*gang/i.test(v)) return '부강'; if(/성신|sungshin|seongsin|sungsin/i.test(v)) return '성신'; if(/에잇|eight/i.test(v)) return '에잇싱크'; return ''; };
       if(it<0 || io<0) throw new Error('"운송장 번호(快递单号)"와 "주문 코드(订单码)" 열을 찾지 못했습니다. 딩톡에서 내려받은 제货单/pickup 엑셀이 맞는지 확인해 주세요.');
       const rows = []; let date = '', wh = '';
@@ -3217,7 +3217,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-145237';
+const BUILD = 'b20261124-152122';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
