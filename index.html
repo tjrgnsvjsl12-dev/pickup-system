@@ -83,6 +83,33 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .sumtable .storecell{font-weight:700;color:var(--fg)}
 .sumtable .qtycell{font-weight:700}
 .sumtable .qtycell.zero{color:var(--muted);font-weight:400;opacity:.45}
+.stagebar{display:flex;height:12px;border-radius:999px;overflow:hidden;background:var(--chip);margin:2px 0 12px}
+.tiles{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.tile{border:1px solid var(--border);border-top:5px solid var(--border);border-radius:10px;padding:10px 10px 9px;background:var(--surface-2)}
+.tile.clickable{cursor:pointer}.tile.sel{outline:2px solid var(--accent);background:var(--chip)}
+.tile .tt{font-size:12.5px;font-weight:800;color:var(--fg)}
+.tile .tn{font-size:26px;font-weight:800;line-height:1.15;margin-top:4px;font-variant-numeric:tabular-nums}
+.tile .tn .u{font-size:13px;font-weight:700;margin-left:2px;color:var(--muted)}
+.tile .ts{font-size:12.5px;font-weight:700;color:var(--fg);margin-top:2px;font-variant-numeric:tabular-nums}
+.tile .td{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
+.alertbtn{width:100%;text-align:left;margin-bottom:8px;border-color:var(--danger)}
+.alertbtn.sel{background:var(--chip)}
+.alertbtn .at{font-weight:800;color:var(--danger);font-size:13.5px}
+.alertbtn .an{font-size:20px;font-weight:800;color:var(--danger);font-variant-numeric:tabular-nums;margin:2px 0}
+.cotable{width:100%;border-collapse:collapse;min-width:480px}
+.cotable th{font-size:11.5px;color:var(--muted);font-weight:700;padding:8px 6px;text-align:right;border-bottom:2px solid var(--border);white-space:nowrap}
+.cotable td{padding:8px 6px;text-align:right;border-bottom:1px solid var(--border);font-variant-numeric:tabular-nums}
+.cotable th:first-child,.cotable td:first-child{text-align:left}
+.cotable .co{font-weight:800}.cotable .n{font-size:15px;font-weight:800}.cotable .n.z{color:var(--muted);font-weight:400;opacity:.5}
+.cotable .s{font-size:11px;color:var(--muted)}.cotable td.g .n{color:var(--success)}
+.cotable tfoot td{background:var(--chip);border-top:2px solid var(--border);border-bottom:none}
+.ptwrap{max-height:62vh;overflow:auto;border:1px solid var(--border);border-radius:10px}
+.ptable{width:100%;border-collapse:collapse;min-width:640px}
+.ptable thead th{position:sticky;top:0;background:var(--chip);z-index:1;font-size:11.5px;color:var(--muted);font-weight:700;padding:8px 8px;text-align:left;white-space:nowrap}
+.ptable td{padding:8px;border-top:1px solid var(--border);font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
+.ptable tbody tr:nth-child(even){background:var(--surface-2)}
+.ptable td.none{color:var(--muted)}.ptable td.late{color:var(--danger);font-weight:700}
+.statusbadge.before{background:var(--chip);color:var(--muted)}
 .colorsw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;border:1px solid var(--border)}
 .sumwrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
 </style>
@@ -533,7 +560,7 @@ function renderAdminView(){
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
   let onlineMe = null; // {perms:[...], companies:[...]} 온라인 주문 권한
-  let onlineTab = 'sum'; let onlineCompany = ''; let onlineAlertKind = ''; let onlineRows = null;
+  let onlineTab = 'sum'; let onlineCompany = ''; let onlineAlertKind = ''; let onlineStage = ''; let onlineRows = null;
   let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
   let editFromAll = false; // 전체 현황에서 수정 버튼으로 들어왔는지 (저장/취소 후 전체 현황으로 복귀)
   const canEditAll = ()=> !!(myProfile && myProfile.can_edit_all);
@@ -773,6 +800,7 @@ function renderAdminView(){
   const onlineEsc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const onlineTime = v => { if(!v) return ''; const p = {}; new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(v)).forEach(x=>p[x.type]=x.value); return p.month+'/'+p.day+' '+p.hour.replace('24','00')+':'+p.minute; };
   const nf = n => Number(n||0).toLocaleString('ko-KR');
+  const stageLabel = v => v==='송장 대기' ? '배송 전' : v;
 
   function onlineModelParts(raw){
     raw = String(raw||'');
@@ -788,10 +816,11 @@ function renderAdminView(){
     if(onlineHas('view')) defs.push(['sum','집계']);
     if(onlineHas('receive')) defs.push(['recv','수령']);
     if(onlineHas('admin')) defs.push(['orders','주문 등록']);
-    if(onlineHas('admin')) defs.push(['track','송장 등록']);
+    if(onlineHas('admin')) defs.push(['track','운송장 등록']);
     if(onlineHas('admin')) defs.push(['ding','딩톡 이관']);
     if(onlineHas('view')) defs.push(['export','내보내기']);
     if(!defs.length){ app.appendChild(h('div',{class:'lockmsg',text:'온라인 주문 권한이 없습니다.'})); return; }
+    document.body.style.maxWidth = '980px';
     if(!defs.some(d=>d[0]===onlineTab)) onlineTab = defs[0][0];
     const tabs = h('div',{class:'tabs'});
     defs.forEach(([k,label])=> tabs.appendChild(h('div',{class:'tab'+(onlineTab===k?' active':''),text:label,onclick:()=>{ onlineTab=k; drawDashboard(); }})));
@@ -853,91 +882,120 @@ function renderAdminView(){
     const companies = Object.keys(st).sort();
     if(onlineCompany && !st[onlineCompany]) onlineCompany = '';
     body.appendChild(h('div',{class:'flexbetween',style:'margin-bottom:10px'},[
-      h('div',{style:'font-weight:700;font-size:16px',text:'온라인 주문 현황'}),
+      h('div',{style:'font-weight:800;font-size:18px',text:'온라인 주문 현황'}),
       h('button',{class:'btn-ghost btn-sm',text:t('refresh'),onclick:()=>{ drawDashboard(); }})
     ]));
     const chips = h('div',{class:'chiprow'});
     [['','전체'],...companies.map(c=>[c,c])].forEach(([val,label])=>{
-      chips.appendChild(h('button',{type:'button',class:'chip-btn'+(onlineCompany===val?' selected':''),text:label,onclick:()=>{ onlineCompany=val; drawDashboard(); }}));
+      chips.appendChild(h('button',{type:'button',class:'chip-btn'+(onlineCompany===val?' selected':''),text:label,onclick:()=>{ onlineCompany=val; onlineStage=''; onlineAlertKind=''; drawDashboard(); }}));
     });
     body.appendChild(chips);
 
-    const pick = onlineCompany ? [st[onlineCompany]] : Object.values(st);
-    const agg = pick.reduce((a,c)=>({total:a.total+c.total,done:a.done+c.done,wait:a.wait+c.wait,nt:a.nt+c.nt,tu:a.tu+c.tu,du:a.du+c.du,wu:a.wu+c.wu,nu:a.nu+c.nu}),{total:0,done:0,wait:0,nt:0,tu:0,du:0,wu:0,nu:0});
-    const kpi = h('div',{class:'card'});
-    kpi.appendChild(h('div',{class:'sumhead'},[
-      h('div',{class:'label',text:(onlineCompany||'전체')+' · 주문 '+agg.total+'건'}),
-      h('div',{class:'bignum',html:agg.tu+'<span class="u">대</span>'})
-    ]));
-    const tbl = h('table',{class:'sumtable'});
-    tbl.appendChild(h('thead',{html:'<tr><th>구분</th><th>건</th><th>대</th></tr>'}));
-    const tb = h('tbody');
-    [['배송완료 (현장 스캔 확인)',agg.done,agg.du],['배송중 (송장 등록, 도착 미확인)',agg.wait,agg.wu],['송장 대기',agg.nt,agg.nu]].forEach(([l,n,u])=>{
-      tb.appendChild(h('tr',{},[h('td',{text:l,class:'storecell'}),h('td',{text:String(n),class:'qtycell'+(n?'':' zero')}),h('td',{text:String(u),class:'qtycell'+(u?'':' zero')})]));
-    });
-    tbl.appendChild(tb); kpi.appendChild(tbl); body.appendChild(kpi);
+    const zero = {total:0,done:0,wait:0,nt:0,tu:0,du:0,wu:0,nu:0};
+    const sumUp = list => list.reduce((a,c)=>({total:a.total+c.total,done:a.done+c.done,wait:a.wait+c.wait,nt:a.nt+c.nt,tu:a.tu+c.tu,du:a.du+c.du,wu:a.wu+c.wu,nu:a.nu+c.nu}),zero);
+    const agg = sumUp(onlineCompany ? [st[onlineCompany]] : Object.values(st));
+    const pct = (u,tu)=> tu ? Math.round(u/tu*100) : 0;
 
-    // 지연 경고: 도착 지연(송장 있는데 예정일 지나도 미스캔) / 출고 지연 의심(예정일 지나도 송장 없음)
+    // ① 진행 흐름: 배송 전 → 배송중 → 배송완료
+    const flow = h('div',{class:'card'});
+    flow.appendChild(h('div',{class:'sumhead'},[
+      h('div',{class:'label',text:(onlineCompany||'전체')+' · 주문 '+nf(agg.total)+'건'}),
+      h('div',{class:'bignum',html:nf(agg.tu)+'<span class="u">대</span>'})
+    ]));
+    const bar = h('div',{class:'stagebar'});
+    [['var(--muted)',agg.nu],['var(--accent)',agg.wu],['var(--success)',agg.du]].forEach(([c,u])=>{ if(u) bar.appendChild(h('div',{style:'width:'+(u/agg.tu*100)+'%;background:'+c})); });
+    flow.appendChild(bar);
+    const tiles = h('div',{class:'tiles'});
+    const mkTile = (key, color, title, sub, n, u, clickable)=>{
+      const sel = clickable && onlineStage===key;
+      const tile = h('div',{class:'tile'+(clickable?' clickable':'')+(sel?' sel':''),style:'border-top-color:'+color,onclick: clickable ? ()=>{ onlineStage = (onlineStage===key?'':key); onlineAlertKind=''; drawDashboard(); } : null},[
+        h('div',{class:'tt',text:title}),
+        h('div',{class:'tn',style:'color:'+color,html:nf(u)+'<span class="u">대</span>'}),
+        h('div',{class:'ts',text:nf(n)+'건 · '+pct(u,agg.tu)+'%'}),
+        h('div',{class:'td',text:sub})
+      ]);
+      tiles.appendChild(tile);
+    };
+    mkTile('송장 대기','var(--muted)','① 배송 전','운송장 아직 없음',agg.nt,agg.nu,true);
+    mkTile('배송중','var(--accent)','② 배송중','운송장 등록됨 · 도착 확인 전',agg.wait,agg.wu,true);
+    mkTile('','var(--success)','③ 배송완료','현장 스캔으로 도착 확인',agg.done,agg.du,false);
+    flow.appendChild(tiles);
+    flow.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'① ② 칸을 누르면 아래 목록이 그 단계 주문만 보입니다. 다시 누르면 전체로 돌아갑니다.'}));
+    body.appendChild(flow);
+
+    // ② 지연 경고
     const ov = (kind)=> overdue.filter(r=>r.kind===kind && (!onlineCompany || r.company===onlineCompany)).reduce((a,r)=>({n:a.n+Number(r.orders),u:a.u+Number(r.units)}),{n:0,u:0});
     const oa = ov('arr'), os = ov('ship');
     const alertCard = h('div',{class:'card',style:(oa.n||os.n)?'border-color:var(--danger)':''});
-    alertCard.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:(oa.n||os.n)?'⚠ 지연 경고':'✓ 지연 건 없음'}));
+    alertCard.appendChild(h('div',{style:'font-weight:800;margin-bottom:'+((oa.n||os.n)?'8':'0')+'px;color:'+((oa.n||os.n)?'var(--danger)':'var(--success)'),text:(oa.n||os.n)?'⚠ 도착 예정일이 지난 주문':'✓ 도착 예정일이 지난 주문 없음'}));
     const mkAlert = (kind, label, hint, v)=>{
       if(!v.n) return;
-      const b = h('button',{type:'button',class:'btn-ghost',style:'width:100%;text-align:left;margin-bottom:6px;'+(onlineAlertKind===kind?'border-color:var(--danger);':''),onclick:()=>{ onlineAlertKind = onlineAlertKind===kind?'':kind; drawDashboard(); }},[
-        h('div',{style:'font-weight:800;color:var(--danger)',text:label+' '+v.n+'건 · '+v.u+'대'}),
-        h('div',{class:'muted',text:hint})
-      ]);
-      alertCard.appendChild(b);
+      alertCard.appendChild(h('button',{type:'button',class:'btn-ghost alertbtn'+(onlineAlertKind===kind?' sel':''),onclick:()=>{ onlineAlertKind = onlineAlertKind===kind?'':kind; onlineStage=''; drawDashboard(); }},[
+        h('div',{class:'at',text:label}), h('div',{class:'an',text:nf(v.n)+'건 · '+nf(v.u)+'대'}), h('div',{class:'muted',text:hint})
+      ]));
     };
-    mkAlert('arr','도착 지연','송장은 등록됐는데 도착 예정일이 지나도록 스캔이 안 됨 (미도착 또는 스캔 누락)',oa);
-    mkAlert('ship','출고 지연 의심','도착 예정일이 지나도록 송장이 없음 (출고가 안 됐거나 송장 파일 미등록)',os);
-    if(oa.n||os.n) alertCard.appendChild(h('div',{class:'muted',text:'위 항목을 누르면 아래 목록이 해당 건만 보입니다. 다시 누르면 전체로 돌아갑니다.'}));
+    mkAlert('ship','배송 전인데 예정일 경과 (출고 지연 의심)','도착 예정일이 지났는데 운송장이 없음 — 출고가 안 됐거나 운송장 파일이 아직 등록되지 않음',os);
+    mkAlert('arr','배송중인데 예정일 경과 (도착 지연)','운송장은 있는데 예정일이 지나도록 스캔이 안 됨 — 아직 미도착이거나 스캔 누락',oa);
     body.appendChild(alertCard);
 
+    // ③ 회사별
     if(!onlineCompany && companies.length>1){
       const c2 = h('div',{class:'card'});
-      c2.appendChild(h('h2',{text:'회사별'}));
-      const t2 = h('table',{class:'sumtable'});
-      t2.appendChild(h('thead',{html:'<tr><th>회사</th><th>주문</th><th>완료</th><th>배송중</th><th>송장대기</th></tr>'}));
+      c2.appendChild(h('div',{style:'font-weight:800;margin-bottom:2px',text:'회사별'}));
+      c2.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'큰 숫자는 수량(대), 아래 작은 글씨는 주문 건수입니다.'}));
+      const wrap2 = h('div',{style:'overflow-x:auto'});
+      const t2 = h('table',{class:'cotable'});
+      t2.appendChild(h('thead',{html:'<tr><th>회사</th><th>전체</th><th>① 배송 전</th><th>② 배송중</th><th>③ 배송완료</th><th>완료율</th></tr>'}));
       const b2 = h('tbody');
+      const cell = (u,n,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)}), h('div',{class:'s',text:nf(n)+'건'})]);
       companies.forEach(c=>{ const s=st[c];
-        b2.appendChild(h('tr',{},[h('td',{text:c,class:'storecell'}),h('td',{text:s.total+'건'}),h('td',{text:s.done+'건'}),h('td',{text:s.wait+'건'}),h('td',{text:s.nt+'건'})])); });
-      t2.appendChild(b2); c2.appendChild(t2); body.appendChild(c2);
+        b2.appendChild(h('tr',{},[h('td',{class:'co',text:c}), cell(s.tu,s.total), cell(s.nu,s.nt), cell(s.wu,s.wait), cell(s.du,s.done,'g'), h('td',{},[h('div',{class:'n',text:pct(s.du,s.tu)+'%'})])]));
+      });
+      const f2 = h('tfoot'); f2.appendChild(h('tr',{},[h('td',{class:'co',text:'합계'}), cell(agg.tu,agg.total), cell(agg.nu,agg.nt), cell(agg.wu,agg.wait), cell(agg.du,agg.done,'g'), h('td',{},[h('div',{class:'n',text:pct(agg.du,agg.tu)+'%'})])]));
+      t2.append(b2,f2); wrap2.appendChild(t2); c2.appendChild(wrap2); body.appendChild(c2);
     }
     if(st['미분류']) body.appendChild(h('div',{class:'err',text:'⚠ 회사가 지정되지 않은 주문이 있습니다. 카드 등록이 필요합니다.'}));
 
-    // 수령 전 주문: 서버에서 검색·페이지 처리 (50건씩)
+    // ④ 주문 목록 (서버에서 검색·페이지 처리, 50건씩)
     const lc = h('div',{class:'card'});
-    const title = h('h2',{text:onlineAlertKind==='arr'?'도착 지연 주문':onlineAlertKind==='ship'?'출고 지연 의심 주문':'아직 배송완료 전 주문'});
+    const modeTitle = onlineAlertKind==='arr'?'배송중인데 예정일이 지난 주문':onlineAlertKind==='ship'?'배송 전인데 예정일이 지난 주문':onlineStage==='송장 대기'?'① 배송 전 주문':onlineStage==='배송중'?'② 배송중 주문':'배송완료 전 주문 (① 배송 전 + ② 배송중)';
+    const title = h('div',{style:'font-weight:800;margin-bottom:8px',text:modeTitle});
     lc.appendChild(title);
-    const q = h('input',{type:'search',placeholder:'주문번호 / 송장번호 검색'});
+    const q = h('input',{type:'search',placeholder:'주문번호 / 운송장번호 검색'});
     lc.appendChild(q);
-    const list = h('div',{});
-    const more = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'더 보기'});
-    lc.appendChild(list); lc.appendChild(more);
+    const cnt = h('div',{class:'muted',style:'margin:8px 0 6px'}); lc.appendChild(cnt);
+    const wrap = h('div',{class:'ptwrap'});
+    const pt = h('table',{class:'ptable'});
+    const alertMode = !!onlineAlertKind;
+    pt.appendChild(h('thead',{html:'<tr><th>주문번호</th><th>회사</th><th>배송지</th><th>도착 예정</th><th>운송장번호</th><th>'+(alertMode?'지연':'상태')+'</th></tr>'}));
+    const list = h('tbody'); pt.appendChild(list); wrap.appendChild(pt); lc.appendChild(wrap);
+    const more = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'더 보기 (50건씩)'});
+    lc.appendChild(more);
     body.appendChild(lc);
-    let offset = 0, seq = 0;
+    let offset = 0, seq = 0, total = 0;
     async function load(reset){
       if(reset){ offset = 0; list.innerHTML=''; }
       const my = ++seq;
-      const { data, error } = onlineAlertKind
+      const { data, error } = alertMode
         ? await sb.rpc('online_overdue', { p_company: onlineCompany||null, p_kind: onlineAlertKind, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset })
-        : await sb.rpc('online_pending', { p_company: onlineCompany||null, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset });
+        : await sb.rpc('online_pending', { p_company: onlineCompany||null, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset, p_stage: onlineStage||null });
       if(my!==seq) return;
-      if(error){ list.appendChild(h('div',{class:'err',text:error.message})); more.classList.add('hidden'); return; }
+      if(error){ list.innerHTML=''; cnt.textContent = error.message; cnt.className='err'; more.classList.add('hidden'); return; }
       const rows = data||[];
-      const total = rows.length ? Number(rows[0].total) : (reset?0:Number(title.dataset.total||0));
-      title.dataset.total = total; title.textContent = (onlineAlertKind==='arr'?'도착 지연 주문':onlineAlertKind==='ship'?'출고 지연 의심 주문':'아직 배송완료 전 주문')+' ('+total+'건)';
+      if(rows.length) total = Number(rows[0].total); else if(reset) total = 0;
       rows.forEach(r=>{
-        list.appendChild(h('div',{class:'itemline'},[
-          h('div',{},[h('div',{class:'mono',text:r.order_no}),h('div',{class:'muted',text:[r.company,r.ship_to,r.window_text,r.tracking?('송장 '+r.tracking):'송장 없음',(r.days_late!=null?('예정일 '+r.days_late+'일 경과'):'')].filter(Boolean).join(' · ')})]),
-          h('span',{class:'statusbadge '+(r.stage==='배송중'?'in_progress':'done'),text:r.stage})
+        const late = r.days_late!=null ? (r.days_late+'일 경과') : '';
+        const last = alertMode ? h('td',{class:'late',text:late}) : h('td',{},[h('span',{class:'statusbadge '+(r.stage==='배송중'?'in_progress':'before'),text:stageLabel(r.stage)})]);
+        list.appendChild(h('tr',{},[
+          h('td',{class:'mono',text:r.order_no}), h('td',{text:r.company||''}), h('td',{text:r.ship_to||''}), h('td',{text:r.window_text||''}),
+          h('td',{class:'mono'+(r.tracking?'':' none'),text:r.tracking||'운송장 없음'}), last
         ]));
       });
       offset += rows.length;
+      cnt.className='muted'; cnt.textContent = total ? ('총 '+nf(total)+'건 중 '+nf(offset)+'건 표시') : '';
       more.classList.toggle('hidden', offset>=total);
-      if(reset && !rows.length) list.appendChild(h('div',{class:'muted',text:t('none')}));
+      if(reset && !rows.length){ list.appendChild(h('tr',{},[h('td',{colspan:'6',class:'muted',style:'text-align:center;padding:18px',text:t('none')})])); }
+      wrap.scrollTop = reset ? 0 : wrap.scrollTop;
     }
     more.onclick = ()=>load(false);
     let tm = null; q.addEventListener('input',()=>{ clearTimeout(tm); tm = setTimeout(()=>load(true), 300); });
@@ -1001,7 +1059,7 @@ function renderAdminView(){
       if(!rows.length) throw new Error('등록할 주문을 찾지 못했습니다.');
       return { rows, skipped };
     }
-    const LABEL = {new:['ok','신규 등록'], complete:['ok','딩톡 이관으로 먼저 들어온 건 → 주문 정보 보완 (송장·수령 기록은 그대로)'], exists:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'], unknown_card:['err','회사가 정해지지 않은 카드 (저장 안 함)'], bad_row:['err','주문번호 형식 오류 (건너뜀)']};
+    const LABEL = {new:['ok','신규 등록'], complete:['ok','딩톡 이관으로 먼저 들어온 건 → 주문 정보 보완 (운송장·수령 기록은 그대로)'], exists:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'], unknown_card:['err','회사가 정해지지 않은 카드 (저장 안 함)'], bad_row:['err','주문번호 형식 오류 (건너뜀)']};
     async function preview(){
       err.className='err hidden'; out.className='card hidden'; out.innerHTML=''; prevBtn.disabled = true;
       try{
@@ -1044,7 +1102,7 @@ function renderAdminView(){
             const { data:d2, error:e2 } = await sb.rpc('online_import_orders', { p_rows: rows.filter(r=>keep.has(r.order_no)), p_apply: true });
             if(e2){ err.textContent=e2.message; err.className='err'; ok.disabled=false; return; }
             const saved = (d2||[]).filter(r=>r.status==='new').length, fixed = (d2||[]).filter(r=>r.status==='complete').length;
-            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ 신규 주문 '+saved+'건을 '+(fixed?('저장했고 딩톡 이관 건 '+fixed+'건의 주문 정보를 보완했습니다.'):'저장했습니다.')+' 집계에서 확인하세요. 이제 송장 등록 탭에서 송장 파일을 올릴 수 있습니다.'}));
+            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ 신규 주문 '+saved+'건을 '+(fixed?('저장했고 딩톡 이관 건 '+fixed+'건의 주문 정보를 보완했습니다.'):'저장했습니다.')+' 집계에서 확인하세요. 이제 운송장 등록 탭에서 운송장 파일을 올릴 수 있습니다.'}));
             file.value='';
           };
           out.appendChild(ok);
@@ -1058,7 +1116,7 @@ function renderAdminView(){
   function drawOnlineDingImport(body){
     const card = h('div',{class:'card'});
     card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'딩톡 수령 이관'}));
-    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'딩톡에서 이미 수령 처리된 내역(제货单/pickup 표단 엑셀)을 올려 송장 등록과 수령 처리를 한 번에 합니다. 이관한 건은 "딩톡 이관"으로 표시되어 현장 스캔 수령과 구분됩니다. 우리 시스템에 주문이 없는 건(예: 켄 주문)은 "주문 기록 없음"으로 표시해 함께 넣습니다.'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'딩톡에서 이미 수령 처리된 내역(제货单/pickup 표단 엑셀)을 올려 운송장 등록과 수령 처리를 한 번에 합니다. 이관한 건은 "딩톡 이관"으로 표시되어 현장 스캔 수령과 구분됩니다. 우리 시스템에 주문이 없는 건(예: 켄 주문)은 "주문 기록 없음"으로 표시해 함께 넣습니다.'}));
     card.appendChild(h('label',{text:'딩톡 수령 내역 엑셀'}));
     const file = h('input',{type:'file',accept:'.xlsx,.xls'});
     card.appendChild(file);
@@ -1102,9 +1160,9 @@ function renderAdminView(){
       return rows;
     }
     const LABEL = {
-      new:['ok','주문 있음 → 송장 등록 + 수령 처리'], new_no_order:['ok','주문 기록 없음 → "딩톡 이관(주문 기록 없음)"으로 등록 + 수령 처리'],
+      new:['ok','주문 있음 → 운송장 등록 + 수령 처리'], new_no_order:['ok','주문 기록 없음 → "딩톡 이관(주문 기록 없음)"으로 등록 + 수령 처리'],
       already_received:['muted','이미 수령 처리됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'],
-      order_has_other_tracking:['err','주문에 다른 송장이 이미 있음 (건너뜀)'], tracking_used:['err','다른 주문에 쓰인 송장 (건너뜀)'],
+      order_has_other_tracking:['err','주문에 다른 운송장이 이미 있음 (건너뜀)'], tracking_used:['err','다른 주문에 쓰인 운송장 (건너뜀)'],
       qty_over:['err','주문 수량보다 많음 (건너뜀)'], model_mismatch:['err','주문 모델과 딩톡 모델이 다름 (건너뜀)'], voided_order:['err','취소된 주문 (건너뜀)']
     };
     prevBtn.onclick = async ()=>{
@@ -1150,12 +1208,12 @@ function renderAdminView(){
 
   function drawOnlineTracking(body){
     const card = h('div',{class:'card'});
-    card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'송장 등록'}));
-    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'배송이 온 만큼만 올려도 됩니다. 이미 등록된 송장은 건너뛰고 새 송장만 저장하며, 저장된 주문은 "배송중"이 됩니다. 파일에는 주문번호와 송장번호 열이 있어야 합니다.'}));
+    card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'운송장 등록'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'배송이 온 만큼만 올려도 됩니다. 이미 등록된 운송장은 건너뛰고 새 운송장만 저장하며, 저장된 주문은 "배송중"이 됩니다. 파일에는 주문번호와 운송장번호 열이 있어야 합니다.'}));
     card.appendChild(h('label',{text:'엑셀/CSV 파일 선택'}));
     const file = h('input',{type:'file',accept:'.xlsx,.xls,.csv'});
     card.appendChild(file);
-    card.appendChild(h('label',{text:'또는 붙여넣기 (한 줄에 "주문번호 송장번호")'}));
+    card.appendChild(h('label',{text:'또는 붙여넣기 (한 줄에 "주문번호 운송장번호")'}));
     const ta = h('textarea',{placeholder:'W1773466477  123456789012'});
     card.appendChild(ta);
     const err = h('div',{class:'err hidden'});
@@ -1187,7 +1245,7 @@ function renderAdminView(){
           break;
         }
       }
-      if(!out.length) throw new Error('주문번호 열과 송장번호 열을 찾지 못했습니다. 첫 줄 제목에 "주문번호", "송장번호"가 있는지 확인해 주세요.');
+      if(!out.length) throw new Error('주문번호 열과 운송장번호 열을 찾지 못했습니다. 첫 줄 제목에 "주문번호", "운송장번호"가 있는지 확인해 주세요.');
       return out;
     }
     function readText(txt){
@@ -1198,10 +1256,10 @@ function renderAdminView(){
         const tr = tk.find(x=>x!==o && /^[A-Za-z0-9-]{8,}$/.test(x));
         if(o && tr) rows.push({order_no:o, tracking:tr, carrier:''});
       });
-      if(!rows.length) throw new Error('붙여넣은 내용에서 "주문번호 송장번호" 쌍을 찾지 못했습니다.');
+      if(!rows.length) throw new Error('붙여넣은 내용에서 "주문번호 운송장번호" 쌍을 찾지 못했습니다.');
       return rows;
     }
-    const LABEL = {new:['ok','신규 등록'], same:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'], order_has_other:['err','주문에 다른 송장이 이미 있음 (건너뜀)'], tracking_used:['err','다른 주문에 쓰인 송장 (건너뜀)'], not_found:['err','등록되지 않은 주문번호 (건너뜀)']};
+    const LABEL = {new:['ok','신규 등록'], same:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'], order_has_other:['err','주문에 다른 운송장이 이미 있음 (건너뜀)'], tracking_used:['err','다른 주문에 쓰인 운송장 (건너뜀)'], not_found:['err','등록되지 않은 주문번호 (건너뜀)']};
     prevBtn.onclick = async ()=>{
       err.className='err hidden'; out.className='card hidden'; out.innerHTML='';
       prevBtn.disabled = true;
@@ -1229,11 +1287,11 @@ function renderAdminView(){
             const { data:d2, error:e2 } = await sb.rpc('online_attach_tracking', { p_rows: newRows.map(r=>((()=>{ const x = rows.find(y=>y.order_no===r.order_no)||{}; return {order_no:r.order_no,tracking:r.tracking,carrier:x.carrier||'',link:x.link||''}; })())), p_apply: true });
             if(e2){ err.textContent=e2.message; err.className='err'; ok.disabled=false; return; }
             const saved = (d2||[]).filter(r=>r.status==='new').length;
-            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+saved+'건 저장했습니다. 지금부터 해당 송장은 수령(스캔) 화면에서 조회됩니다.'}));
+            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+saved+'건 저장했습니다. 지금부터 해당 운송장은 수령(스캔) 화면에서 조회됩니다.'}));
             file.value=''; ta.value='';
           };
           out.appendChild(ok);
-        } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 저장할 송장이 없습니다.'}));
+        } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 저장할 운송장이 없습니다.'}));
       }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; }
       prevBtn.disabled = false;
     };
@@ -1246,7 +1304,7 @@ function renderAdminView(){
     const rows = []; let seq = 0;
     const card = h('div',{class:'card'});
     card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'박스 수령 (연속 스캔)'}));
-    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'입력칸에 커서를 둔 채 계속 스캔하세요. 스캔한 송장이 아래 표에 한 줄씩 쌓이고 주문 정보가 바로 채워집니다. 잘못 찍은 줄은 ✕로 지우고, 다 찍으면 [제출]을 눌러야 저장됩니다.'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'입력칸에 커서를 둔 채 계속 스캔하세요. 스캔한 운송장이 아래 표에 한 줄씩 쌓이고 주문 정보가 바로 채워집니다. 잘못 찍은 줄은 ✕로 지우고, 다 찍으면 [제출]을 눌러야 저장됩니다.'}));
     const optRow = h('div',{class:'row',style:'margin-bottom:6px'});
     const qWrap = h('div',{}); qWrap.appendChild(h('label',{text:'박스 안 수량 (새로 스캔하는 박스에 적용)'}));
     const qrow = h('div',{class:'chiprow',style:'margin-bottom:6px'}); const qb = {};
@@ -1287,7 +1345,7 @@ function renderAdminView(){
       const { data, error } = await sb.rpc('online_my_today_all', { p_office: office });
       if(error){ dingMsg.textContent = error.message; return; }
       const list = data||[];
-      if(!list.length){ dingMsg.textContent = office+' 사무실로 오늘 제출한 송장이 없습니다.'; return; }
+      if(!list.length){ dingMsg.textContent = office+' 사무실로 오늘 제출한 운송장이 없습니다.'; return; }
       const txt = list.map(r=>r.tracking).join('\n');
       try{ await navigator.clipboard.writeText(txt); dingMsg.textContent = '✓ '+list.length+'건 복사됨. 딩톡 빠른 입력 표에 붙여넣기(Ctrl+V) 하세요.'; }
       catch(e){ dingMsg.textContent = '복사 권한이 없어 아래 내용을 직접 복사하세요.'; const box = h('div',{class:'copybox'}); box.textContent = txt; dingCard.appendChild(box); }
@@ -1295,7 +1353,7 @@ function renderAdminView(){
     dingCard.append(dingBtn, dingMsg); body.appendChild(dingCard);
     const todayCard = h('div',{class:'card'}); const todayBox = h('div',{}); todayCard.appendChild(todayBox); body.appendChild(todayCard);
 
-    // --- 수령 취소 (관리): 다른 사람·지난 날짜 건도 송장번호로 찾아 취소 ---
+    // --- 수령 취소 (관리): 다른 사람·지난 날짜 건도 운송장번호로 찾아 취소 ---
     if(onlineHas('admin') || onlineHas('void')){
       const vc = h('div',{class:'card'});
       vc.appendChild(h('div',{style:'font-weight:700;margin-bottom:4px',text:'수령 취소 (관리자용)'}));
@@ -1330,7 +1388,7 @@ function renderAdminView(){
     // --- 표 그리기 ---
     const modelText = r=>{ if(!r.info) return ''; const mp = onlineModelParts(r.info.model_raw); return [mp.model,mp.cap,mp.color].filter(Boolean).join(' '); };
     const STATUS = {
-      checking:['조회 중…',''], ready:['제출 대기','var(--accent)'], already:['이미 수령됨','var(--danger)'], notfound:['미등록 송장','var(--danger)'],
+      checking:['조회 중…',''], ready:['제출 대기','var(--accent)'], already:['이미 수령됨','var(--danger)'], notfound:['미등록 운송장','var(--danger)'],
       qtyover:['수량 초과','var(--danger)'], submitting:['제출 중…',''], done:['제출 완료 ✓','var(--success)'], failed:['실패','var(--danger)'], voided:['취소됨','var(--muted)']
     };
     function saveDraft(){ try{ localStorage.setItem('pm_online_draft', JSON.stringify(rows.filter(r=>r.status==='ready'||r.status==='checking').map(r=>({tracking:r.tracking,qty:r.qty,office:r.office})))); }catch(e){} }
@@ -1408,7 +1466,7 @@ function renderAdminView(){
       batch.forEach(row=>{
         if(!data){ row.status='failed'; row.msg='조회 실패('+fail+') — ✕로 지우고 다시 스캔하세요'; anyBad = true; return; }
         const f = data.find(x=>x.tracking===row.tracking);
-        if(!f || !f.found){ row.status='notfound'; row.msg='송장 파일이 아직 등록되지 않았을 수 있습니다'; anyBad = true; }
+        if(!f || !f.found){ row.status='notfound'; row.msg='운송장 파일이 아직 등록되지 않았을 수 있습니다'; anyBad = true; }
         else { row.info = f;
           if(f.already){ row.status='already'; row.msg=(f.received_by||'')+' '+onlineTime(f.received_at)+(f.source&&f.source!=='scan'?' ('+f.source+')':''); anyBad = true; }
           else { row.status='ready'; if(f.qty && row.qty>f.qty) row.qty=f.qty; } }
@@ -1501,7 +1559,7 @@ function renderAdminView(){
       cs.forEach(c=> sel.appendChild(h('option',{value:c,text:c})));
     }).catch(e=>{ err.textContent=e.message||String(e); err.className='err'; });
     const pick = ()=> rows.filter(r=>!sel.value || r.company===sel.value);
-    const toRow = r=>({'회사':r.company,'주문번호':r.order_no,'송장번호':r.tracking||'','상태':r.stage,'모델':r.model_raw||'','수량':r.qty,'배송지':r.ship_to||'','주문일':r.order_date||'','도착예정':r.window_text||'','카드끝4자리':r.card_last4||'','수령일시':onlineTime(r.received_at),'수령자':r.received_by||'','수령방식':r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':r.receipt_source):'','주문기록':r.no_order_record?'없음(딩톡 이관)':''});
+    const toRow = r=>({'회사':r.company,'주문번호':r.order_no,'운송장번호':r.tracking||'','상태':stageLabel(r.stage),'모델':r.model_raw||'','수량':r.qty,'배송지':r.ship_to||'','주문일':r.order_date||'','도착예정':r.window_text||'','카드끝4자리':r.card_last4||'','수령일시':onlineTime(r.received_at),'수령자':r.received_by||'','수령방식':r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':r.receipt_source):'','주문기록':r.no_order_record?'없음(딩톡 이관)':''});
     bx.onclick = async ()=>{
       err.className='err hidden';
       const data = pick(); if(!data.length){ err.textContent='내보낼 내역이 없습니다'; err.className='err'; return; }
@@ -1509,7 +1567,7 @@ function renderAdminView(){
         const X = await loadSheetJS();
         const wb = X.utils.book_new();
         const st = onlineStats(data);
-        const sum = Object.keys(st).sort().map(c=>({'회사':c,'주문(건)':st[c].total,'수량(대)':st[c].tu,'배송완료(건)':st[c].done,'배송완료(대)':st[c].du,'배송중(건)':st[c].wait,'송장대기(건)':st[c].nt}));
+        const sum = Object.keys(st).sort().map(c=>({'회사':c,'주문(건)':st[c].total,'수량(대)':st[c].tu,'배송완료(건)':st[c].done,'배송완료(대)':st[c].du,'배송중(건)':st[c].wait,'배송 전(건)':st[c].nt}));
         const addSheet = (name, list)=>{ const ws = X.utils.json_to_sheet(list); ws['!cols']=Object.keys(list[0]).map(k=>({wch:Math.max(10,k.length*2+2)})); X.utils.book_append_sheet(wb, ws, name.slice(0,31)); };
         addSheet('요약', sum);
         const cs = Object.keys(st).sort();
@@ -1522,12 +1580,12 @@ function renderAdminView(){
       err.className='err hidden';
       const data = pick(); if(!data.length){ err.textContent='내보낼 내역이 없습니다'; err.className='err'; return; }
       const st = onlineStats(data);
-      const th = '<tr>'+['회사','주문번호','송장번호','상태','수량','배송지','주문일','수령일시','수령자','수령방식'].map(x=>'<th>'+x+'</th>').join('')+'</tr>';
-      const tr = data.map(r=>'<tr>'+[r.company,r.order_no,r.tracking||'',r.stage,r.qty,r.ship_to||'',r.order_date||'',onlineTime(r.received_at),r.received_by||'',r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':r.receipt_source+(r.no_order_record?' (주문 기록 없음)':'')):''].map(x=>'<td>'+onlineEsc(x)+'</td>').join('')+'</tr>').join('');
+      const th = '<tr>'+['회사','주문번호','운송장번호','상태','수량','배송지','주문일','수령일시','수령자','수령방식'].map(x=>'<th>'+x+'</th>').join('')+'</tr>';
+      const tr = data.map(r=>'<tr>'+[r.company,r.order_no,r.tracking||'',stageLabel(r.stage),r.qty,r.ship_to||'',r.order_date||'',onlineTime(r.received_at),r.received_by||'',r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':r.receipt_source+(r.no_order_record?' (주문 기록 없음)':'')):''].map(x=>'<td>'+onlineEsc(x)+'</td>').join('')+'</tr>').join('');
       const sm = Object.keys(st).sort().map(c=>'<tr><td>'+onlineEsc(c)+'</td><td>'+st[c].total+'건 / '+st[c].tu+'대</td><td>'+st[c].done+'건 / '+st[c].du+'대</td><td>'+st[c].wait+'건</td><td>'+st[c].nt+'건</td></tr>').join('');
       const w = window.open('','_blank');
       if(!w){ err.textContent='팝업이 차단되었습니다. 팝업을 허용해 주세요.'; err.className='err'; return; }
-      w.document.write('<!doctype html><meta charset="utf-8"><title>온라인 주문 '+onlineEsc(sel.value||'전체')+'</title><style>body{font-family:sans-serif;font-size:11px;margin:16px}h1{font-size:16px}table{border-collapse:collapse;width:100%;margin-bottom:14px}th,td{border:1px solid #999;padding:3px 5px;text-align:left}th{background:#eee}</style><h1>온라인 주문 수령 내역 · '+onlineEsc(sel.value||'전체')+'</h1><div>출력일 '+new Date().toLocaleDateString('ko-KR')+'</div><br><table><tr><th>회사</th><th>주문</th><th>배송완료</th><th>배송중</th><th>송장 대기</th></tr>'+sm+'</table><table>'+th+tr+'</table><script>window.onload=function(){window.print()}<\/script>');
+      w.document.write('<!doctype html><meta charset="utf-8"><title>온라인 주문 '+onlineEsc(sel.value||'전체')+'</title><style>body{font-family:sans-serif;font-size:11px;margin:16px}h1{font-size:16px}table{border-collapse:collapse;width:100%;margin-bottom:14px}th,td{border:1px solid #999;padding:3px 5px;text-align:left}th{background:#eee}</style><h1>온라인 주문 수령 내역 · '+onlineEsc(sel.value||'전체')+'</h1><div>출력일 '+new Date().toLocaleDateString('ko-KR')+'</div><br><table><tr><th>회사</th><th>주문</th><th>배송완료</th><th>배송중</th><th>배송 전</th></tr>'+sm+'</table><table>'+th+tr+'</table><script>window.onload=function(){window.print()}<\/script>');
       w.document.close();
     };
   }
