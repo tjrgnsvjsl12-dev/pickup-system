@@ -3119,8 +3119,38 @@ ${orderLines}
   boot();
 }
 
+
+// ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
+const BUILD = 'b20261124-144219';
+function startUpdateWatcher(){
+  let shown = false;
+  const showBanner = ()=>{
+    if(shown) return; shown = true;
+    const b = document.createElement('div');
+    b.style.cssText = 'position:fixed;left:0;right:0;top:0;z-index:9999;background:#b4552f;color:#fff;padding:10px 14px;display:flex;gap:12px;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-wrap:wrap;box-shadow:0 2px 8px rgba(0,0,0,.25)';
+    b.appendChild(document.createTextNode('새 버전이 나왔습니다. 제출하지 않은 스캔은 자동 보관되니 안심하고 눌러 주세요.'));
+    const btn = document.createElement('button');
+    btn.textContent = '지금 새로고침';
+    btn.style.cssText = 'background:#fff;color:#b4552f;border:0;border-radius:8px;padding:6px 12px;font-weight:800;cursor:pointer';
+    btn.onclick = ()=>{ location.replace(location.pathname + '?v=' + Date.now()); };
+    b.appendChild(btn); document.body.appendChild(b);
+  };
+  const check = async ()=>{
+    if(shown || document.hidden) return;
+    try{
+      const r = await fetch(location.pathname + '?chk=' + Date.now(), { cache:'no-store' });
+      const m = (await r.text()).match(/const BUILD = 'b20261124-144219']+)'/);
+      if(m && m[1] !== BUILD) showBanner();
+    }catch(e){}
+  };
+  setTimeout(check, 5000);
+  setInterval(check, 180000);
+  document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) check(); });
+}
+
 // =====================================================================
 if(isAlbaCode) renderAlbaView(); else renderAdminView();
+if(!isAlbaCode) startUpdateWatcher();
 </script>
 </body>
 </html>
