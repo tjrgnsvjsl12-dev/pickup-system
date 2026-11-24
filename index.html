@@ -1048,7 +1048,7 @@ function renderAdminView(){
     const ov = (kind)=> overdue.filter(r=>r.kind===kind && byCo(r) && (!onlineMonth || r.ym===onlineMonth)).reduce((a,r)=>({n:a.n+Number(r.orders),u:a.u+Number(r.units)}),{n:0,u:0});
     const oa = ov('arr'), os = ov('ship');
     const alertCard = h('div',{class:'card',style:(oa.n||os.n)?'border-color:var(--danger)':''});
-    alertCard.appendChild(h('div',{style:'font-weight:800;margin-bottom:'+((oa.n||os.n)?'8':'0')+'px;color:'+((oa.n||os.n)?'var(--danger)':'var(--success)'),text:(oa.n||os.n)?'⚠ 도착 예정일이 지난 주문':'✓ 도착 예정일이 지난 주문 없음'}));
+    alertCard.appendChild(h('div',{style:'font-weight:800;margin-bottom:'+((oa.n||os.n)?'8':'0')+'px;color:'+((oa.n||os.n)?'var(--danger)':'var(--success)'),text:(oa.n||os.n)?'⚠ 도착 예정일이 지난 주문 (주문 당시 예정일 기준 · 참고용)':'✓ 도착 예정일이 지난 주문 없음 (주문 당시 예정일 기준)'}));
     const mkAlert = (kind, label, hint, v)=>{
       if(!v.n) return;
       alertCard.appendChild(h('button',{type:'button',class:'btn-ghost alertbtn'+(onlineAlertKind===kind?' sel':''),onclick:()=>{ onlineAlertKind = onlineAlertKind===kind?'':kind; onlineStage=''; onlineDay=''; drawDashboard(); }},[
@@ -3294,7 +3294,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-162457';
+const BUILD = 'b20261124-163215';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
