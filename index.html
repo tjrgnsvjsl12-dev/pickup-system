@@ -989,7 +989,7 @@ function renderAdminView(){
       mc.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'단위: 대 · 달을 누르면 그 달 주문만 보입니다'}));
       const w3 = h('div',{style:'overflow-x:auto'}); const t3 = h('table',{class:'cotable clickrows'});
       t3.appendChild(h('thead',{html:'<tr><th>주문한 달</th><th>주문</th><th>① 배송 전</th><th>② 배송중</th><th>③ 배송완료</th><th>아직 안 온</th><th>완료율</th></tr>'}));
-      const b3 = h('tbody'); const cell3 = (u,n,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)+(cls==='b'?'대':'')}), ]);
+      const b3 = h('tbody'); const cell3 = (u,n,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)+'대'}), ]);
       const f3 = h('tfoot');
       const rowOf = (label, s, onclick)=> h('tr',{onclick},[h('td',{class:'co',text:label}), cell3(s.tu,s.total,'b'), cell3(s.nu,s.nt), cell3(s.wu,s.wait), cell3(s.du,s.done,'g'), cell3(s.nu+s.wu,s.nt+s.wait,(s.nt+s.wait)?'r':'g'), h('td',{},[h('div',{class:'n',text:pct(s.du,s.tu)+'%'})])]);
       months.forEach(ym=>{ const s = sumUp(Object.values(statsFromSummary(mrows.filter(r=>byCo(r)&&r.ym===ym)))); if(s.total) b3.appendChild(rowOf(ymLabel(ym), s, ()=>{ onlineMonth=ym; onlineStage=''; onlineAlertKind=''; onlineDay=''; drawDashboard(); })); });
@@ -1015,8 +1015,8 @@ function renderAdminView(){
             b4.appendChild(h('tr',{class:onlineDay===k?'selrow':'',onclick:()=>{ onlineDay = (onlineDay===k?'':k); onlineStage=''; onlineAlertKind=''; drawDashboard(); }},[
               h('td',{class:'co',text:k==='미상'?'주문일 없음':k.slice(5).replace('-','/')+' ('+['일','월','화','수','목','금','토'][new Date(k+'T00:00:00').getDay()]+')'}),
               h('td',{},[h('div',{class:'n',text:nf(o.u)+'대'})]),
-              h('td',{class:'g'},[h('div',{class:'n'+(o.du?'':' z'),text:nf(o.du)})]),
-              h('td',{class:left?'r':'g'},[h('div',{class:'n',text:left?nf(o.u-o.du):'✓'}),])]));
+              h('td',{class:'g'},[h('div',{class:'n'+(o.du?'':' z'),text:nf(o.du)+'대'})]),
+              h('td',{class:left?'r':'g'},[h('div',{class:'n',text:left?nf(o.u-o.du)+'대':'✓'}),])]));
           });
           t4.appendChild(b4); dbody.appendChild(h('div',{style:'overflow-x:auto'},[t4]));
         });
@@ -1040,7 +1040,7 @@ function renderAdminView(){
         const t5 = h('table',{class:'cotable'});
         t5.appendChild(h('thead',{html:'<tr><th>품목 (모델 · 용량 · 색상)</th><th>주문</th><th>① 배송 전</th><th>② 배송중</th><th>③ 배송완료</th><th>아직 안 온</th></tr>'}));
         const b5 = h('tbody'); const tot = {u:0,bu:0,wu:0,du:0,n:0};
-        const c5 = (u,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)+(cls==='b'?'대':'')})]);
+        const c5 = (u,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)+'대'})]);
         keys.forEach(k=>{ const o = items[k]; tot.u+=o.u; tot.bu+=o.bu; tot.wu+=o.wu; tot.du+=o.du; tot.n+=o.n;
           b5.appendChild(h('tr',{},[h('td',{class:'co',style:'white-space:normal',text:k}), c5(o.u,'b'), c5(o.bu), c5(o.wu), c5(o.du,'g'), c5(o.bu+o.wu,(o.bu+o.wu)?'r':'g')]));
         });
@@ -1073,7 +1073,7 @@ function renderAdminView(){
       const t2 = h('table',{class:'cotable'});
       t2.appendChild(h('thead',{html:'<tr><th>회사</th><th>전체</th><th>① 배송 전</th><th>② 배송중</th><th>③ 배송완료</th><th>완료율</th></tr>'}));
       const b2 = h('tbody');
-      const cell = (u,n,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)+(cls==='b'?'대':'')})]);
+      const cell = (u,n,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)+'대'})]);
       stCompanies.forEach(c=>{ const s=st[c];
         b2.appendChild(h('tr',{},[h('td',{class:'co',text:c}), cell(s.tu,s.total,'b'), cell(s.nu,s.nt), cell(s.wu,s.wait), cell(s.du,s.done,'g'), h('td',{},[h('div',{class:'n',text:pct(s.du,s.tu)+'%'})])]));
       });
@@ -3299,7 +3299,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-161314';
+const BUILD = 'b20261124-161603';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
