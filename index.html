@@ -1280,6 +1280,27 @@ function renderAdminView(){
     dingCard.append(dingBtn, dingMsg); body.appendChild(dingCard);
     const todayCard = h('div',{class:'card'}); const todayBox = h('div',{}); todayCard.appendChild(todayBox); body.appendChild(todayCard);
 
+    // --- 수령 취소 (관리): 다른 사람·지난 날짜 건도 송장번호로 찾아 취소 ---
+    if(onlineHas('admin') || onlineHas('void')){
+      const vc = h('div',{class:'card'});
+      vc.appendChild(h('div',{style:'font-weight:700;margin-bottom:4px',text:'수령 취소 (관리자용)'}));
+      vc.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'다른 사람이 찍었거나 지난 날짜에 수령 처리된 박스를 취소합니다. 기록은 지워지지 않고 취소 사유와 함께 남습니다. 취소하면 다시 스캔할 수 있습니다.'}));
+      const vt = h('input',{type:'text',placeholder:'취소할 운송장번호',autocomplete:'off'});
+      const vr = h('input',{type:'text',placeholder:'취소 사유 (필수, 예: 오스캔)',autocomplete:'off',style:'margin-top:6px'});
+      const vm = h('div',{style:'margin-top:6px;font-weight:700'});
+      const vb = h('button',{class:'btn-danger',style:'margin-top:8px',text:'수령 취소'});
+      vb.onclick = async ()=>{
+        vm.textContent=''; const trk = vt.value.trim(), why = vr.value.trim();
+        if(!trk){ vm.style.color='var(--danger)'; vm.textContent='운송장번호를 입력하세요'; return; }
+        if(!why){ vm.style.color='var(--danger)'; vm.textContent='취소 사유를 입력하세요'; return; }
+        if(!confirm(trk+' 수령을 취소할까요?')) return;
+        const { data, error } = await sb.rpc('online_void_by_tracking', { p_tracking:trk, p_reason:why });
+        if(error){ vm.style.color='var(--danger)'; vm.textContent=error.message; return; }
+        vm.style.color='var(--success)'; vm.textContent='✓ 취소됨: '+trk+(data&&data.order_no?' ('+data.order_no+')':''); vt.value=''; vr.value=''; loadToday();
+      };
+      vc.append(vt, vr, vb, vm); body.appendChild(vc);
+    }
+
     // --- 소리 ---
     let actx = null;
     const beep = (ok)=>{
