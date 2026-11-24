@@ -787,6 +787,7 @@ function renderAdminView(){
     if(onlineHas('receive')) defs.push(['recv','수령']);
     if(onlineHas('admin')) defs.push(['orders','주문 등록']);
     if(onlineHas('admin')) defs.push(['track','송장 등록']);
+    if(onlineHas('admin')) defs.push(['ding','딩톡 이관']);
     if(onlineHas('view')) defs.push(['export','내보내기']);
     if(!defs.length){ app.appendChild(h('div',{class:'lockmsg',text:'온라인 주문 권한이 없습니다.'})); return; }
     if(!defs.some(d=>d[0]===onlineTab)) onlineTab = defs[0][0];
@@ -799,6 +800,7 @@ function renderAdminView(){
     else if(onlineTab==='recv') drawOnlineReceive(body);
     else if(onlineTab==='track') drawOnlineTracking(body);
     else if(onlineTab==='orders') drawOnlineOrders(body);
+    else if(onlineTab==='ding') drawOnlineDingImport(body);
     else drawOnlineExport(body);
   }
 
@@ -1041,6 +1043,93 @@ function renderAdminView(){
       prevBtn.disabled = false;
     }
     prevBtn.onclick = preview;
+  }
+
+  function drawOnlineDingImport(body){
+    const card = h('div',{class:'card'});
+    card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'딩톡 수령 이관'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'딩톡에서 이미 수령 처리된 내역(제货单/pickup 표단 엑셀)을 올려 송장 등록과 수령 처리를 한 번에 합니다. 이관한 건은 "딩톡 이관"으로 표시되어 현장 스캔 수령과 구분됩니다. 우리 시스템에 주문이 없는 건(예: 켄 주문)은 "주문 기록 없음"으로 표시해 함께 넣습니다.'}));
+    card.appendChild(h('label',{text:'딩톡 수령 내역 엑셀'}));
+    const file = h('input',{type:'file',accept:'.xlsx,.xls'});
+    card.appendChild(file);
+    card.appendChild(h('label',{text:'실제 수령한 직원'}));
+    const rsel = h('select',{}); rsel.appendChild(h('option',{value:'',text:'불러오는 중...'})); card.appendChild(rsel);
+    card.appendChild(h('label',{text:'주문 기록이 없는 건의 회사'}));
+    const csel = h('select',{}); ['CH','부강','성신','에잇싱크'].forEach(c=>csel.appendChild(h('option',{value:c,text:c}))); card.appendChild(csel);
+    const err = h('div',{class:'err hidden'});
+    const prevBtn = h('button',{class:'btn-primary',text:'미리보기'});
+    card.append(err, prevBtn);
+    body.appendChild(card);
+    const out = h('div',{class:'card hidden'}); body.appendChild(out);
+    let lastRecv = ''; try{ lastRecv = localStorage.getItem('pm_online_receiver')||''; }catch(e){}
+    sb.rpc('online_receivers').then(({data,error})=>{
+      rsel.innerHTML=''; rsel.appendChild(h('option',{value:'',text:'선택하세요'}));
+      (data||[]).forEach(r=> rsel.appendChild(h('option',{value:r.id,text:r.display_name||r.id})));
+      if(lastRecv) rsel.value = lastRecv;
+      if(error){ err.textContent=error.message; err.className='err'; }
+    });
+
+    async function readDing(f){
+      const X = await loadSheetJS();
+      const wb = X.read(await f.arrayBuffer(), {type:'array'});
+      const aoa = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''});
+      const hdr = aoa[0].map((_,i)=> String(aoa[0][i]||'')+' '+String((aoa[1]||[])[i]||''));
+      const find = (...keys)=> hdr.findIndex(x=>keys.some(k=>x.includes(k)));
+      const it = find('快递单号'), io = find('订单码'), im = find('产品型号'), iq = find('数量数量'), id = find('日期'), iw = find('仓库');
+      if(it<0 || io<0) throw new Error('"운송장 번호(快递单号)"와 "주문 코드(订单码)" 열을 찾지 못했습니다. 딩톡에서 내려받은 제货单/pickup 엑셀이 맞는지 확인해 주세요.');
+      const rows = []; let date = '', wh = '';
+      aoa.slice(1).forEach(r=>{
+        const dm = String(r[id]||'').match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/);
+        if(dm) date = dm[1]+'-'+dm[2].padStart(2,'0')+'-'+dm[3].padStart(2,'0');
+        if(iw>=0 && String(r[iw]||'').trim()) wh = String(r[iw]).trim();
+        const on = String(r[io]||'').trim(), tr = String(r[it]||'').replace(/\s/g,'');
+        if(!/^W\d{6,}$/i.test(on) || !tr) return;
+        rows.push({ order_no:on, tracking:tr, model_raw:String(r[im]||'').trim(), qty: parseInt(r[iq],10)||2, date, ship_to: /seoul|서울/i.test(wh)?'서울':/busan|부산/i.test(wh)?'부산':'' });
+      });
+      if(!rows.length) throw new Error('이관할 수령 내역을 찾지 못했습니다.');
+      return rows;
+    }
+    const LABEL = {
+      new:['ok','주문 있음 → 송장 등록 + 수령 처리'], new_no_order:['ok','주문 기록 없음 → "딩톡 이관(주문 기록 없음)"으로 등록 + 수령 처리'],
+      already_received:['muted','이미 수령 처리됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'],
+      order_has_other_tracking:['err','주문에 다른 송장이 이미 있음 (건너뜀)'], tracking_used:['err','다른 주문에 쓰인 송장 (건너뜀)'],
+      qty_over:['err','주문 수량보다 많음 (건너뜀)'], model_mismatch:['err','주문 모델과 딩톡 모델이 다름 (건너뜀)'], voided_order:['err','취소된 주문 (건너뜀)']
+    };
+    prevBtn.onclick = async ()=>{
+      err.className='err hidden'; out.className='card hidden'; out.innerHTML=''; prevBtn.disabled = true;
+      try{
+        if(!file.files[0]) throw new Error('파일을 선택해 주세요.');
+        if(!rsel.value) throw new Error('실제 수령한 직원을 선택해 주세요.');
+        try{ localStorage.setItem('pm_online_receiver', rsel.value); }catch(e){}
+        const rows = await readDing(file.files[0]);
+        const { data, error } = await sb.rpc('online_import_received', { p_rows: rows, p_receiver: rsel.value, p_company: csel.value, p_apply: false });
+        if(error) throw error;
+        const res = data||[]; const cnt = {}; res.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
+        out.className='card';
+        const dates = {}; rows.forEach(r=>dates[r.date]=(dates[r.date]||0)+1);
+        out.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:'미리보기 · 파일 '+rows.length+'박스 ('+rows.reduce((a,r)=>a+r.qty,0)+'대)'}));
+        out.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'수령일별: '+Object.keys(dates).sort().map(d=>d+' '+dates[d]+'박스').join(' · ')}));
+        Object.keys(LABEL).forEach(k=>{ if(cnt[k]) out.appendChild(h('div',{class:LABEL[k][0],style:'margin:2px 0',text:LABEL[k][1]+' '+cnt[k]+'건'})); });
+        const bad = res.filter(r=>!['new','new_no_order','already_received'].includes(r.status));
+        if(bad.length){ const box = h('div',{class:'copybox',style:'margin-top:8px'}); box.textContent = bad.slice(0,100).map(r=>r.order_no+'  '+r.tracking+'  → '+(LABEL[r.status]||[0,r.status])[1]+(r.status==='model_mismatch'?(' (딩톡 '+r.model_file+' / 주문 '+r.model_db+')'):'')).join('\n'); out.appendChild(box); }
+        const noOrd = res.filter(r=>r.status==='new_no_order');
+        if(noOrd.length){ const box = h('div',{class:'copybox',style:'margin-top:8px'}); box.textContent = '주문 기록 없음으로 등록될 건 ('+csel.value+')\n'+noOrd.map(r=>r.order_no+'  '+r.tracking).join('\n'); out.appendChild(box); }
+        const go = res.filter(r=>r.status==='new'||r.status==='new_no_order');
+        if(go.length){
+          const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:'신규 '+go.length+'건 이관 저장 (수령자: '+rsel.options[rsel.selectedIndex].text+')'});
+          ok.onclick = async ()=>{
+            ok.disabled = true;
+            const keep = new Set(go.map(r=>r.order_no));
+            const { data:d2, error:e2 } = await sb.rpc('online_import_received', { p_rows: rows.filter(r=>keep.has(r.order_no)), p_receiver: rsel.value, p_company: csel.value, p_apply: true });
+            if(e2){ err.textContent=e2.message; err.className='err'; ok.disabled=false; return; }
+            const saved = (d2||[]).filter(r=>r.status==='new'||r.status==='new_no_order').length;
+            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+saved+'건을 이관했습니다. 집계에서 확인하세요.'})); file.value='';
+          };
+          out.appendChild(ok);
+        } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 이관할 건이 없습니다.'}));
+      }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; }
+      prevBtn.disabled = false;
+    };
   }
 
   function drawOnlineTracking(body){
@@ -1336,7 +1425,7 @@ function renderAdminView(){
       cs.forEach(c=> sel.appendChild(h('option',{value:c,text:c})));
     }).catch(e=>{ err.textContent=e.message||String(e); err.className='err'; });
     const pick = ()=> rows.filter(r=>!sel.value || r.company===sel.value);
-    const toRow = r=>({'회사':r.company,'주문번호':r.order_no,'송장번호':r.tracking||'','상태':r.stage,'모델':r.model_raw||'','수량':r.qty,'배송지':r.ship_to||'','주문일':r.order_date||'','도착예정':r.window_text||'','카드끝4자리':r.card_last4||'','수령일시':onlineTime(r.received_at),'수령자':r.received_by||''});
+    const toRow = r=>({'회사':r.company,'주문번호':r.order_no,'송장번호':r.tracking||'','상태':r.stage,'모델':r.model_raw||'','수량':r.qty,'배송지':r.ship_to||'','주문일':r.order_date||'','도착예정':r.window_text||'','카드끝4자리':r.card_last4||'','수령일시':onlineTime(r.received_at),'수령자':r.received_by||'','수령방식':r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':r.receipt_source):'','주문기록':r.no_order_record?'없음(딩톡 이관)':''});
     bx.onclick = async ()=>{
       err.className='err hidden';
       const data = pick(); if(!data.length){ err.textContent='내보낼 내역이 없습니다'; err.className='err'; return; }
@@ -1357,8 +1446,8 @@ function renderAdminView(){
       err.className='err hidden';
       const data = pick(); if(!data.length){ err.textContent='내보낼 내역이 없습니다'; err.className='err'; return; }
       const st = onlineStats(data);
-      const th = '<tr>'+['회사','주문번호','송장번호','상태','수량','배송지','주문일','수령일시','수령자'].map(x=>'<th>'+x+'</th>').join('')+'</tr>';
-      const tr = data.map(r=>'<tr>'+[r.company,r.order_no,r.tracking||'',r.stage,r.qty,r.ship_to||'',r.order_date||'',onlineTime(r.received_at),r.received_by||''].map(x=>'<td>'+onlineEsc(x)+'</td>').join('')+'</tr>').join('');
+      const th = '<tr>'+['회사','주문번호','송장번호','상태','수량','배송지','주문일','수령일시','수령자','수령방식'].map(x=>'<th>'+x+'</th>').join('')+'</tr>';
+      const tr = data.map(r=>'<tr>'+[r.company,r.order_no,r.tracking||'',r.stage,r.qty,r.ship_to||'',r.order_date||'',onlineTime(r.received_at),r.received_by||'',r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':r.receipt_source+(r.no_order_record?' (주문 기록 없음)':'')):''].map(x=>'<td>'+onlineEsc(x)+'</td>').join('')+'</tr>').join('');
       const sm = Object.keys(st).sort().map(c=>'<tr><td>'+onlineEsc(c)+'</td><td>'+st[c].total+'건 / '+st[c].tu+'대</td><td>'+st[c].done+'건 / '+st[c].du+'대</td><td>'+st[c].wait+'건</td><td>'+st[c].nt+'건</td></tr>').join('');
       const w = window.open('','_blank');
       if(!w){ err.textContent='팝업이 차단되었습니다. 팝업을 허용해 주세요.'; err.className='err'; return; }
