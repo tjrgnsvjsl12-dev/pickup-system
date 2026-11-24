@@ -3121,7 +3121,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-144219';
+const BUILD = 'b20261124-144229';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
@@ -3139,7 +3139,7 @@ function startUpdateWatcher(){
     if(shown || document.hidden) return;
     try{
       const r = await fetch(location.pathname + '?chk=' + Date.now(), { cache:'no-store' });
-      const m = (await r.text()).match(/const BUILD = 'b20261124-144219']+)'/);
+      const m = (await r.text()).match(/const BUILD = '([^']+)'/);
       if(m && m[1] !== BUILD) showBanner();
     }catch(e){}
   };
