@@ -739,6 +739,7 @@ function renderAdminView(){
 
   function drawDashboard(){
     if(progressTimer){ clearInterval(progressTimer); progressTimer = null; }
+    document.body.style.maxWidth = ''; window.onbeforeunload = null;
     app.innerHTML = '';
     const top = h('div',{class:'topbar'},[
       h('div',{},[h('h1',{text:t('brand')}), h('div',{class:'sub',text:(myProfile&&myProfile.display_name)||session.user.email})]),
@@ -1224,73 +1225,62 @@ function renderAdminView(){
   }
 
   function drawOnlineReceive(body){
+    document.body.style.maxWidth = '980px';
     let qty = 2, sound = true;
+    let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
+    const rows = []; let seq = 0;
     const card = h('div',{class:'card'});
     card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'박스 수령 (연속 스캔)'}));
-    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'입력칸에 커서를 둔 채 계속 스캔하세요. Enter 없이 자동으로 인식·저장되고 다음 스캔을 바로 받습니다. 같은 송장은 두 번 저장되지 않습니다.'}));
-    card.appendChild(h('label',{text:'박스 안 수량 (스캔하는 박스에 적용)'}));
-    const qrow = h('div',{class:'chiprow',style:'margin-bottom:10px'});
-    const qb = {};
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'입력칸에 커서를 둔 채 계속 스캔하세요. 스캔한 송장이 아래 표에 한 줄씩 쌓이고 주문 정보가 바로 채워집니다. 잘못 찍은 줄은 ✕로 지우고, 다 찍으면 [제출]을 눌러야 저장됩니다.'}));
+    const optRow = h('div',{class:'row',style:'margin-bottom:6px'});
+    const qWrap = h('div',{}); qWrap.appendChild(h('label',{text:'박스 안 수량 (새로 스캔하는 박스에 적용)'}));
+    const qrow = h('div',{class:'chiprow',style:'margin-bottom:6px'}); const qb = {};
     [2,1].forEach(n=>{ const b = h('button',{type:'button',class:'chip-btn'+(qty===n?' selected':''),text:n+'대',onclick:()=>{ qty=n; Object.keys(qb).forEach(k=>qb[k].classList.toggle('selected',Number(k)===n)); inp.focus(); }}); qb[n]=b; qrow.appendChild(b); });
-    card.appendChild(qrow);
-    card.appendChild(h('label',{text:'지금 수령하는 사무실'}));
-    let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
-    const orow = h('div',{class:'chiprow',style:'margin-bottom:10px'});
-    const ob = {};
+    qWrap.appendChild(qrow);
+    const oWrap = h('div',{}); oWrap.appendChild(h('label',{text:'지금 수령하는 사무실'}));
+    const orow = h('div',{class:'chiprow',style:'margin-bottom:6px'}); const ob = {};
     ['서울','부산'].forEach(n=>{ const b = h('button',{type:'button',class:'chip-btn'+(office===n?' selected':''),text:n+' 사무실',onclick:()=>{ office=n; try{ localStorage.setItem('pm_online_office',n); }catch(e){} Object.keys(ob).forEach(k=>ob[k].classList.toggle('selected',k===n)); inp.focus(); }}); ob[n]=b; orow.appendChild(b); });
-    card.appendChild(orow);
+    oWrap.appendChild(orow);
+    optRow.append(qWrap, oWrap); card.appendChild(optRow);
     const inp = h('input',{type:'text',inputmode:'numeric',autocomplete:'off',autocapitalize:'off',placeholder:'여기에 스캔',style:'font-size:18px'});
     card.appendChild(inp);
-    const last = h('div',{class:'hidden',style:'border:1px solid var(--border);border-radius:10px;padding:10px 12px;margin-bottom:10px;background:var(--surface-2)'});
-    card.appendChild(last);
-    const showLast = (r, ok)=>{
-      const mp = onlineModelParts(r.model_raw);
-      last.classList.remove('hidden'); last.innerHTML='';
-      last.style.borderColor = ok ? 'var(--success)' : 'var(--danger)';
-      const row = (k,v)=> h('div',{class:'flexbetween',style:'font-size:13px;margin:2px 0'},[h('span',{class:'muted',text:k}),h('span',{style:'font-weight:700;text-align:right',text:v})]);
-      last.appendChild(h('div',{style:'font-weight:800;margin-bottom:4px;color:'+(ok?'var(--success)':'var(--danger)'),text:(ok?'✓ 저장됨 · ':'⚠ ')+r.tracking}));
-      if(r.order_no){
-        last.appendChild(row('주문코드', r.order_no));
-        last.appendChild(row('모델', mp.model)); last.appendChild(row('용량', mp.cap||'-')); last.appendChild(row('색상', mp.color||'-'));
-        last.appendChild(row('수량', (r.qty||r.order_qty||'')+'대'));
-        last.appendChild(row('회사', r.company));
-        last.appendChild(row('주문 배송지', (r.ship_to||'-')+' 사무실'));
-      }
-    };
-    const cnt = h('div',{class:'flexbetween',style:'margin-bottom:6px'});
-    const cOk = h('div',{style:'font-weight:800;color:var(--success)',text:'저장 0박스 · 0대'});
-    const cBad = h('div',{style:'font-weight:800;color:var(--danger)',text:'확인 필요 0건'});
-    cnt.append(cOk,cBad); card.appendChild(cnt);
-    const sndLbl = h('label',{style:'display:flex;gap:6px;align-items:center;font-weight:400;margin:0 0 8px'},[]);
-    const sndChk = h('input',{type:'checkbox',checked:'checked',style:'width:auto;margin:0'});
-    sndChk.onchange = ()=>{ sound = sndChk.checked; };
-    sndLbl.append(sndChk, document.createTextNode('소리 알림 (성공 짧은 소리 / 문제 낮은 소리)'));
-    card.appendChild(sndLbl);
-    const log = h('div',{});
-    card.appendChild(log);
-    const badBox = h('div',{class:'copybox hidden',style:'border-color:var(--danger);margin-top:8px'});
-    card.appendChild(h('div',{class:'muted hidden',id:'badTitle',style:'margin-top:8px;color:var(--danger);font-weight:700',text:'확인이 필요한 송장 (이 화면을 나가면 사라집니다)'}));
-    card.appendChild(badBox);
+
+    const sumLine = h('div',{class:'flexbetween',style:'margin:2px 0 8px;flex-wrap:wrap'});
+    card.appendChild(sumLine);
+    const wrap = h('div',{style:'max-height:52vh;overflow:auto;border:1px solid var(--border);border-radius:10px'});
+    const tbl = h('table',{class:'sumtable',style:'min-width:640px'});
+    tbl.appendChild(h('thead',{html:'<tr><th>#</th><th style="text-align:left">운송장번호</th><th style="text-align:left">주문코드</th><th style="text-align:left">모델</th><th>수량</th><th>회사</th><th>배송지</th><th style="text-align:left">상태</th><th></th></tr>'}));
+    const tb = h('tbody'); tbl.appendChild(tb); wrap.appendChild(tbl); card.appendChild(wrap);
+    const actions = h('div',{class:'row',style:'margin-top:10px'});
+    const submitBtn = h('button',{class:'btn-primary',text:'제출'});
+    const clearBtn = h('button',{class:'btn-ghost',text:'제출 전 목록 모두 지우기',style:'flex:none'});
+    actions.append(submitBtn, clearBtn); card.appendChild(actions);
+    const msg = h('div',{style:'margin-top:8px;font-weight:700'}); card.appendChild(msg);
+    const sndLbl = h('label',{style:'display:flex;gap:6px;align-items:center;font-weight:400;margin:10px 0 0'});
+    const sndChk = h('input',{type:'checkbox',checked:'checked',style:'width:auto;margin:0'}); sndChk.onchange = ()=>{ sound = sndChk.checked; };
+    sndLbl.append(sndChk, document.createTextNode('소리 알림 (성공 짧은 소리 / 문제 낮은 소리)')); card.appendChild(sndLbl);
     body.appendChild(card);
 
+    // --- 딩톡 입력용 복사 / 오늘 내가 수령한 박스 ---
     const dingCard = h('div',{class:'card'});
     dingCard.appendChild(h('div',{style:'font-weight:700;margin-bottom:4px',text:'딩톡 입력용 복사'}));
-    dingCard.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'오늘 내가 스캔한 운송장번호만 한 줄에 하나씩 복사합니다. 딩톡 빠른 입력(快速填报)의 운송장 번호 칸에 붙여넣으면 나머지는 딩톡이 채웁니다.'}));
+    dingCard.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'오늘 내가 제출한 운송장번호만 한 줄에 하나씩 복사합니다. 딩톡 빠른 입력(快速填报)의 운송장 번호 칸에 붙여넣으면 나머지는 딩톡이 채웁니다.'}));
     const dingMsg = h('div',{class:'muted',style:'margin-top:6px'});
-    const dingBtn = h('button',{class:'btn-ghost',style:'width:100%',text:'오늘 스캔분 복사 (선택한 사무실만)'});
+    const dingBtn = h('button',{class:'btn-ghost',style:'width:100%',text:'오늘 제출분 복사 (선택한 사무실만)'});
     dingBtn.onclick = async ()=>{
       dingMsg.textContent = '';
       const { data, error } = await sb.rpc('online_my_today_all', { p_office: office });
       if(error){ dingMsg.textContent = error.message; return; }
-      const rows = data||[];
-      if(!rows.length){ dingMsg.textContent = office+' 사무실로 오늘 스캔한 송장이 없습니다.'; return; }
-      const txt = rows.map(r=>r.tracking).join('\n');
-      try{ await navigator.clipboard.writeText(txt); dingMsg.textContent = '✓ '+rows.length+'건 복사됨. 딩톡 빠른 입력 표에 붙여넣기(Ctrl+V) 하세요.'; }
+      const list = data||[];
+      if(!list.length){ dingMsg.textContent = office+' 사무실로 오늘 제출한 송장이 없습니다.'; return; }
+      const txt = list.map(r=>r.tracking).join('\n');
+      try{ await navigator.clipboard.writeText(txt); dingMsg.textContent = '✓ '+list.length+'건 복사됨. 딩톡 빠른 입력 표에 붙여넣기(Ctrl+V) 하세요.'; }
       catch(e){ dingMsg.textContent = '복사 권한이 없어 아래 내용을 직접 복사하세요.'; const box = h('div',{class:'copybox'}); box.textContent = txt; dingCard.appendChild(box); }
     };
     dingCard.append(dingBtn, dingMsg); body.appendChild(dingCard);
     const todayCard = h('div',{class:'card'}); const todayBox = h('div',{}); todayCard.appendChild(todayBox); body.appendChild(todayCard);
 
+    // --- 소리 ---
     let actx = null;
     const beep = (ok)=>{
       if(!sound) return;
@@ -1300,106 +1290,156 @@ function renderAdminView(){
         if(ok) tone(1100,.05,0); else { tone(220,.18,0); tone(180,.25,.22); }
       }catch(e){}
     };
-    let okBoxes = 0, okUnits = 0, bad = 0;
-    const seen = new Set();
-    const addLog = (cls, text)=>{
-      const d = h('div',{class:cls,style:'margin:4px 0 0;font-weight:600;font-size:13px',text});
-      log.insertBefore(d, log.firstChild);
-      while(log.children.length>6) log.removeChild(log.lastChild);
+
+    // --- 표 그리기 ---
+    const modelText = r=>{ if(!r.info) return ''; const mp = onlineModelParts(r.info.model_raw); return [mp.model,mp.cap,mp.color].filter(Boolean).join(' '); };
+    const STATUS = {
+      checking:['조회 중…',''], ready:['제출 대기','var(--accent)'], already:['이미 수령됨','var(--danger)'], notfound:['미등록 송장','var(--danger)'],
+      qtyover:['수량 초과','var(--danger)'], submitting:['제출 중…',''], done:['제출 완료 ✓','var(--success)'], failed:['실패','var(--danger)'], voided:['취소됨','var(--muted)']
     };
-    const addBad = (text)=>{
-      bad++; cBad.textContent = '확인 필요 '+bad+'건';
-      badBox.classList.remove('hidden'); document.getElementById('badTitle').classList.remove('hidden');
-      badBox.textContent = (text+'\n'+badBox.textContent).split('\n').slice(0,200).join('\n').trim();
-    };
-    const explain = (r)=>{
-      const trk = r.tracking;
-      const mp = onlineModelParts(r.model_raw);
-      const desc = r.order_no ? (' · '+r.order_no+' · '+mp.model+' '+mp.cap+' '+mp.color+' · '+r.company+' · '+(r.ship_to||'-')) : '';
-      if(r.status==='ok') return [true,'ok','✓ '+trk+desc+' · '+r.qty+'대'];
-      if(r.status==='already') return [false,'err','⚠ '+trk+' 이미 수령됨 ('+(r.by||'')+' '+onlineTime(r.received_at)+')'+desc];
-      if(r.status==='not_found') return [false,'err','✗ '+trk+' 등록되지 않은 송장 (송장 파일 업로드 전일 수 있음)'];
-      if(r.status==='qty_over') return [false,'err','✗ '+trk+' 주문 수량('+r.order_qty+'대)보다 많음'];
-      return [false,'err','✗ '+trk+' 처리 불가 ('+r.status+')'];
-    };
-    // --- 스캔 대기열: 스캔이 빨라도 하나도 빠뜨리지 않고 묶어서 저장 ---
-    const queue = []; let flushing = false, flushTimer = null, todayTimer = null;
-    const enqueue = (trk)=>{
-      trk = trk.trim(); if(!trk) return;
-      if(seen.has(trk)){ beep(false); addLog('err','⚠ '+trk+' 방금 이미 스캔했습니다 (중복)'); addBad(trk+'  방금 중복 스캔'); return; }
-      seen.add(trk); queue.push({tracking:trk, qty, ship_to:office});
-      clearTimeout(flushTimer); flushTimer = setTimeout(flush, queue.length>=50?0:200);
-    };
-    async function flush(){
-      if(flushing || !queue.length) return;
-      flushing = true;
-      const batch = queue.splice(0,50);
-      let data = null, failMsg = null;
-      for(let attempt=0; attempt<3 && !data; attempt++){
-        try{
-          const r = await sb.rpc('online_receive', { p_items: batch });
-          if(r.error) throw r.error; data = r.data||[];
-        }catch(e){ failMsg = e.message||String(e); await new Promise(res=>setTimeout(res, 600*(attempt+1))); }
-      }
-      if(!data){
-        // 저장 결과를 모를 때: 다시 스캔할 수 있게 목록에서 빼고 알린다 (서버가 중복을 막아주므로 안전)
-        batch.forEach(b=>seen.delete(b.tracking));
-        beep(false); addLog('err','✗ 저장 실패 ('+batch.length+'건): '+failMsg+' — 같은 송장을 다시 스캔하세요');
-        addBad('저장 실패 '+batch.map(b=>b.tracking).join(', ')+'  → 다시 스캔 필요');
-      } else {
-        let anyBad = false;
-        data.forEach(r=>{ const [ok,cls,msg] = explain(r); addLog(cls,msg);
-          if(ok){ okBoxes++; okUnits += r.qty;
-            if(r.ship_to && r.ship_to!==(batch.find(b=>b.tracking===r.tracking)||{}).ship_to){ anyBad = true; addBad('(저장됨) '+r.tracking+' 주문 배송지는 '+r.ship_to+'인데 '+(batch.find(b=>b.tracking===r.tracking)||{}).ship_to+' 사무실에서 수령함'); }
-          } else { anyBad = true; addBad(msg); seen.delete(r.tracking); } });
-        if(data.length){ const lr = data[data.length-1]; showLast(lr, lr.status==='ok'); }
-        cOk.textContent = '저장 '+okBoxes+'박스 · '+okUnits+'대';
-        beep(!anyBad);
-        clearTimeout(todayTimer); todayTimer = setTimeout(loadToday, 800);
-      }
-      flushing = false;
-      if(queue.length) flush();
+    function saveDraft(){ try{ localStorage.setItem('pm_online_draft', JSON.stringify(rows.filter(r=>r.status==='ready'||r.status==='checking').map(r=>({tracking:r.tracking,qty:r.qty,office:r.office})))); }catch(e){} }
+    function render(){
+      tb.innerHTML = '';
+      rows.forEach((r,i)=>{
+        const tr = h('tr',{id:'rcvrow'+r.k, style:'border-left:4px solid '+(STATUS[r.status][1]||'transparent')+(r.status==='voided'?';opacity:.55':'')});
+        const info = r.info||{};
+        tr.appendChild(h('td',{text:String(i+1)}));
+        tr.appendChild(h('td',{class:'mono',style:'text-align:left;font-weight:700',text:r.tracking}));
+        tr.appendChild(h('td',{class:'mono',style:'text-align:left',text:info.order_no||''}));
+        tr.appendChild(h('td',{style:'text-align:left;white-space:normal',text:modelText(r)}));
+        const qtd = h('td',{});
+        if(r.status==='ready'){
+          const sel = h('select',{style:'width:64px;margin:0;padding:4px'}); [2,1].filter(n=>!info.qty||n<=info.qty).forEach(n=>sel.appendChild(h('option',{value:n,text:n+'대'}))); sel.value = String(r.qty);
+          sel.onchange = ()=>{ r.qty = Number(sel.value); saveDraft(); renderSummary(); inp.focus(); }; qtd.appendChild(sel);
+        } else qtd.textContent = (r.qty||'')+(r.qty?'대':'');
+        tr.appendChild(qtd);
+        tr.appendChild(h('td',{text:info.company||''}));
+        tr.appendChild(h('td',{text:info.ship_to||''}));
+        let stTxt = STATUS[r.status][0];
+        if(r.msg) stTxt += ' · '+r.msg;
+        if(r.status==='ready' && info.ship_to && info.ship_to!==r.office) stTxt += ' · ⚠ 주문 배송지 '+info.ship_to+' ≠ '+r.office+' 사무실';
+        tr.appendChild(h('td',{style:'text-align:left;white-space:normal;font-weight:700;color:'+(STATUS[r.status][1]||'inherit'),text:stTxt}));
+        const act = h('td',{});
+        if(r.status==='done'){
+          act.appendChild(h('button',{class:'btn-danger btn-sm',text:'취소',onclick:async()=>{
+            if(!confirm(r.tracking+' 수령을 취소할까요? (기록은 지워지지 않고 취소로 남습니다)')) return;
+            const { error } = await sb.rpc('online_void_own', { p_receipt_id:r.rid, p_reason:'오스캔' });
+            if(error){ msg.style.color='var(--danger)'; msg.textContent = error.message; return; }
+            r.status='voided'; render(); loadToday(); inp.focus();
+          }}));
+        } else if(r.status!=='submitting') act.appendChild(h('button',{class:'btn-ghost btn-sm',text:'✕',title:'이 줄 지우기',onclick:()=>{ rows.splice(rows.indexOf(r),1); saveDraft(); render(); inp.focus(); }}));
+        tr.appendChild(act);
+        tb.appendChild(tr);
+      });
+      renderSummary();
+      wrap.scrollTop = wrap.scrollHeight;
     }
-    // --- 자동 인식: 입력이 0.15초 멈추면(또는 Enter) 한 건으로 인식 ---
+    function renderSummary(){
+      const rd = rows.filter(r=>r.status==='ready'), dn = rows.filter(r=>r.status==='done');
+      const bad = rows.filter(r=>['already','notfound','qtyover','failed'].includes(r.status));
+      sumLine.innerHTML = '';
+      sumLine.appendChild(h('div',{style:'font-weight:800;color:var(--accent)',text:'제출 대기 '+rd.length+'박스 · '+rd.reduce((a,r)=>a+r.qty,0)+'대'}));
+      sumLine.appendChild(h('div',{style:'font-weight:800;color:var(--success)',text:'제출 완료 '+dn.length+'박스 · '+dn.reduce((a,r)=>a+r.qty,0)+'대'}));
+      sumLine.appendChild(h('div',{style:'font-weight:800;color:var(--danger)',text:'확인 필요 '+bad.length+'건 (제출되지 않음)'}));
+      submitBtn.textContent = rd.length ? ('제출 ('+rd.length+'박스 · '+rd.reduce((a,r)=>a+r.qty,0)+'대)') : '제출';
+      submitBtn.disabled = !rd.length || rows.some(r=>r.status==='submitting');
+    }
+
+    // --- 스캔 → 표에 추가 → 주문 정보 조회 ---
+    const lookups = []; let lookTimer = null, looking = false;
+    function addScan(trk, qtyForRow, officeForRow){
+      trk = trk.trim(); if(!trk) return;
+      const dup = rows.find(r=>r.tracking===trk && r.status!=='voided');
+      if(dup){
+        beep(false); msg.style.color='var(--danger)'; msg.textContent = '⚠ '+trk+' 이미 표에 있습니다 (중복 스캔)';
+        const el = document.getElementById('rcvrow'+dup.k); if(el){ if(el.scrollIntoView) el.scrollIntoView({block:'nearest'}); el.style.background='var(--chip)'; setTimeout(()=>{ el.style.background=''; },1200); }
+        return;
+      }
+      msg.textContent = '';
+      const row = { k:++seq, tracking:trk, qty:qtyForRow||qty, office:officeForRow||office, status:'checking', info:null, msg:'', rid:null };
+      rows.push(row); lookups.push(row); render();
+      clearTimeout(lookTimer); lookTimer = setTimeout(runLookups, 120);
+    }
+    async function runLookups(){
+      if(looking || !lookups.length) return; looking = true;
+      const batch = lookups.splice(0,50);
+      let data = null, fail = null;
+      for(let a=0; a<3 && !data; a++){
+        try{ const r = await sb.rpc('online_find_many', { p_trackings: batch.map(b=>b.tracking) }); if(r.error) throw r.error; data = r.data||[]; }
+        catch(e){ fail = e.message||String(e); await new Promise(res=>setTimeout(res, 500*(a+1))); }
+      }
+      let anyBad = false;
+      batch.forEach(row=>{
+        if(!data){ row.status='failed'; row.msg='조회 실패('+fail+') — ✕로 지우고 다시 스캔하세요'; anyBad = true; return; }
+        const f = data.find(x=>x.tracking===row.tracking);
+        if(!f || !f.found){ row.status='notfound'; row.msg='송장 파일이 아직 등록되지 않았을 수 있습니다'; anyBad = true; }
+        else { row.info = f;
+          if(f.already){ row.status='already'; row.msg=(f.received_by||'')+' '+onlineTime(f.received_at)+(f.source&&f.source!=='scan'?' ('+f.source+')':''); anyBad = true; }
+          else { row.status='ready'; if(f.qty && row.qty>f.qty) row.qty=f.qty; } }
+      });
+      beep(!anyBad); render(); saveDraft(); looking = false;
+      if(lookups.length) runLookups();
+    }
+
+    // --- 자동 인식 (Enter 없이): 입력이 0.15초 멈추면 한 건 ---
     let idle = null;
-    const consume = ()=>{
-      const v = inp.value; if(!v.trim()) return;
-      inp.value = '';
-      v.split(/[\s,;]+/).filter(Boolean).forEach(enqueue);
-    };
-    inp.addEventListener('input', ()=>{
-      clearTimeout(idle);
-      const v = inp.value.trim();
-      if(/[\s,;]/.test(v)) { consume(); return; }
-      if(v.length>=8) idle = setTimeout(consume, 150); // 스캐너는 글자 간격이 매우 짧아, 0.15초 멈추면 한 개 입력이 끝난 것으로 본다
-    });
+    const consume = ()=>{ const v = inp.value; if(!v.trim()) return; inp.value=''; v.split(/[\s,;]+/).filter(Boolean).forEach(x=>addScan(x)); };
+    inp.addEventListener('input', ()=>{ clearTimeout(idle); const v = inp.value.trim(); if(/[\s,;]/.test(v)){ consume(); return; } if(v.length>=8) idle = setTimeout(consume, 150); });
     inp.addEventListener('keydown', e=>{ if(e.key==='Enter'){ clearTimeout(idle); consume(); e.preventDefault(); } });
     inp.addEventListener('blur', ()=> setTimeout(()=>{ if(document.activeElement===document.body) inp.focus(); }, 150));
+
+    // --- 제출 ---
+    submitBtn.onclick = async ()=>{
+      const todo = rows.filter(r=>r.status==='ready'); if(!todo.length) return;
+      todo.forEach(r=>r.status='submitting'); render(); msg.textContent='';
+      let ok = 0, units = 0, problems = 0;
+      for(let i=0;i<todo.length;i+=50){
+        const chunk = todo.slice(i,i+50);
+        let data = null, fail = null;
+        for(let a=0; a<3 && !data; a++){
+          try{ const r = await sb.rpc('online_receive', { p_items: chunk.map(c=>({tracking:c.tracking, qty:c.qty, ship_to:c.office})) }); if(r.error) throw r.error; data = r.data||[]; }
+          catch(e){ fail = e.message||String(e); await new Promise(res=>setTimeout(res, 600*(a+1))); }
+        }
+        chunk.forEach(row=>{
+          if(!data){ row.status='ready'; row.msg=''; problems++; return; }   // 저장 결과를 모를 때: 제출 대기로 되돌림 (서버가 중복을 막아 안전)
+          const x = data.find(d=>d.tracking===row.tracking);
+          if(x && x.status==='ok'){ row.status='done'; row.rid=x.receipt_id; row.qty=x.qty; ok++; units+=x.qty; }
+          else if(x && x.status==='already'){ row.status='already'; row.msg=(x.by||'')+' '+onlineTime(x.received_at); problems++; }
+          else { row.status='failed'; row.msg=x?x.status:'응답 없음'; problems++; }
+        });
+        if(!data){ msg.style.color='var(--danger)'; msg.textContent = '✗ 저장 실패: '+fail+' — 제출 대기로 남겨 두었습니다. 잠시 후 다시 [제출]을 누르세요.'; }
+      }
+      beep(problems===0); saveDraft(); render(); loadToday();
+      if(!msg.textContent){ msg.style.color = problems?'var(--danger)':'var(--success)'; msg.textContent = '✓ '+ok+'박스 · '+units+'대 제출 완료'+(problems?(' · 확인 필요 '+problems+'건'):''); }
+      inp.focus();
+    };
+    clearBtn.onclick = ()=>{
+      const n = rows.filter(r=>r.status==='ready'||r.status==='checking'||r.status==='already'||r.status==='notfound'||r.status==='failed').length;
+      if(!n || !confirm('제출 전 목록 '+n+'건을 모두 지울까요? (이미 제출 완료된 줄은 그대로입니다)')) return;
+      for(let i=rows.length-1;i>=0;i--) if(rows[i].status!=='done' && rows[i].status!=='voided' && rows[i].status!=='submitting') rows.splice(i,1);
+      saveDraft(); render(); inp.focus();
+    };
+    window.onbeforeunload = e=>{ if(rows.some(r=>r.status==='ready'||r.status==='checking')){ e.preventDefault(); e.returnValue=''; return ''; } };
 
     async function loadToday(){
       const { data, error } = await sb.rpc('online_my_today');
       todayBox.innerHTML='';
       if(error){ todayBox.appendChild(h('div',{class:'err',text:error.message})); return; }
-      const rows = data||[];
+      const list = data||[];
       todayBox.appendChild(h('div',{class:'flexbetween',style:'margin-bottom:6px'},[
-        h('div',{style:'font-weight:700',text:'오늘 내가 수령한 박스'}),
-        h('div',{class:'muted',text:(rows.length?Number(rows[0].boxes):0)+'박스 · '+(rows.length?Number(rows[0].units):0)+'대'})
+        h('div',{style:'font-weight:700',text:'오늘 내가 제출한 박스'}),
+        h('div',{class:'muted',text:(list.length?Number(list[0].boxes):0)+'박스 · '+(list.length?Number(list[0].units):0)+'대 (최근 100건 표시)'})
       ]));
-      if(!onlineHas('admin')) todayBox.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'잘못 저장한 건은 관리자에게 요청해 주세요. (최근 100건만 표시)'}));
-      if(!rows.length) todayBox.appendChild(h('div',{class:'muted',text:t('none')}));
-      rows.forEach(r=>{
-        const line = h('div',{class:'itemline'},[
+      if(!list.length) todayBox.appendChild(h('div',{class:'muted',text:t('none')}));
+      list.forEach(r=>{
+        todayBox.appendChild(h('div',{class:'itemline'},[
           h('div',{},[h('div',{class:'mono',text:r.tracking}),h('div',{class:'muted',text:[r.company,r.qty+'대',new Date(r.received_at).toLocaleTimeString('ko-KR',{hour12:false,timeZone:'Asia/Seoul'})].join(' · ')})])
-        ]);
-        if(onlineHas('admin')) line.appendChild(h('button',{class:'btn-danger btn-sm',text:'취소',onclick:async()=>{
-          const why = prompt('취소 사유를 입력하세요 (기록은 삭제되지 않고 취소로 남습니다)'); if(!why||!why.trim()) return;
-          const { error } = await sb.rpc('online_void_receipt',{ p_receipt_id:r.receipt_id, p_reason:why.trim() });
-          if(error) alert(error.message); else { seen.delete(r.tracking); loadToday(); }
-        }}));
-        todayBox.appendChild(line);
+        ]));
       });
     }
-    loadToday();
+    // 임시 저장된 제출 전 목록 복원
+    try{ const d = JSON.parse(localStorage.getItem('pm_online_draft')||'[]'); d.forEach(x=>addScan(x.tracking, x.qty, x.office)); if(d.length){ msg.style.color='var(--accent)'; msg.textContent = '이전에 제출하지 않은 '+d.length+'건을 불러왔습니다. 확인 후 제출하세요.'; } }catch(e){}
+    render(); loadToday();
     setTimeout(()=>inp.focus(), 50);
   }
 
