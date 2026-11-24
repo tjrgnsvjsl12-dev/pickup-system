@@ -1048,7 +1048,7 @@ function renderAdminView(){
     const ov = (kind)=> overdue.filter(r=>r.kind===kind && byCo(r) && (!onlineMonth || r.ym===onlineMonth)).reduce((a,r)=>({n:a.n+Number(r.orders),u:a.u+Number(r.units)}),{n:0,u:0});
     const oa = ov('arr'), os = ov('ship');
     const alertCard = h('div',{class:'card',style:(oa.n||os.n)?'border-color:var(--danger)':''});
-    alertCard.appendChild(h('div',{style:'font-weight:800;margin-bottom:'+((oa.n||os.n)?'8':'0')+'px;color:'+((oa.n||os.n)?'var(--danger)':'var(--success)'),text:(oa.n||os.n)?'⚠ 도착 예정일이 지난 주문 (주문 당시 예정일 기준 · 참고용)':'✓ 도착 예정일이 지난 주문 없음 (주문 당시 예정일 기준)'}));
+    alertCard.appendChild(h('div',{style:'font-weight:800;margin-bottom:'+((oa.n||os.n)?'8':'0')+'px;color:'+((oa.n||os.n)?'var(--danger)':'var(--success)'),text:(oa.n||os.n)?'⚠ 도착 예정일이 지난 주문 (마지막으로 등록된 예정일 기준)':'✓ 도착 예정일이 지난 주문 없음 (마지막으로 등록된 예정일 기준)'}));
     const mkAlert = (kind, label, hint, v)=>{
       if(!v.n) return;
       alertCard.appendChild(h('button',{type:'button',class:'btn-ghost alertbtn'+(onlineAlertKind===kind?' sel':''),onclick:()=>{ onlineAlertKind = onlineAlertKind===kind?'':kind; onlineStage=''; onlineDay=''; drawDashboard(); }},[
@@ -1372,7 +1372,7 @@ function renderAdminView(){
     body.appendChild(flowGuide('track'));
     const card = h('div',{class:'card'});
     card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'운송장 등록'}));
-    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'택배 운송장번호가 나온 건(배송중)을 올리는 화면입니다. 도착을 확인하는 화면이 아닙니다 — 도착한 건은 [수령] 스캔이나 [딩톡 가져오기]로 처리하세요. 나온 만큼만 올려도 되고, 이미 등록된 운송장은 건너뛰며, 저장된 주문은 "배송중"이 됩니다. 파일에는 주문번호와 운송장번호 열이 있어야 합니다.'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'택배 운송장번호가 나온 건(배송중)을 올리는 화면입니다. 도착을 확인하는 화면이 아닙니다 — 도착한 건은 [수령] 스캔이나 [딩톡 가져오기]로 처리하세요. 파일에 "배송 예정 기간" 열(예: 11월 25 - 11월 27)을 넣으면 그 주문의 예정 기간도 함께 갱신되고, 운송장이 아직 없는 주문은 운송장번호를 비워 두고 예정 기간만 올려도 됩니다. 나온 만큼만 올려도 되고, 이미 등록된 운송장은 건너뛰며, 저장된 주문은 "배송중"이 됩니다. 파일에는 주문번호와 운송장번호 열이 있어야 합니다.'}));
     card.appendChild(h('label',{text:'엑셀/CSV 파일 선택'}));
     const file = h('input',{type:'file',accept:'.xlsx,.xls,.csv'});
     card.appendChild(file);
@@ -1390,6 +1390,30 @@ function renderAdminView(){
     const TRK = ['송장','运单','物流','tracking','waybill','단号','单号'];
     const CAR = ['택배사','快递公司','carrier'];
     const LNK = ['링크','link','url','跟踪'];
+    const WIN = ['예정','도착일','배송기간','预计','预估','送达','eta','window','estimated','기간'];
+    // 애플 배송 예정 기간 문자열 → {from,to} (YYYY-MM-DD). 예: "11월 25 - 11월 27", "11/25~11/27", "2026-11-25 ~ 2026-11-27", "Nov 25 - Nov 27"
+    const MON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    function parseWindow(v){
+      const t = String(v==null?'':v).trim(); if(!t) return null;
+      const now = new Date(Date.now()+9*3600*1000); const cy = now.getUTCFullYear(), cm = now.getUTCMonth()+1;
+      const found = [];
+      const re = /(?:(\d{4})\s*[-./년年]\s*)?(\d{1,2})\s*[-./월月]\s*(\d{1,2})\s*(?:일|日)?|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*(\d{1,2})/gi;
+      let m;
+      while((m = re.exec(t))){
+        const y = m[1]?Number(m[1]):null, mo = m[2]?Number(m[2]):MON[m[4].toLowerCase()], d = Number(m[3]||m[5]);
+        if(mo>=1&&mo<=12&&d>=1&&d<=31) found.push({y,mo,d,end:re.lastIndex});
+      }
+      if(!found.length) return null;
+      if(found.length===1){ // "11월 25일 - 27일" 처럼 뒤쪽에 일만 있는 경우
+        const m2 = /^\s*[-~–—]\s*(\d{1,2})\s*(?:일|日)?\s*$/.exec(t.slice(found[0].end));
+        if(m2) found.push({y:found[0].y,mo:found[0].mo,d:Number(m2[1])});
+      }
+      const yr = (f)=> f.y || (f.mo < cm-6 ? cy+1 : f.mo > cm+6 ? cy-1 : cy);
+      const iso = (y,mo,d)=> y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      const a = found[0], b = found[found.length-1];
+      const ya = yr(a); let yb = b.y || ya; if(!b.y && (b.mo<a.mo)) yb = ya+1;
+      return { from: iso(ya,a.mo,a.d), to: iso(yb,b.mo,b.d) };
+    }
     const carrierOf = u=> /cjlogistics/i.test(u)?'CJ대한통운':/hanjin/i.test(u)?'한진':/lotte/i.test(u)?'롯데':/logen/i.test(u)?'로젠':/epost|koreapost/i.test(u)?'우체국':'';
     const findCol = (hdr, keys, skip)=> hdr.findIndex((x,i)=> i!==skip && keys.some(k=> String(x).toLowerCase().replace(/\s/g,'').includes(k.toLowerCase())));
     async function readFile(f){
@@ -1403,13 +1427,21 @@ function renderAdminView(){
           const hdr = aoa[hi]; const oi = findCol(hdr, ORD, -1);
           if(oi<0) continue;
           const ti = findCol(hdr, TRK.filter(k=>k!=='单号'||true), oi); // 주문번호 열은 제외
-          if(ti<0) continue;
           const ci = findCol(hdr, CAR, -1), li = findCol(hdr, LNK, oi);
-          aoa.slice(hi+1).forEach(r=>{ if(r[oi]&&r[ti]){ const lk = li>=0?String(r[li]).trim():''; out.push({order_no:String(r[oi]).trim(), tracking:String(r[ti]).trim(), carrier: ci>=0?String(r[ci]).trim():carrierOf(lk), link: /^https?:\/\//i.test(lk)?lk:''}); } });
+          const wi = hdr.findIndex((x,i)=> i!==oi && i!==ti && i!==li && i!==ci && WIN.some(k=> String(x).toLowerCase().replace(/\s/g,'').includes(k.toLowerCase())));
+          if(ti<0 && wi<0) continue;
+          aoa.slice(hi+1).forEach(r=>{
+            if(!r[oi]) return;
+            const trk = ti>=0 ? String(r[ti]).trim() : '';
+            const wraw = wi>=0 ? String(r[wi]).trim() : ''; const w = wraw ? parseWindow(wraw) : null;
+            if(!trk && !wraw) return;
+            const lk = li>=0?String(r[li]).trim():'';
+            out.push({order_no:String(r[oi]).trim(), tracking:trk, carrier: ci>=0?String(r[ci]).trim():carrierOf(lk), link: /^https?:\/\//i.test(lk)?lk:'', window_from: w?w.from:'', window_to: w?w.to:'', window_text: wraw, window_bad: !!wraw && !w});
+          });
           break;
         }
       }
-      if(!out.length) throw new Error('주문번호 열과 운송장번호 열을 찾지 못했습니다. 첫 줄 제목에 "주문번호", "운송장번호"가 있는지 확인해 주세요.');
+      if(!out.length) throw new Error('주문번호 열과 운송장번호(또는 배송 예정 기간) 열을 찾지 못했습니다. 첫 줄 제목에 "주문번호", "운송장번호"가 있는지 확인해 주세요.');
       return out;
     }
     function readText(txt){
@@ -1423,35 +1455,39 @@ function renderAdminView(){
       if(!rows.length) throw new Error('붙여넣은 내용에서 "주문번호 운송장번호" 쌍을 찾지 못했습니다.');
       return rows;
     }
-    const LABEL = {new:['ok','신규 등록'], same:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'], order_has_other:['err','주문에 다른 운송장이 이미 있음 (건너뜀)'], tracking_used:['err','다른 주문에 쓰인 운송장 (건너뜀)'], not_found:['err','등록되지 않은 주문번호 (건너뜀)']};
+    const LABEL = {new:['ok','신규 등록'], window_only:['muted','예정 기간만 있는 줄 (운송장 없음)'], same:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','파일 안에서 중복 (건너뜀)'], order_has_other:['err','주문에 다른 운송장이 이미 있음 (건너뜀)'], tracking_used:['err','다른 주문에 쓰인 운송장 (건너뜀)'], not_found:['err','등록되지 않은 주문번호 (건너뜀)']};
     prevBtn.onclick = async ()=>{
       err.className='err hidden'; out.className='card hidden'; out.innerHTML='';
       prevBtn.disabled = true;
       try{
         let rows = file.files[0] ? await readFile(file.files[0]) : readText(ta.value);
-        rows = rows.filter(r=>r.order_no && r.tracking);
-        const { data, error } = await sb.rpc('online_attach_tracking', { p_rows: rows, p_apply: false });
+        rows = rows.filter(r=>r.order_no && (r.tracking || r.window_from));
+        const badWin = rows.filter(r=>r.window_bad).length;
+        const { data, error } = await sb.rpc('online_attach_tracking', { p_rows: rows.map(({window_bad,...x})=>x), p_apply: false });
         if(error) throw error;
         const res = data||[];
         const cnt = {}; res.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
         out.className='card';
         out.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:'미리보기 · 총 '+res.length+'건'}));
         Object.keys(LABEL).forEach(k=>{ if(cnt[k]) out.appendChild(h('div',{class:LABEL[k][0],style:'margin:2px 0',text:LABEL[k][1]+' '+cnt[k]+'건'})); });
-        const bad = res.filter(r=>r.status!=='new' && r.status!=='same');
+        const winN = res.filter(r=>r.win).length;
+        if(winN) out.appendChild(h('div',{class:'ok',style:'margin:2px 0',text:'배송 예정 기간 갱신 '+winN+'건'}));
+        if(badWin) out.appendChild(h('div',{class:'err',style:'margin:2px 0',text:'예정 기간을 읽지 못한 줄 '+badWin+'건 (예: "11월 25 - 11월 27" 형식이 아님) — 해당 줄의 예정 기간은 건너뜁니다.'}));
+        const bad = res.filter(r=>r.status!=='new' && r.status!=='same' && r.status!=='window_only');
         if(bad.length){
           const box = h('div',{class:'copybox',style:'margin-top:8px'});
           box.textContent = bad.slice(0,100).map(r=>r.order_no+'  '+r.tracking+'  → '+LABEL[r.status][1]+(r.other?(' ('+r.other+')'):'')).join('\n')+(bad.length>100?'\n… 외 '+(bad.length-100)+'건':'');
           out.appendChild(box);
         }
         const newRows = res.filter(r=>r.status==='new');
-        if(newRows.length){
-          const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:'신규 '+newRows.length+'건 저장 (배송중으로 변경)'});
+        if(newRows.length || winN){
+          const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:(newRows.length?'운송장 '+newRows.length+'건 저장 (배송중으로 변경)':'')+(newRows.length&&winN?' + ':'')+(winN?'예정 기간 '+winN+'건 갱신':'')});
           ok.onclick = async ()=>{
             ok.disabled = true;
-            const { data:d2, error:e2 } = await sb.rpc('online_attach_tracking', { p_rows: newRows.map(r=>((()=>{ const x = rows.find(y=>y.order_no===r.order_no)||{}; return {order_no:r.order_no,tracking:r.tracking,carrier:x.carrier||'',link:x.link||''}; })())), p_apply: true });
+            const { data:d2, error:e2 } = await sb.rpc('online_attach_tracking', { p_rows: rows.map(({window_bad,...x})=>x), p_apply: true });
             if(e2){ err.textContent=e2.message; err.className='err'; ok.disabled=false; return; }
-            const saved = (d2||[]).filter(r=>r.status==='new').length;
-            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+saved+'건 저장했습니다. 지금부터 해당 운송장은 수령(스캔) 화면에서 조회됩니다.'}));
+            const saved = (d2||[]).filter(r=>r.status==='new').length, savedW = (d2||[]).filter(r=>r.win).length;
+            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+(saved?'운송장 '+saved+'건 저장':'')+(saved&&savedW?', ':'')+(savedW?'예정 기간 '+savedW+'건 갱신':'')+'했습니다.'+(saved?' 지금부터 해당 운송장은 수령(스캔) 화면에서 조회됩니다.':'')}));
             file.value=''; ta.value='';
           };
           out.appendChild(ok);
@@ -3294,7 +3330,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-163215';
+const BUILD = 'b20261124-163504';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
