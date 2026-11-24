@@ -108,7 +108,8 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .ptable thead th{position:sticky;top:0;background:var(--chip);z-index:1;font-size:11.5px;color:var(--muted);font-weight:700;padding:8px 8px;text-align:left;white-space:nowrap}
 .ptable td{padding:8px;border-top:1px solid var(--border);font-size:13px;white-space:nowrap;font-variant-numeric:tabular-nums}
 .ptable tbody tr:nth-child(even){background:var(--surface-2)}
-.ptable td.none{color:var(--muted)}.ptable td.late{color:var(--danger);font-weight:700}
+.ptable td.none{color:var(--muted)}
+.trklink{color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:2px}.trklink:hover{opacity:.75}.ptable td.late{color:var(--danger);font-weight:700}
 .statusbadge.before{background:var(--chip);color:var(--muted)}
 .colorsw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;border:1px solid var(--border)}
 .sumwrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
@@ -800,6 +801,13 @@ function renderAdminView(){
   const onlineEsc = s => String(s==null?'':s).replace(/[&<>"]/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
   const onlineTime = v => { if(!v) return ''; const p = {}; new Intl.DateTimeFormat('en-GB',{timeZone:'Asia/Seoul',month:'numeric',day:'numeric',hour:'2-digit',minute:'2-digit',hour12:false}).formatToParts(new Date(v)).forEach(x=>p[x.type]=x.value); return p.month+'/'+p.day+' '+p.hour.replace('24','00')+':'+p.minute; };
   const nf = n => Number(n||0).toLocaleString('ko-KR');
+  // 운송장 조회 주소: 저장된 추적 링크 > 택배사별 주소 > 네이버 검색(택배사 자동 인식)
+  const trackUrl = r => {
+    const n = String(r.tracking||'').trim(); if(!n) return '';
+    if(/^https?:\/\//i.test(r.track_link||'')) return r.track_link;
+    if(/CJ|대한통운/i.test(r.carrier||'')) return 'https://www.cjlogistics.com/ko/tool/parcel/newTracking?gnbInvcNo='+encodeURIComponent(n);
+    return 'https://search.naver.com/search.naver?query='+encodeURIComponent('운송장 '+n);
+  };
   const stageLabel = v => v==='송장 대기' ? '배송 전' : v;
 
   function onlineModelParts(raw){
@@ -964,6 +972,7 @@ function renderAdminView(){
     const q = h('input',{type:'search',placeholder:'주문번호 / 운송장번호 검색'});
     lc.appendChild(q);
     const cnt = h('div',{class:'muted',style:'margin:8px 0 6px'}); lc.appendChild(cnt);
+    lc.appendChild(h('div',{class:'muted',style:'margin:-2px 0 6px',text:'운송장번호를 누르면 택배 배송 조회 화면이 새 창으로 열립니다.'}));
     const wrap = h('div',{class:'ptwrap'});
     const pt = h('table',{class:'ptable'});
     const alertMode = !!onlineAlertKind;
@@ -988,7 +997,7 @@ function renderAdminView(){
         const last = alertMode ? h('td',{class:'late',text:late}) : h('td',{},[h('span',{class:'statusbadge '+(r.stage==='배송중'?'in_progress':'before'),text:stageLabel(r.stage)})]);
         list.appendChild(h('tr',{},[
           h('td',{class:'mono',text:r.order_no}), h('td',{text:r.company||''}), h('td',{text:r.ship_to||''}), h('td',{text:r.window_text||''}),
-          h('td',{class:'mono'+(r.tracking?'':' none'),text:r.tracking||'운송장 없음'}), last
+          (r.tracking ? h('td',{class:'mono'},[h('a',{class:'trklink',href:trackUrl(r),target:'_blank',rel:'noopener noreferrer',title:'배송 조회 (새 창)',text:r.tracking+' ↗'})]) : h('td',{class:'mono none',text:'운송장 없음'})), last
         ]));
       });
       offset += rows.length;
