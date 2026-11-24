@@ -837,6 +837,7 @@ function renderAdminView(){
     return 'https://search.naver.com/search.naver?query='+encodeURIComponent('운송장 '+n);
   };
   const srcLabel = v => v==='딩톡 이관' ? '딩톡 가져옴' : v;
+  const itemName = raw => { const m = onlineModelParts(raw); return [m.model,m.cap,m.color].filter(Boolean).join(' ') || String(raw||'(모델 없음)'); };
   const stageLabel = v => v==='송장 대기' ? '배송 전' : v;
 
   function onlineModelParts(raw){
@@ -1023,6 +1024,32 @@ function renderAdminView(){
           dbody.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:'날짜를 누르면 아래 목록이 그날 주문만 보입니다. 다시 누르면 해제됩니다.'}));
         });
       }
+    }
+
+    // ②-2 품목별: 어떤 모델·용량·색상이 몇 대 주문됐고 어디까지 왔는지
+    {
+      const mc2 = h('div',{class:'card'});
+      mc2.appendChild(h('div',{style:'font-weight:800;margin-bottom:2px',text:'품목별 ('+scopeLabel+(onlineDay?' · '+onlineDay.slice(5).replace('-','/'):'')+')'}));
+      mc2.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'어떤 모델·용량·색상이 몇 대 주문됐는지, 그중 몇 대가 도착했는지 보여줍니다. 수량은 모두 대(台) 기준입니다.'}));
+      const mbody = h('div',{style:'overflow-x:auto'}); mc2.appendChild(mbody); body.appendChild(mc2);
+      mbody.appendChild(h('div',{class:'muted',text:t('loading')}));
+      sb.rpc('online_model_summary',{ p_company:onlineCompany||null, p_ym:onlineMonth||null, p_day:onlineDay||null }).then(({data,error})=>{
+        mbody.innerHTML='';
+        if(error){ mbody.appendChild(h('div',{class:'err',text:error.message})); return; }
+        const items = {};
+        (data||[]).forEach(r=>{ const k = itemName(r.model_raw); const o = items[k] = items[k] || {n:0,u:0,bu:0,wu:0,du:0}; const u = Number(r.units); o.n += Number(r.orders); o.u += u; if(r.stage==='배송완료') o.du += u; else if(r.stage==='배송중') o.wu += u; else o.bu += u; });
+        const keys = Object.keys(items).sort((a,b)=> items[b].u-items[a].u);
+        if(!keys.length){ mbody.appendChild(h('div',{class:'muted',text:t('none')})); return; }
+        const t5 = h('table',{class:'cotable'});
+        t5.appendChild(h('thead',{html:'<tr><th>품목 (모델 · 용량 · 색상)</th><th>주문</th><th>① 배송 전</th><th>② 배송중</th><th>③ 배송완료</th><th>아직 안 온</th></tr>'}));
+        const b5 = h('tbody'); const tot = {u:0,bu:0,wu:0,du:0,n:0};
+        const c5 = (u,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)})]);
+        keys.forEach(k=>{ const o = items[k]; tot.u+=o.u; tot.bu+=o.bu; tot.wu+=o.wu; tot.du+=o.du; tot.n+=o.n;
+          b5.appendChild(h('tr',{},[h('td',{class:'co',style:'white-space:normal',text:k}), h('td',{},[h('div',{class:'n',text:nf(o.u)}),h('div',{class:'s',text:nf(o.n)+'건'})]), c5(o.bu), c5(o.wu), c5(o.du,'g'), c5(o.bu+o.wu,(o.bu+o.wu)?'r':'g')]));
+        });
+        const f5 = h('tfoot'); f5.appendChild(h('tr',{},[h('td',{class:'co',text:'합계'}), h('td',{},[h('div',{class:'n',text:nf(tot.u)}),h('div',{class:'s',text:nf(tot.n)+'건'})]), c5(tot.bu), c5(tot.wu), c5(tot.du,'g'), c5(tot.bu+tot.wu,(tot.bu+tot.wu)?'r':'g')]));
+        t5.append(b5,f5); mbody.appendChild(t5);
+      });
     }
 
     // ③ 도착 예정일이 지난 주문
@@ -1695,7 +1722,7 @@ function renderAdminView(){
     card.appendChild(h('label',{text:'주문한 달'}));
     const msel = h('select',{}); msel.appendChild(h('option',{value:'',text:'전체 기간'}));
     card.appendChild(msel);
-    card.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:'엑셀에는 "월별정리"(달마다 주문 대비 도착)와 "아직안온주문"(아직 도착하지 않은 주문 전체, 주문일 순) 시트가 함께 들어갑니다.'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:'엑셀에는 "월별정리"(달마다 주문 대비 도착), "품목별"·"월별품목"(모델·용량·색상별 수량)과 "아직안온주문"(아직 도착하지 않은 주문 전체, 주문일 순) 시트가 함께 들어갑니다.'}));
     const err = h('div',{class:'err hidden'});
     const bx = h('button',{class:'btn-primary',text:'엑셀(.xlsx) 내려받기'});
     const bp = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'PDF로 저장 / 인쇄'});
@@ -1728,6 +1755,11 @@ function renderAdminView(){
         const mm = {}; base.forEach(r=>{ const k = ymOf(r)+'|'+r.company; const o = mm[k] = mm[k] || {ym:ymOf(r),co:r.company,n:0,u:0,dn:0,du:0,wn:0,wu:0,bn:0,bu:0}; const q = r.qty||0; o.n++; o.u+=q; if(r.stage==='배송완료'){ o.dn++; o.du+=q; } else if(r.stage==='배송중'){ o.wn++; o.wu+=q; } else { o.bn++; o.bu+=q; } });
         const monthly = Object.values(mm).sort((a,b)=> a.ym<b.ym?1:a.ym>b.ym?-1:(a.co<b.co?-1:1)).map(o=>({'주문한 달':o.ym,'회사':o.co,'주문(건)':o.n,'주문(대)':o.u,'배송 전(건)':o.bn,'배송중(건)':o.wn,'배송완료(건)':o.dn,'배송완료(대)':o.du,'아직 안 온(건)':o.bn+o.wn,'아직 안 온(대)':o.bu+o.wu,'완료율(%)':o.n?Math.round(o.dn/o.n*100):0}));
         if(monthly.length) addSheet('월별정리', monthly);
+        // 품목별: 선택한 범위(회사·달) 전체 / 월별품목: 회사 선택만 반영해 달×품목
+        const itemAgg = (list, withYm)=>{ const o = {}; list.forEach(r=>{ const k = (withYm?ymOf(r)+'|':'')+itemName(r.model_raw); const x = o[k] = o[k] || {ym:ymOf(r),item:itemName(r.model_raw),n:0,u:0,b:0,w:0,d:0}; const q = r.qty||0; x.n++; x.u+=q; if(r.stage==='배송완료') x.d+=q; else if(r.stage==='배송중') x.w+=q; else x.b+=q; }); return Object.values(o); };
+        const fmtItem = (x, withYm)=>Object.assign(withYm?{'주문한 달':x.ym}:{}, {'품목':x.item,'주문(건)':x.n,'주문(대)':x.u,'배송 전(대)':x.b,'배송중(대)':x.w,'배송완료(대)':x.d,'아직 안 온(대)':x.b+x.w});
+        const items1 = itemAgg(data,false).sort((a,b)=>b.u-a.u); if(items1.length) addSheet('품목별', items1.map(x=>fmtItem(x,false)));
+        const items2 = itemAgg(base,true).sort((a,b)=> a.ym<b.ym?1:a.ym>b.ym?-1:b.u-a.u); if(items2.length) addSheet('월별품목', items2.map(x=>fmtItem(x,true)));
         const notYet = data.filter(r=>r.stage!=='배송완료').sort((a,b)=> String(a.order_date||'9999').localeCompare(String(b.order_date||'9999')) || String(a.order_no).localeCompare(String(b.order_no)));
         if(notYet.length) addSheet('아직안온주문', notYet.map(toRow));
         const cs = Object.keys(st).sort();
@@ -3271,7 +3303,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-152311';
+const BUILD = 'b20261124-155614';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
