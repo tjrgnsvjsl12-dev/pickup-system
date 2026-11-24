@@ -111,6 +111,15 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .ptable td.none{color:var(--muted)}
 .trklink{color:var(--accent);font-weight:700;text-decoration:underline;text-underline-offset:2px}.trklink:hover{opacity:.75}.ptable td.late{color:var(--danger);font-weight:700}
 .statusbadge.before{background:var(--chip);color:var(--muted)}
+.monthchip{display:inline-flex;flex-direction:column;align-items:center;gap:1px;line-height:1.25;padding:7px 14px}
+.monthchip .mbadge{font-size:10.5px;font-weight:700;color:var(--muted)}
+.monthchip.haspend .mbadge{color:var(--danger)}
+.monthchip.selected .mbadge,.monthchip.selected.haspend .mbadge{color:var(--accent-fg)}
+.compare{font-size:14px;font-weight:800;margin:0 0 10px;padding:9px 11px;border-radius:9px;background:var(--chip);color:var(--fg);line-height:1.4}
+.compare.alldone{background:var(--success);color:var(--success-fg)}
+.cotable.clickrows tbody tr{cursor:pointer}.cotable.clickrows tbody tr:hover{background:var(--chip)}
+.cotable.clickrows tbody tr.selrow{outline:2px solid var(--accent);outline-offset:-2px;background:var(--chip)}
+.cotable td.r .n{color:var(--danger)}.cotable td.r .s{color:var(--danger)}
 .colorsw{display:inline-block;width:10px;height:10px;border-radius:50%;margin-right:6px;vertical-align:middle;border:1px solid var(--border)}
 .sumwrap{overflow-x:auto;margin:0 -16px;padding:0 16px}
 </style>
@@ -563,7 +572,7 @@ function renderAdminView(){
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
   let onlineMe = null; // {perms:[...], companies:[...]} 온라인 주문 권한
-  let onlineTab = 'sum'; let onlineCompany = ''; let onlineAlertKind = ''; let onlineStage = ''; let onlineRows = null;
+  let onlineTab = 'sum'; let onlineCompany = ''; let onlineAlertKind = ''; let onlineStage = ''; let onlineMonth = ''; let onlineDay = ''; let onlineShowDays = false; let onlineRows = null;
   let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
   let editFromAll = false; // 전체 현황에서 수정 버튼으로 들어왔는지 (저장/취소 후 전체 현황으로 복귀)
   const canEditAll = ()=> !!(myProfile && myProfile.can_edit_all);
@@ -889,50 +898,73 @@ function renderAdminView(){
 
   async function drawOnlineSummary(body){
     body.appendChild(h('div',{class:'muted',text:t('loading')}));
-    let sumRows, overdue = [];
+    let mrows, overdue = [];
     try{
-      const { data, error } = await sb.rpc('online_summary', { p_company: null });
-      if(error) throw error; sumRows = data || [];
-      const oc = await sb.rpc('online_overdue_counts'); overdue = oc.error ? [] : (oc.data||[]);
+      const { data, error } = await sb.rpc('online_month_summary', { p_company: null });
+      if(error) throw error; mrows = data || [];
+      const oc = await sb.rpc('online_overdue_by_month'); overdue = oc.error ? [] : (oc.data||[]);
     }catch(e){ body.innerHTML=''; body.appendChild(h('div',{class:'err',text:e.message||String(e)})); return; }
     body.innerHTML = '';
-    const st = statsFromSummary(sumRows);
-    const companies = Object.keys(st).sort();
-    if(onlineCompany && !st[onlineCompany]) onlineCompany = '';
+    const nowY = new Date().getFullYear();
+    const ymLabel = ym => ym==='미상' ? '주문일 없음' : (Number(ym.slice(0,4))===nowY ? Number(ym.slice(5))+'월' : ym.slice(0,4)+'년 '+Number(ym.slice(5))+'월');
+    const companies = Array.from(new Set(mrows.map(r=>r.company))).sort();
+    const months = Array.from(new Set(mrows.map(r=>r.ym))).sort().reverse();
+    if(onlineCompany && !companies.includes(onlineCompany)) onlineCompany = '';
+    if(onlineMonth && !months.includes(onlineMonth)){ onlineMonth = ''; onlineDay = ''; }
+    const byCo = r => !onlineCompany || r.company===onlineCompany;
+    const sel = mrows.filter(r=> byCo(r) && (!onlineMonth || r.ym===onlineMonth));
+    const st = statsFromSummary(sel);
+    const stCompanies = Object.keys(st).sort();
+    const zero = {total:0,done:0,wait:0,nt:0,tu:0,du:0,wu:0,nu:0};
+    const sumUp = list => list.reduce((a,c)=>({total:a.total+c.total,done:a.done+c.done,wait:a.wait+c.wait,nt:a.nt+c.nt,tu:a.tu+c.tu,du:a.du+c.du,wu:a.wu+c.wu,nu:a.nu+c.nu}),zero);
+    const agg = sumUp(Object.values(st));
+    const pct = (u,tu)=> tu ? Math.round(u/tu*100) : 0;
+
     body.appendChild(h('div',{class:'flexbetween',style:'margin-bottom:10px'},[
       h('div',{style:'font-weight:800;font-size:18px',text:'온라인 주문 현황'}),
       h('button',{class:'btn-ghost btn-sm',text:t('refresh'),onclick:()=>{ drawDashboard(); }})
     ]));
+    // 회사 선택
     const chips = h('div',{class:'chiprow'});
-    [['','전체'],...companies.map(c=>[c,c])].forEach(([val,label])=>{
-      chips.appendChild(h('button',{type:'button',class:'chip-btn'+(onlineCompany===val?' selected':''),text:label,onclick:()=>{ onlineCompany=val; onlineStage=''; onlineAlertKind=''; drawDashboard(); }}));
+    [['','전체 회사'],...companies.map(c=>[c,c])].forEach(([val,label])=>{
+      chips.appendChild(h('button',{type:'button',class:'chip-btn'+(onlineCompany===val?' selected':''),text:label,onclick:()=>{ onlineCompany=val; onlineStage=''; onlineAlertKind=''; onlineDay=''; drawDashboard(); }}));
     });
     body.appendChild(chips);
+    // 주문월 선택: 달마다 "아직 안 온 건수"를 같이 표시 (빠뜨리지 않도록)
+    body.appendChild(h('div',{class:'muted',style:'margin:10px 0 4px;font-weight:700',text:'주문한 달'}));
+    const mchips = h('div',{class:'chiprow'});
+    const mkMonth = (val,label,pend)=>{
+      const b = h('button',{type:'button',class:'chip-btn monthchip'+(onlineMonth===val?' selected':'')+(pend>0?' haspend':''),onclick:()=>{ onlineMonth=val; onlineStage=''; onlineAlertKind=''; onlineDay=''; drawDashboard(); }});
+      b.appendChild(h('span',{text:label}));
+      if(val!==undefined && pend!==null) b.appendChild(h('span',{class:'mbadge',text:pend>0?('미도착 '+nf(pend)):'✓ 완료'}));
+      mchips.appendChild(b);
+    };
+    const pendOf = rows => rows.filter(r=>r.stage!=='배송완료').reduce((a,r)=>a+Number(r.orders),0);
+    mkMonth('','전체 기간',pendOf(mrows.filter(byCo)));
+    months.forEach(ym=> mkMonth(ym, ymLabel(ym), pendOf(mrows.filter(r=>byCo(r)&&r.ym===ym))));
+    body.appendChild(mchips);
 
-    const zero = {total:0,done:0,wait:0,nt:0,tu:0,du:0,wu:0,nu:0};
-    const sumUp = list => list.reduce((a,c)=>({total:a.total+c.total,done:a.done+c.done,wait:a.wait+c.wait,nt:a.nt+c.nt,tu:a.tu+c.tu,du:a.du+c.du,wu:a.wu+c.wu,nu:a.nu+c.nu}),zero);
-    const agg = sumUp(onlineCompany ? [st[onlineCompany]] : Object.values(st));
-    const pct = (u,tu)=> tu ? Math.round(u/tu*100) : 0;
-
-    // ① 진행 흐름: 배송 전 → 배송중 → 배송완료
+    // ① 진행 흐름
     const flow = h('div',{class:'card'});
+    const scopeLabel = (onlineCompany||'전체 회사')+' · '+(onlineMonth?ymLabel(onlineMonth)+' 주문':'전체 기간');
     flow.appendChild(h('div',{class:'sumhead'},[
-      h('div',{class:'label',text:(onlineCompany||'전체')+' · 주문 '+nf(agg.total)+'건'}),
+      h('div',{class:'label',text:scopeLabel+' · 주문 '+nf(agg.total)+'건'}),
       h('div',{class:'bignum',html:nf(agg.tu)+'<span class="u">대</span>'})
     ]));
+    const left = agg.nt+agg.wait;
+    flow.appendChild(h('div',{class:'compare'+(left?'':' alldone'),text: !agg.total ? '주문 없음' : left ? ('주문 '+nf(agg.total)+'건 → 도착 '+nf(agg.done)+'건 ('+pct(agg.done,agg.total)+'%) · 아직 안 온 건 '+nf(left)+'건 (배송 전 '+nf(agg.nt)+' + 배송중 '+nf(agg.wait)+')') : '✓ 전량 수령 완료 — 주문 '+nf(agg.total)+'건 모두 도착'}));
     const bar = h('div',{class:'stagebar'});
-    [['var(--muted)',agg.nu],['var(--accent)',agg.wu],['var(--success)',agg.du]].forEach(([c,u])=>{ if(u) bar.appendChild(h('div',{style:'width:'+(u/agg.tu*100)+'%;background:'+c})); });
+    [['var(--muted)',agg.nu],['var(--accent)',agg.wu],['var(--success)',agg.du]].forEach(([c,u])=>{ if(u&&agg.tu) bar.appendChild(h('div',{style:'width:'+(u/agg.tu*100)+'%;background:'+c})); });
     flow.appendChild(bar);
     const tiles = h('div',{class:'tiles'});
     const mkTile = (key, color, title, sub, n, u, clickable)=>{
-      const sel = clickable && onlineStage===key;
-      const tile = h('div',{class:'tile'+(clickable?' clickable':'')+(sel?' sel':''),style:'border-top-color:'+color,onclick: clickable ? ()=>{ onlineStage = (onlineStage===key?'':key); onlineAlertKind=''; drawDashboard(); } : null},[
+      const on = clickable && onlineStage===key;
+      tiles.appendChild(h('div',{class:'tile'+(clickable?' clickable':'')+(on?' sel':''),style:'border-top-color:'+color,onclick: clickable ? ()=>{ onlineStage = (onlineStage===key?'':key); onlineAlertKind=''; drawDashboard(); } : null},[
         h('div',{class:'tt',text:title}),
         h('div',{class:'tn',style:'color:'+color,html:nf(u)+'<span class="u">대</span>'}),
         h('div',{class:'ts',text:nf(n)+'건 · '+pct(u,agg.tu)+'%'}),
         h('div',{class:'td',text:sub})
-      ]);
-      tiles.appendChild(tile);
+      ]));
     };
     mkTile('송장 대기','var(--muted)','① 배송 전','운송장 아직 없음',agg.nt,agg.nu,true);
     mkTile('배송중','var(--accent)','② 배송중','운송장 등록됨 · 도착 확인 전',agg.wait,agg.wu,true);
@@ -941,14 +973,56 @@ function renderAdminView(){
     flow.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'① ② 칸을 누르면 아래 목록이 그 단계 주문만 보입니다. 다시 누르면 전체로 돌아갑니다.'}));
     body.appendChild(flow);
 
-    // ② 지연 경고
-    const ov = (kind)=> overdue.filter(r=>r.kind===kind && (!onlineCompany || r.company===onlineCompany)).reduce((a,r)=>({n:a.n+Number(r.orders),u:a.u+Number(r.units)}),{n:0,u:0});
+    // ② 월별 정리 (전체 기간일 때): 달마다 주문 대비 도착, 아직 안 온 건
+    if(!onlineMonth){
+      const mc = h('div',{class:'card'});
+      mc.appendChild(h('div',{style:'font-weight:800;margin-bottom:2px',text:'월별 정리 (주문한 달 기준)'}));
+      mc.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'11월에 주문한 건이 12월·1월에 도착해도 계속 11월 주문으로 집계됩니다. 달을 누르면 그 달 주문만 보이고, "아직 안 온 건"은 모두 도착할 때까지 남습니다. 큰 숫자는 수량(대), 작은 글씨는 건수입니다.'}));
+      const w3 = h('div',{style:'overflow-x:auto'}); const t3 = h('table',{class:'cotable clickrows'});
+      t3.appendChild(h('thead',{html:'<tr><th>주문한 달</th><th>주문</th><th>① 배송 전</th><th>② 배송중</th><th>③ 배송완료</th><th>아직 안 온 건</th><th>완료율</th></tr>'}));
+      const b3 = h('tbody'); const cell3 = (u,n,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)}), h('div',{class:'s',text:nf(n)+'건'})]);
+      const f3 = h('tfoot');
+      const rowOf = (label, s, onclick)=> h('tr',{onclick},[h('td',{class:'co',text:label}), cell3(s.tu,s.total), cell3(s.nu,s.nt), cell3(s.wu,s.wait), cell3(s.du,s.done,'g'), cell3(s.nu+s.wu,s.nt+s.wait,(s.nt+s.wait)?'r':'g'), h('td',{},[h('div',{class:'n',text:pct(s.du,s.tu)+'%'})])]);
+      months.forEach(ym=>{ const s = sumUp(Object.values(statsFromSummary(mrows.filter(r=>byCo(r)&&r.ym===ym)))); if(s.total) b3.appendChild(rowOf(ymLabel(ym), s, ()=>{ onlineMonth=ym; onlineStage=''; onlineAlertKind=''; onlineDay=''; drawDashboard(); })); });
+      f3.appendChild(rowOf('합계', agg, null));
+      t3.append(b3,f3); w3.appendChild(t3); mc.appendChild(w3); body.appendChild(mc);
+    } else {
+      // ②' 일별 보기 (선택한 달 안에서)
+      const dc = h('div',{class:'card'});
+      const dbtn = h('button',{class:'btn-ghost',style:'width:100%;text-align:left;font-weight:700',text:(onlineShowDays?'▾ ':'▸ ')+ymLabel(onlineMonth)+' 일별로 보기 (주문한 날 기준)',onclick:()=>{ onlineShowDays=!onlineShowDays; drawDashboard(); }});
+      dc.appendChild(dbtn);
+      const dbody = h('div',{style:'margin-top:8px'}); dc.appendChild(dbody); body.appendChild(dc);
+      if(onlineShowDays){
+        dbody.appendChild(h('div',{class:'muted',text:t('loading')}));
+        sb.rpc('online_day_summary',{ p_ym:onlineMonth, p_company:onlineCompany||null }).then(({data,error})=>{
+          dbody.innerHTML='';
+          if(error){ dbody.appendChild(h('div',{class:'err',text:error.message})); return; }
+          const days = {}; (data||[]).forEach(r=>{ const k = r.d||'미상'; const o = days[k] = days[k]||{n:0,u:0,dn:0,du:0}; o.n+=Number(r.orders); o.u+=Number(r.units); if(r.stage==='배송완료'){ o.dn+=Number(r.orders); o.du+=Number(r.units); } });
+          const keys = Object.keys(days).sort().reverse();
+          const t4 = h('table',{class:'cotable clickrows'});
+          t4.appendChild(h('thead',{html:'<tr><th>주문한 날</th><th>주문</th><th>③ 도착</th><th>아직 안 온 건</th></tr>'}));
+          const b4 = h('tbody');
+          keys.forEach(k=>{ const o = days[k]; const left = o.n-o.dn;
+            b4.appendChild(h('tr',{class:onlineDay===k?'selrow':'',onclick:()=>{ onlineDay = (onlineDay===k?'':k); onlineStage=''; onlineAlertKind=''; drawDashboard(); }},[
+              h('td',{class:'co',text:k==='미상'?'주문일 없음':k.slice(5).replace('-','/')+' ('+['일','월','화','수','목','금','토'][new Date(k+'T00:00:00').getDay()]+')'}),
+              h('td',{},[h('div',{class:'n',text:nf(o.u)}),h('div',{class:'s',text:nf(o.n)+'건'})]),
+              h('td',{class:'g'},[h('div',{class:'n'+(o.du?'':' z'),text:nf(o.du)}),h('div',{class:'s',text:nf(o.dn)+'건'})]),
+              h('td',{class:left?'r':'g'},[h('div',{class:'n',text:left?nf(o.u-o.du):'✓'}),h('div',{class:'s',text:left?nf(left)+'건':'전부 도착'})])]));
+          });
+          t4.appendChild(b4); dbody.appendChild(h('div',{style:'overflow-x:auto'},[t4]));
+          dbody.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:'날짜를 누르면 아래 목록이 그날 주문만 보입니다. 다시 누르면 해제됩니다.'}));
+        });
+      }
+    }
+
+    // ③ 도착 예정일이 지난 주문
+    const ov = (kind)=> overdue.filter(r=>r.kind===kind && byCo(r) && (!onlineMonth || r.ym===onlineMonth)).reduce((a,r)=>({n:a.n+Number(r.orders),u:a.u+Number(r.units)}),{n:0,u:0});
     const oa = ov('arr'), os = ov('ship');
     const alertCard = h('div',{class:'card',style:(oa.n||os.n)?'border-color:var(--danger)':''});
     alertCard.appendChild(h('div',{style:'font-weight:800;margin-bottom:'+((oa.n||os.n)?'8':'0')+'px;color:'+((oa.n||os.n)?'var(--danger)':'var(--success)'),text:(oa.n||os.n)?'⚠ 도착 예정일이 지난 주문':'✓ 도착 예정일이 지난 주문 없음'}));
     const mkAlert = (kind, label, hint, v)=>{
       if(!v.n) return;
-      alertCard.appendChild(h('button',{type:'button',class:'btn-ghost alertbtn'+(onlineAlertKind===kind?' sel':''),onclick:()=>{ onlineAlertKind = onlineAlertKind===kind?'':kind; onlineStage=''; drawDashboard(); }},[
+      alertCard.appendChild(h('button',{type:'button',class:'btn-ghost alertbtn'+(onlineAlertKind===kind?' sel':''),onclick:()=>{ onlineAlertKind = onlineAlertKind===kind?'':kind; onlineStage=''; onlineDay=''; drawDashboard(); }},[
         h('div',{class:'at',text:label}), h('div',{class:'an',text:nf(v.n)+'건 · '+nf(v.u)+'대'}), h('div',{class:'muted',text:hint})
       ]));
     };
@@ -956,17 +1030,17 @@ function renderAdminView(){
     mkAlert('arr','배송중인데 예정일 경과 (도착 지연)','운송장은 있는데 예정일이 지나도록 스캔이 안 됨 — 아직 미도착이거나 스캔 누락',oa);
     body.appendChild(alertCard);
 
-    // ③ 회사별
-    if(!onlineCompany && companies.length>1){
+    // ④ 회사별
+    if(!onlineCompany && stCompanies.length>1){
       const c2 = h('div',{class:'card'});
-      c2.appendChild(h('div',{style:'font-weight:800;margin-bottom:2px',text:'회사별'}));
+      c2.appendChild(h('div',{style:'font-weight:800;margin-bottom:2px',text:'회사별 ('+(onlineMonth?ymLabel(onlineMonth)+' 주문':'전체 기간')+')'}));
       c2.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'큰 숫자는 수량(대), 아래 작은 글씨는 주문 건수입니다.'}));
       const wrap2 = h('div',{style:'overflow-x:auto'});
       const t2 = h('table',{class:'cotable'});
       t2.appendChild(h('thead',{html:'<tr><th>회사</th><th>전체</th><th>① 배송 전</th><th>② 배송중</th><th>③ 배송완료</th><th>완료율</th></tr>'}));
       const b2 = h('tbody');
       const cell = (u,n,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)}), h('div',{class:'s',text:nf(n)+'건'})]);
-      companies.forEach(c=>{ const s=st[c];
+      stCompanies.forEach(c=>{ const s=st[c];
         b2.appendChild(h('tr',{},[h('td',{class:'co',text:c}), cell(s.tu,s.total), cell(s.nu,s.nt), cell(s.wu,s.wait), cell(s.du,s.done,'g'), h('td',{},[h('div',{class:'n',text:pct(s.du,s.tu)+'%'})])]));
       });
       const f2 = h('tfoot'); f2.appendChild(h('tr',{},[h('td',{class:'co',text:'합계'}), cell(agg.tu,agg.total), cell(agg.nu,agg.nt), cell(agg.wu,agg.wait), cell(agg.du,agg.done,'g'), h('td',{},[h('div',{class:'n',text:pct(agg.du,agg.tu)+'%'})])]));
@@ -974,11 +1048,12 @@ function renderAdminView(){
     }
     if(st['미분류']) body.appendChild(h('div',{class:'err',text:'⚠ 회사가 지정되지 않은 주문이 있습니다. 카드 등록이 필요합니다.'}));
 
-    // ④ 주문 목록 (서버에서 검색·페이지 처리, 50건씩)
+    // ⑤ 아직 안 온 주문 목록 (서버에서 검색·페이지 처리, 50건씩)
     const lc = h('div',{class:'card'});
-    const modeTitle = onlineAlertKind==='arr'?'배송중인데 예정일이 지난 주문':onlineAlertKind==='ship'?'배송 전인데 예정일이 지난 주문':onlineStage==='송장 대기'?'① 배송 전 주문':onlineStage==='배송중'?'② 배송중 주문':'배송완료 전 주문 (① 배송 전 + ② 배송중)';
-    const title = h('div',{style:'font-weight:800;margin-bottom:8px',text:modeTitle});
-    lc.appendChild(title);
+    const scope = (onlineMonth?ymLabel(onlineMonth)+' 주문 중 ':'')+(onlineDay?onlineDay.slice(5).replace('-','/')+' 주문 중 ':'');
+    const modeTitle = scope+(onlineAlertKind==='arr'?'배송중인데 예정일이 지난 주문':onlineAlertKind==='ship'?'배송 전인데 예정일이 지난 주문':onlineStage==='송장 대기'?'① 배송 전 주문':onlineStage==='배송중'?'② 배송중 주문':'아직 안 온 주문 (① 배송 전 + ② 배송중)');
+    lc.appendChild(h('div',{style:'font-weight:800;margin-bottom:8px',text:modeTitle}));
+    if(onlineDay) lc.appendChild(h('button',{class:'btn-ghost btn-sm',style:'margin-bottom:8px',text:'날짜 선택 해제 ✕',onclick:()=>{ onlineDay=''; drawDashboard(); }}));
     const q = h('input',{type:'search',placeholder:'주문번호 / 운송장번호 검색'});
     lc.appendChild(q);
     const cnt = h('div',{class:'muted',style:'margin:8px 0 6px'}); lc.appendChild(cnt);
@@ -996,8 +1071,8 @@ function renderAdminView(){
       if(reset){ offset = 0; list.innerHTML=''; }
       const my = ++seq;
       const { data, error } = alertMode
-        ? await sb.rpc('online_overdue', { p_company: onlineCompany||null, p_kind: onlineAlertKind, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset })
-        : await sb.rpc('online_pending', { p_company: onlineCompany||null, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset, p_stage: onlineStage||null });
+        ? await sb.rpc('online_overdue', { p_company: onlineCompany||null, p_kind: onlineAlertKind, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset, p_ym: onlineMonth||null })
+        : await sb.rpc('online_pending', { p_company: onlineCompany||null, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset, p_stage: onlineStage||null, p_ym: onlineMonth||null, p_day: onlineDay||null });
       if(my!==seq) return;
       if(error){ list.innerHTML=''; cnt.textContent = error.message; cnt.className='err'; more.classList.add('hidden'); return; }
       const rows = data||[];
@@ -1013,8 +1088,7 @@ function renderAdminView(){
       offset += rows.length;
       cnt.className='muted'; cnt.textContent = total ? ('총 '+nf(total)+'건 중 '+nf(offset)+'건 표시') : '';
       more.classList.toggle('hidden', offset>=total);
-      if(reset && !rows.length){ list.appendChild(h('tr',{},[h('td',{colspan:'6',class:'muted',style:'text-align:center;padding:18px',text:t('none')})])); }
-      wrap.scrollTop = reset ? 0 : wrap.scrollTop;
+      if(reset && !rows.length){ list.appendChild(h('tr',{},[h('td',{colspan:'6',class:'muted',style:'text-align:center;padding:18px',text:alertMode||onlineStage||onlineMonth||onlineDay||q.value.trim()?'해당하는 주문이 없습니다 ✓':t('none')})])); }
     }
     more.onclick = ()=>load(false);
     let tm = null; q.addEventListener('input',()=>{ clearTimeout(tm); tm = setTimeout(()=>load(true), 300); });
@@ -1564,6 +1638,10 @@ function renderAdminView(){
     const sel = h('select',{});
     sel.appendChild(h('option',{value:'',text:'불러오는 중...'}));
     card.appendChild(sel);
+    card.appendChild(h('label',{text:'주문한 달'}));
+    const msel = h('select',{}); msel.appendChild(h('option',{value:'',text:'전체 기간'}));
+    card.appendChild(msel);
+    card.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:'엑셀에는 "월별정리"(달마다 주문 대비 도착)와 "아직안온주문"(아직 도착하지 않은 주문 전체, 주문일 순) 시트가 함께 들어갑니다.'}));
     const err = h('div',{class:'err hidden'});
     const bx = h('button',{class:'btn-primary',text:'엑셀(.xlsx) 내려받기'});
     const bp = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'PDF로 저장 / 인쇄'});
@@ -1576,8 +1654,10 @@ function renderAdminView(){
       sel.innerHTML='';
       sel.appendChild(h('option',{value:'',text:'전체 (회사별 시트 분리)'}));
       cs.forEach(c=> sel.appendChild(h('option',{value:c,text:c})));
+      Array.from(new Set(rows.map(x=>(x.order_date||'').slice(0,7)||'미상'))).sort().reverse().forEach(m=> msel.appendChild(h('option',{value:m,text:m==='미상'?'주문일 없음':m.replace('-','년 ')+'월'})));
     }).catch(e=>{ err.textContent=e.message||String(e); err.className='err'; });
-    const pick = ()=> rows.filter(r=>!sel.value || r.company===sel.value);
+    const ymOf = r => (r.order_date||'').slice(0,7)||'미상';
+    const pick = ()=> rows.filter(r=>(!sel.value || r.company===sel.value) && (!msel.value || ymOf(r)===msel.value));
     const toRow = r=>({'회사':r.company,'주문번호':r.order_no,'운송장번호':r.tracking||'','상태':stageLabel(r.stage),'모델':r.model_raw||'','수량':r.qty,'배송지':r.ship_to||'','주문일':r.order_date||'','도착예정':r.window_text||'','카드끝4자리':r.card_last4||'','수령일시':onlineTime(r.received_at),'수령자':r.received_by||'','수령방식':r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':srcLabel(r.receipt_source)):'','주문기록':r.no_order_record?'없음(딩톡 가져옴)':''});
     bx.onclick = async ()=>{
       err.className='err hidden';
@@ -1589,6 +1669,13 @@ function renderAdminView(){
         const sum = Object.keys(st).sort().map(c=>({'회사':c,'주문(건)':st[c].total,'수량(대)':st[c].tu,'배송완료(건)':st[c].done,'배송완료(대)':st[c].du,'배송중(건)':st[c].wait,'배송 전(건)':st[c].nt}));
         const addSheet = (name, list)=>{ const ws = X.utils.json_to_sheet(list); ws['!cols']=Object.keys(list[0]).map(k=>({wch:Math.max(10,k.length*2+2)})); X.utils.book_append_sheet(wb, ws, name.slice(0,31)); };
         addSheet('요약', sum);
+        // 월별정리: 주문한 달 기준 (회사 선택만 반영, 달 선택과 무관하게 전체 달 표시)
+        const base = rows.filter(r=>!sel.value || r.company===sel.value);
+        const mm = {}; base.forEach(r=>{ const k = ymOf(r)+'|'+r.company; const o = mm[k] = mm[k] || {ym:ymOf(r),co:r.company,n:0,u:0,dn:0,du:0,wn:0,wu:0,bn:0,bu:0}; const q = r.qty||0; o.n++; o.u+=q; if(r.stage==='배송완료'){ o.dn++; o.du+=q; } else if(r.stage==='배송중'){ o.wn++; o.wu+=q; } else { o.bn++; o.bu+=q; } });
+        const monthly = Object.values(mm).sort((a,b)=> a.ym<b.ym?1:a.ym>b.ym?-1:(a.co<b.co?-1:1)).map(o=>({'주문한 달':o.ym,'회사':o.co,'주문(건)':o.n,'주문(대)':o.u,'배송 전(건)':o.bn,'배송중(건)':o.wn,'배송완료(건)':o.dn,'배송완료(대)':o.du,'아직 안 온(건)':o.bn+o.wn,'아직 안 온(대)':o.bu+o.wu,'완료율(%)':o.n?Math.round(o.dn/o.n*100):0}));
+        if(monthly.length) addSheet('월별정리', monthly);
+        const notYet = data.filter(r=>r.stage!=='배송완료').sort((a,b)=> String(a.order_date||'9999').localeCompare(String(b.order_date||'9999')) || String(a.order_no).localeCompare(String(b.order_no)));
+        if(notYet.length) addSheet('아직안온주문', notYet.map(toRow));
         const cs = Object.keys(st).sort();
         if(sel.value || cs.length===1) addSheet('주문목록', data.map(toRow));
         else cs.forEach(c=> addSheet(c, data.filter(r=>r.company===c).map(toRow)));
@@ -3130,7 +3217,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-144337';
+const BUILD = 'b20261124-145237';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
