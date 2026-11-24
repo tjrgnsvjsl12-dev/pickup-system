@@ -943,17 +943,12 @@ function renderAdminView(){
     body.appendChild(chips);
     // 주문월 선택: 달마다 "아직 안 온 건수"를 같이 표시 (빠뜨리지 않도록)
     body.appendChild(h('div',{class:'muted',style:'margin:10px 0 4px;font-weight:700',text:'주문한 달'}));
-    const mchips = h('div',{class:'chiprow'});
-    const mkMonth = (val,label,pend)=>{
-      const b = h('button',{type:'button',class:'chip-btn monthchip'+(onlineMonth===val?' selected':'')+(pend>0?' haspend':''),onclick:()=>{ onlineMonth=val; onlineStage=''; onlineAlertKind=''; onlineDay=''; drawDashboard(); }});
-      b.appendChild(h('span',{text:label}));
-      if(val!==undefined && pend!==null) b.appendChild(h('span',{class:'mbadge',text:pend>0?('미도착 '+nf(pend)):'✓ 완료'}));
-      mchips.appendChild(b);
-    };
-    const pendOf = rows => rows.filter(r=>r.stage!=='배송완료').reduce((a,r)=>a+Number(r.orders),0);
-    mkMonth('','전체 기간',pendOf(mrows.filter(byCo)));
-    months.forEach(ym=> mkMonth(ym, ymLabel(ym), pendOf(mrows.filter(r=>byCo(r)&&r.ym===ym))));
-    body.appendChild(mchips);
+    const pendOf = rows => rows.filter(r=>r.stage!=='배송완료').reduce((a,r)=>a+Number(r.units),0);
+    const msel = h('select',{style:'width:100%;max-width:340px;font-size:15px;font-weight:700',onchange:(e)=>{ onlineMonth=e.target.value; onlineStage=''; onlineAlertKind=''; onlineDay=''; drawDashboard(); }});
+    const addOpt = (val,label,pend)=>{ const o = h('option',{value:val,text:label+(pend>0?' · 아직 안 온 '+nf(pend)+'대':' · ✓ 전량 도착')}); if(onlineMonth===val) o.selected=true; msel.appendChild(o); };
+    addOpt('','전체 기간',pendOf(mrows.filter(byCo)));
+    months.forEach(ym=> addOpt(ym, ymLabel(ym), pendOf(mrows.filter(r=>byCo(r)&&r.ym===ym))));
+    body.appendChild(msel);
 
     // ① 진행 흐름
     const flow = h('div',{class:'card'});
@@ -3299,7 +3294,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-161603';
+const BUILD = 'b20261124-162105';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
