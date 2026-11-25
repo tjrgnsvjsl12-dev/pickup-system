@@ -1,0 +1,840 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>오더 기록</title>
+<style>
+:root{--bg:#f4f5f7;--surf:#fff;--ink:#101828;--ink2:#344054;--mut:#667085;--line:#e4e7ec;--pri:#2f55d4;--pri2:#2444b8;--pri-s:#eef2ff;--ok:#0e7a43;--ok-s:#e8f6ee;--warn:#b54708;--warn-s:#fff4e5;--bad:#b42318;--bad-s:#fdecea}
+*{box-sizing:border-box}
+body{margin:0;font:15px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI","Apple SD Gothic Neo","Malgun Gothic","PingFang SC","Microsoft YaHei",sans-serif;background:var(--bg);color:var(--ink);-webkit-font-smoothing:antialiased}
+header{background:#fff;border-bottom:1px solid var(--line);padding:0 20px;height:58px;display:flex;gap:10px;align-items:center;position:sticky;top:0;z-index:5}
+.brand{display:flex;align-items:baseline;gap:10px;flex:1;min-width:0}.brand b{font-size:17px;letter-spacing:-.01em;white-space:nowrap}.brand span{font-size:12px;color:var(--mut);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+header select{width:auto;min-width:120px;padding:6px 10px;min-height:38px}
+select,input,textarea,button{font:inherit}
+select,input,textarea{border:1px solid var(--line);border-radius:10px;padding:8px 11px;background:#fff;color:var(--ink);width:100%;outline:none;transition:border-color .12s,box-shadow .12s}
+select:focus,input:focus,textarea:focus{border-color:var(--pri);box-shadow:0 0 0 3px var(--pri-s)}
+textarea{resize:vertical}
+button{border:1px solid var(--line);background:#fff;border-radius:10px;padding:8px 15px;cursor:pointer;min-height:40px;font-weight:550;color:var(--ink2);transition:background .12s,border-color .12s}
+button:hover{background:#f9fafb;border-color:#d0d5dd}
+button:disabled{opacity:.45;cursor:not-allowed}
+button.pri{background:var(--pri);color:#fff;border-color:var(--pri)}button.pri:hover{background:var(--pri2)}
+button.ok{background:var(--ok);color:#fff;border-color:var(--ok)}button.ok:hover{background:#0b6537}
+button.bad{color:var(--bad);border-color:#f3c4bf;background:#fff}button.bad:hover{background:var(--bad-s)}
+button.sm{min-height:30px;padding:3px 11px;font-size:13px;border-radius:8px}
+button.ghost{border-color:transparent;background:transparent;color:var(--mut)}button.ghost:hover{background:#eceef2}
+main{max-width:1080px;margin:0 auto;padding:18px 20px 70px}
+.card{background:var(--surf);border:1px solid var(--line);border-radius:14px;padding:18px;margin-bottom:14px;box-shadow:0 1px 2px #1018280a}
+.ct{font-size:13px;font-weight:650;color:var(--mut);margin-bottom:10px}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end}.row>*{flex:1;min-width:110px}.row>.fix{flex:none;min-width:0}
+.chip{display:inline-block;padding:2px 10px;border-radius:12px;font-size:12px;font-weight:650;white-space:nowrap}
+.c-s1{background:#eef2ff;color:#2f55d4}.c-s2{background:var(--warn-s);color:var(--warn)}.c-s3{background:#eef2ff;color:#2f55d4}.c-s4{background:var(--warn-s);color:var(--warn)}.c-s5{background:#fdf0f7;color:#a3166b}.c-done{background:var(--ok-s);color:var(--ok)}.c-void{background:#f2f4f7;color:#667085}
+table{width:100%;border-collapse:collapse}th,td{text-align:left;padding:10px 8px;border-bottom:1px solid #eef0f3;vertical-align:top}th{font-size:12px;color:var(--mut);font-weight:600;padding-top:4px}tr:last-child td{border-bottom:none}
+.mut{color:var(--mut)}.small{font-size:12.5px}.bold{font-weight:650}
+.log{border-left:2px solid var(--line);margin-left:5px;padding-left:14px;max-height:420px;overflow:auto}.log div{margin:9px 0;font-size:13.5px}
+.box{padding:10px 13px;border-radius:10px;margin:8px 0}
+.warn{background:var(--warn-s);border:1px solid #fed7aa;color:var(--warn)}.err{background:var(--bad-s);border:1px solid #fecdca;color:var(--bad)}.okbox{background:var(--ok-s);border:1px solid #abefc6;color:var(--ok)}
+.raw{background:#f8f9fb;border:1px solid var(--line);border-radius:10px;padding:10px 12px;white-space:pre-wrap;font-size:13.5px}
+.modal{position:fixed;inset:0;background:#10182866;display:none;align-items:flex-start;justify-content:center;z-index:20;padding:12px;overflow:auto}
+.modal>div{background:#fff;border-radius:18px;padding:22px;width:min(660px,100%);margin-top:20px;box-shadow:0 20px 60px #10182833}
+label.l{display:block;font-size:12.5px;font-weight:600;color:var(--mut);margin:14px 0 5px}
+.pill{display:inline-flex;align-items:center;gap:4px;border:1px solid var(--line);border-radius:18px;padding:5px 13px;cursor:pointer;background:#fff;font-size:13.5px;font-weight:550;color:var(--ink2)}
+.pill.on{background:var(--pri-s);border-color:#c7d2fe;color:var(--pri)}
+pre{white-space:pre-wrap;background:#f8f9fb;border:1px solid var(--line);border-radius:10px;padding:12px;font:12.5px/1.7 inherit}
+.big{display:block;width:100%;min-height:50px;font-size:16px;font-weight:650;text-align:left;padding:10px 16px;margin-top:8px}
+button.warnb{background:var(--warn-s);border-color:#fdba74;color:var(--warn)}
+.tag{display:inline-block;padding:1px 9px;border-radius:10px;font-size:12px;font-weight:650}.tag.me{background:var(--ok);color:#fff}.tag.rd{background:#ffedd5;color:#9a3412}
+.stt{display:inline-block;padding:1px 9px;border-radius:10px;font-size:12px;font-weight:650;white-space:nowrap}.stt.ok{background:var(--ok-s);color:var(--ok)}.stt.lower{background:var(--warn-s);color:var(--warn)}.stt.drop{background:#f2f4f7;color:var(--mut)}
+.herobtn{display:flex;align-items:center;justify-content:center;gap:8px;width:100%;min-height:58px;font-size:17px;margin-bottom:16px;border-radius:14px;box-shadow:0 4px 14px #2f55d433}
+.tabs2{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
+.sec{font-size:13px;font-weight:700;color:var(--ink2);margin:18px 2px 8px;display:flex;align-items:center;gap:8px}.sec i{font-style:normal;color:var(--mut);font-weight:600}
+.ocard{background:#fff;border:1px solid var(--line);border-left:4px solid #c7cdd8;border-radius:12px;padding:14px 16px;margin-bottom:10px;cursor:pointer;box-shadow:0 1px 2px #1018280a;transition:box-shadow .12s,transform .12s}
+.ocard:hover{box-shadow:0 6px 18px #10182814;transform:translateY(-1px)}
+.ocard.mine{border-left-color:var(--ok);background:linear-gradient(90deg,#f3fbf6,#fff 40%)}
+.ocard.st-s2,.ocard.st-s4{border-left-color:#f59e0b}.ocard.st-s5{border-left-color:#c026d3}.ocard.st-done{border-left-color:#98a2b3;opacity:.92}.ocard.st-void{border-left-color:#d0d5dd;opacity:.8}
+.ocard .top{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:8px}
+.ocard .li{font-size:16px;margin:3px 0}.ocard .li s{color:var(--mut)}
+.ocard .nx{margin-top:10px;padding-top:9px;border-top:1px dashed var(--line);font-size:13.5px;color:var(--mut)}.ocard.mine .nx{color:var(--ok);font-weight:650}
+.titlebar{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin:6px 0 16px}
+.titlebar h2{margin:2px 0 0;font-size:22px;letter-spacing:-.015em;line-height:1.3}.eyebrow{font-size:12.5px;color:var(--mut)}
+.cols{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:16px;align-items:start}
+@media(max-width:900px){.cols{grid-template-columns:1fr}.colside{order:-1}}
+.prog{list-style:none;margin:0;padding:0}.prog li{display:flex;gap:11px;align-items:flex-start;padding:8px 0;color:var(--mut);font-size:14px}
+.prog .dot{width:18px;height:18px;border-radius:50%;border:2px solid #d0d5dd;flex:none;margin-top:2px;background:#fff}
+.prog li.past{color:var(--ink2)}.prog li.past .dot{background:var(--ok);border-color:var(--ok)}
+.prog li.cur{color:var(--ink);font-weight:700}.prog li.cur .dot{border-color:var(--pri);background:var(--pri);box-shadow:0 0 0 4px var(--pri-s)}
+.prog .who{display:block;font-size:12px;font-weight:500;color:var(--mut)}
+.act{padding:0;overflow:hidden}.act .acthd{display:flex;align-items:center;gap:8px;padding:11px 18px;font-weight:700;font-size:14px}.act .acthd.mine{background:var(--ok);color:#fff}.act .acthd.wait{background:#f2f4f7;color:var(--ink2)}.act .acthd.done{background:var(--ok-s);color:var(--ok)}.act .actbd{padding:18px}
+.act.mine{border:1.5px solid var(--ok)}
+.hero table td.nmcell{font-weight:650;font-size:16px}.hero table td.qcell{font-weight:650;font-size:16px;white-space:nowrap}
+.hero tr.dropped td{color:var(--mut)}.hero tr.dropped .nmcell{text-decoration:line-through}
+.nrow{display:flex;gap:6px;flex-wrap:wrap;align-items:center;padding:10px;border:1px solid var(--line);border-radius:12px;margin-bottom:8px;background:#fafbfc}
+.nrow .nm{flex:1 1 100%}.nrow .qt{width:92px;flex:none}.nrow select{width:62px;flex:none;padding:7px 4px}.nrow .pr{width:100px;flex:none}.nrow .cu{width:76px}
+.fchip{display:inline-block;border:1px solid #c7d2fe;background:var(--pri-s);color:var(--pri);border-radius:16px;padding:5px 12px;margin:3px 4px 3px 0;cursor:pointer;font-size:13px;font-weight:550}
+.dcrow{display:grid;grid-template-columns:1fr auto;gap:10px 16px;padding:16px 0;border-bottom:1px solid var(--line);align-items:start}.dcrow:first-child{padding-top:2px}
+.dcrow .nm{font-weight:650;font-size:16px}.dcrow .meta{font-size:13px;color:var(--mut);margin-top:2px}
+.dcq{text-align:right}.dcq .px{font-weight:700;font-size:17px}.dcq .sub{font-size:12.5px;color:var(--mut)}
+.seg{display:flex;gap:8px;grid-column:1/-1}.seg label{flex:1;margin:0}.seg input{display:none}
+.seg span{display:block;text-align:center;padding:11px 6px;border:1.5px solid var(--line);border-radius:11px;cursor:pointer;font-weight:650;background:#fff;color:var(--ink2);transition:all .1s}
+.seg span:hover{border-color:#b9c0cc}
+.seg input[value=ok]:checked+span{background:var(--ok);border-color:var(--ok);color:#fff}
+.seg input[value=lower]:checked+span{background:#f59e0b;border-color:#f59e0b;color:#fff}
+.seg input[value=drop]:checked+span{background:#667085;border-color:#667085;color:#fff}
+.tgbox{grid-column:1/-1;display:none;gap:8px;align-items:center}.tgbox span{font-size:13px;color:var(--warn);font-weight:600}
+.dcdone{display:flex;justify-content:space-between;gap:10px;padding:10px 0;border-bottom:1px solid var(--line);color:var(--mut);align-items:center}
+#panel,#menu{position:fixed;right:14px;top:64px;width:min(380px,calc(100vw - 28px));max-height:72vh;overflow:auto;display:none;z-index:9;box-shadow:0 12px 40px #10182822}
+</style>
+</head>
+<body>
+<header>
+  <div class="brand"><b>오더 기록</b><span>오더 승인</span></div>
+  <div id="langWrap" style="display:none"><select id="langSel" onchange="S.langBy=S.langBy||{};S.langBy[S.me]=this.value;save();render()"><option value="ko">한국어</option><option value="zh">中文</option><option value="en">English</option></select></div>
+  <span id="who" class="small" style="font-weight:700"></span>
+  <button onclick="togglePanel()">알림 <b id="bellN"></b></button>
+  <button onclick="toggleMenu()" title="설정">⚙</button>
+</header>
+<div id="panel" class="card"></div>
+<div id="menu" class="card"></div>
+<main id="main"></main>
+<div class="modal" id="modal"><div id="modalBody"></div></div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.45.4/dist/umd/supabase.js"></script>
+<script>
+const ST=[
+ {k:'s1',n:'① 조사·견적'},
+ {k:'s2',n:'② Penny 가격 회신'},
+ {k:'s3',n:'③ 서류 준비'},
+ {k:'s4',n:'④ Penny 서류 확인'},
+ {k:'s5',n:'⑤ 결제승인(재무·CC)'},
+ {k:'done',n:'⑥ 완료'}];
+const ALL=[...ST,{k:'void',n:'무산'}];
+const stName=k=>(ALL.find(s=>s.k===k)||{}).n;
+const VOID_REASONS=['가격이 안 맞음','Penny 무응답','Penny 결정: 진행 안 함','물량·재고 없음','업체 연락 안 됨','잘못 등록','기타'];
+const COMPANIES=['CH','성신','에잇싱크','부강'];
+let FIN={},USERS=[],ROLES={},EDITORS=[];
+function applyRoster(list){FIN={};USERS=[];ROLES={};
+ list.forEach(u=>{const rs=u.roles||[];ROLES[u.id]=rs;const fc=rs.filter(r=>r.startsWith('fin:')).map(r=>r.slice(4));fc.forEach(c=>{FIN[c]=u.name});
+  USERS.push({id:u.id,name:u.name+(fc.length?' ('+fc.join('·')+' 재무)':'')})});
+ EDITORS=USERS.filter(u=>ROLES[u.id].includes('edit'))}
+const isAdmin=()=>(ROLES[S.me]||[]).includes('admin');
+const isEdit=()=>ROLES[S.me].includes('edit');
+const turn=o=>{
+ let role;
+ if(S.mode==='ding')role='edit';
+ else if(o.status==='s1'||o.status==='s3')role='edit';
+ else if(o.status==='s2'||o.status==='s4')role='approve';
+ else if(o.status==='s5')role=!o.posted?'edit':!o.finOk?'fin':'pay';
+ else return {role:null,can:false,lab:''};
+ const R=ROLES[S.me];let can=false;
+ if(role==='edit')can=R.includes('edit');
+ else if(role==='approve')can=R.includes('approve');
+ else if(role==='pay')can=R.includes('pay');
+ else can=o.company?R.includes('fin:'+o.company):R.some(r=>r.startsWith('fin:'));
+ const lab={edit:'조사 담당(과장님·석훈·Chloe)',approve:'Penny',pay:'CC',fin:'재무팀'+(o.company&&FIN[o.company]?' ('+FIN[o.company]+')':'')}[role];
+ return {role,can,lab};
+};
+const mine=o=>!['done','void'].includes(o.status)&&turn(o).can;
+const finIds=o=>Object.keys(ROLES).filter(u=>ROLES[u].some(r=>o.company?r==='fin:'+o.company:r.startsWith('fin:')));
+function notify(o,ids,text){if(S.mode!=='app')return;[...new Set(ids)].filter(x=>x&&x!==S.me).forEach(u=>S.notifs.unshift({to:u,o:o.id,text:'['+o.no+'] '+text,t:Date.now(),read:false}));save()}
+const uname=id=>(USERS.find(u=>u.id===id)||{name:id||'-'}).name;
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const won=n=>Number(n||0).toLocaleString('ko-KR');
+const DAY=86400000,ago=d=>Date.now()-d*DAY;
+const num=v=>Number(String(v||'').replace(/,/g,''))||0;
+const FX0=1470;
+const fxOf=o=>num(o&&o.fx)||FX0;
+const fUSD=n=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
+const fKRW=n=>'₩'+Math.round(n||0).toLocaleString('ko-KR');
+const toKRW=(a,c,fx)=>c==='USD'?num(a)*fx:num(a);
+const dual=(a,c,fx)=>c==='USD'?`${fUSD(num(a))} <span class="mut">(≈ ${fKRW(num(a)*fx)})</span>`:`${fKRW(num(a))} <span class="mut">(≈ ${fUSD(num(a)/fx)})</span>`;
+const lineKRW=(o,l)=>toKRW(num(l.qty)*num(l.price),l.cur||'KRW',fxOf(o));
+const payTotal=o=>(o.pay||[]).reduce((a,l)=>a+lineKRW(o,l),0);
+const totTxt=o=>fKRW(payTotal(o))+' ('+fUSD(payTotal(o)/fxOf(o))+')';
+const todayStr=()=>{const d=new Date();return (d.getMonth()+1)+'/'+d.getDate()};
+const COND={'이하':'≤','정도':'≈','이상':'≥'};
+const estTxt=(o,x)=>x.estAmt?`${COND[x.estCond||'정도']} ${dual(x.estAmt,x.estCur||'USD',fxOf(o))}`:'';
+const ut=s=>`<span data-nt>${esc(s)}</span>`;
+function ensurePay(o){if(!['s3','s4','s5'].includes(o.status))return;if(o.pay&&(o.pay.length||o.payEdited))return;
+ const oks=o.items.filter(x=>x.st==='ok'&&x.ap);
+ if(oks.length){o.pay=oks.map(x=>({item:x.name,vendor:x.ap.vendor,qty:x.ap.qty||x.qty||'',price:String(x.ap.price),cur:x.ap.cur||'KRW'}));return}
+ const cur=o.round||1;const Lq=o.quotes.filter(q=>num(q.price)>0&&(q.round||1)===cur);const by={};
+ Lq.forEach(q=>{const k=q.item||'';const kk=toKRW(q.price,q.cur||'KRW',fxOf(o));if(!by[k]||kk<by[k].kk)by[k]={q,kk}});
+ o.pay=Object.values(by).map(({q})=>{const it=o.items.find(x=>x.name===q.item)||(o.items.length===1?o.items[0]:null);return {item:q.item||(it?it.name:''),vendor:q.vendor,qty:q.qty||(it?it.qty:''),price:String(q.price),cur:q.cur||'KRW'}})}
+function editPay(id,i,f,v){const o=O(id);o.pay[i][f]=v;o.payEdited=true;save();render()}
+function delPay(id,i){const o=O(id);o.pay.splice(i,1);o.payEdited=true;save();render()}
+function addPay(id){const o=O(id);ensurePay(o);o.pay=o.pay||[];o.payEdited=true;const lq=o.quotes[o.quotes.length-1]||{};o.pay.push({item:o.items.length===1?o.items[0].name:'',vendor:lq.vendor||'',qty:'',price:'',cur:lq.cur||'KRW'});save();render()}
+function reloadPay(id){const o=O(id);o.pay=null;o.payEdited=false;ensurePay(o);save();render()}
+function chkAll(){const b=[...document.querySelectorAll('.pchk')];const btn=document.getElementById('okbtn');if(btn)btn.disabled=!(b.length&&b.every(x=>x.checked))}
+function allChecked(){const b=[...document.querySelectorAll('.pchk')];return !b.length||b.every(x=>x.checked)}
+function payTable(o,opt={}){
+ const L=o.pay||[],fx=fxOf(o);
+ const th=(t,r)=>`<th${r?' style="text-align:right"':''}>${t}</th>`;
+ const head=`<tr>${th('품목')}${th('업체')}${th('수량',1)}${th('단가',1)}${th('금액',1)}${opt.check?'<th style="text-align:center">확인<br><label class="small"><input type="checkbox" style="width:auto" onchange="document.querySelectorAll(\'.pchk\').forEach(b=>b.checked=this.checked);chkAll()"> 전체</label></th>':''}${opt.edit?'<th></th>':''}</tr>`;
+ const rows=L.map((l,i)=>opt.edit?`<tr><td><input value="${esc(l.item)}" onchange="editPay(${o.id},${i},'item',this.value)"></td><td><input value="${esc(l.vendor)}" onchange="editPay(${o.id},${i},'vendor',this.value)"></td><td><input style="width:78px;text-align:right" value="${esc(l.qty)}" onchange="editPay(${o.id},${i},'qty',this.value)"></td><td style="white-space:nowrap"><input style="width:96px;text-align:right;display:inline-block" value="${esc(l.price)}" onchange="editPay(${o.id},${i},'price',this.value)"><select style="width:70px;display:inline-block" onchange="editPay(${o.id},${i},'cur',this.value)"><option ${(l.cur||'KRW')==='KRW'?'selected':''}>KRW</option><option ${l.cur==='USD'?'selected':''}>USD</option></select></td><td style="text-align:right">${dual(num(l.qty)*num(l.price),l.cur||'KRW',fx)}</td><td><button class="sm bad" onclick="delPay(${o.id},${i})">×</button></td></tr>`:`<tr><td class="bold">${ut(l.item||'-')}</td><td>${ut(l.vendor)}</td><td style="text-align:right">${won(num(l.qty))}</td><td style="text-align:right">${dual(l.price,l.cur||'KRW',fx)}</td><td style="text-align:right" class="bold">${dual(num(l.qty)*num(l.price),l.cur||'KRW',fx)}</td>${opt.check?'<td style="text-align:center"><input type="checkbox" class="pchk" style="width:24px;height:24px" onchange="chkAll()"></td>':''}</tr>`).join('');
+ const empty=!L.length?`<div class="small mut" style="margin-top:6px">${opt.edit?'결제 내역이 비어 있습니다. 줄을 추가하거나 견적에서 가져오세요.':'결제 내역이 없습니다.'}</div>`:'';
+ const tools=opt.edit?`<div style="margin-top:6px;display:flex;gap:6px"><button class="sm" onclick="addPay(${o.id})">+ 줄 추가</button><button class="sm" onclick="reloadPay(${o.id})">견적에서 다시 가져오기</button></div>`:'';
+ const co=o.company?`${o.company}${FIN[o.company]?' · 재무 확인 '+FIN[o.company]:''}`:'결제 회사 미정';
+ return `<div style="overflow:auto"><table>${head}${rows}</table></div>${empty}<div style="text-align:right;margin-top:8px"><span class="small mut">${co} · 환율 1 USD = ${won(fx)} KRW · </span>결제 합계 <span style="font-size:20px;font-weight:700">${fKRW(payTotal(o))}</span> <span class="mut">(≈ ${fUSD(payTotal(o)/fx)})</span></div>${tools}`;
+}
+function estCell(o,x,k){
+ const co=['이하','정도','이상'].map(c=>`<option value="${c}" ${(x.estCond||'정도')===c?'selected':''}>${COND[c]}</option>`).join('');
+ return isEdit()?`<div style="white-space:nowrap"><select style="width:54px;display:inline-block" onchange="editItem(${o.id},${k},'estCond',this.value)">${co}</select><input style="width:76px;display:inline-block" value="${esc(x.estAmt||'')}" onchange="editItem(${o.id},${k},'estAmt',this.value)"><select style="width:70px;display:inline-block" onchange="editItem(${o.id},${k},'estCur',this.value)"><option ${(x.estCur||'USD')==='USD'?'selected':''}>USD</option><option ${x.estCur==='KRW'?'selected':''}>KRW</option></select></div>${x.estAmt?`<div class="small">${estTxt(o,x)}</div>`:''}`:(x.estAmt?estTxt(o,x):'-');
+}
+function setFx(id,v){const n=num(v);if(n<=0){flash('환율을 숫자로 입력하세요','err');return}const o=O(id);const old=fxOf(o);o.fx=n;o.fxEdited=true;o.fxAt=todayStr();log(o,`환율 변경: ${won(old)} → ${won(n)}`);render()}
+const fmt=t=>{const d=new Date(t);return `${d.getMonth()+1}/${d.getDate()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`};
+const rel=t=>{const d=Math.floor((Date.now()-t)/DAY);return d<=0?'오늘':d+'일 전'};
+
+function seed(){
+ const L=(t,w,a,m,ml)=>({t,w,a,m:m||'',ml:ml||'ko'});
+ const base=()=>({fx:1470,fxAt:'11/25',posted:false,finOk:false,final:null,link:null,voidReason:null,docs:[],quotes:[],round:1,owners:['green','hoon','chloe']});
+ const mk=o=>Object.assign(base(),o);
+ const SAMP='Sony 游戏手柄🎮\n\nDualSense – Grand Theft Auto VI White Limited Edition  CFI-ZCT2   5,000台\n\nDualSense – Grand Theft Auto VI Black Limited Edition  CFI-ZCT2   5,000台\n\nMicrosoft 游戏手柄🎮\nXbox - Elite Controller Series 2 Black   编码 1797   300台';
+ return {seq:9,orders:[
+ mk({id:1,no:'ORD-001',by:'penny',at:ago(3),status:'s2',round:2,lastAt:ago(0.3),
+  raw:'iPhone 17 Pro Max 256GB 200台，预计 1,150美元以下\niPhone 17 Pro 256GB 100台，预计 1,000美元左右',
+  items:[{name:'iPhone 17 Pro Max 256GB',qty:'200',hint:'',estAmt:'1150',estCur:'USD',estCond:'이하',st:'lower',tg:{amt:'1150',cur:'USD'}},{name:'iPhone 17 Pro 256GB',qty:'100',hint:'',estAmt:'1000',estCur:'USD',estCond:'정도',st:'ok',ap:{vendor:'Supplier A',price:'1040',cur:'USD',qty:'100',round:1}}],
+  quotes:[
+   {item:'iPhone 17 Pro Max 256GB',vendor:'Supplier A',price:'1210',cur:'USD',qty:'200',memo:'',ml:'ko',t:ago(2.5),by:'green',round:1},
+   {item:'iPhone 17 Pro 256GB',vendor:'Supplier A',price:'1040',cur:'USD',qty:'100',memo:'',ml:'ko',t:ago(2.5),by:'green',round:1},
+   {item:'iPhone 17 Pro Max 256GB',vendor:'Supplier A',price:'1165',cur:'USD',qty:'200',memo:'200대 전량 가능, 이번 주 내 출고',ml:'ko',t:ago(0.4),by:'green',round:2},
+   {item:'iPhone 17 Pro Max 256GB',vendor:'Supplier B',price:'1180',cur:'USD',qty:'150',memo:'150대만 가능',ml:'ko',t:ago(0.4),by:'green',round:2}],
+  ask:{round:2,li:3},
+  tr:{'l3|ko':'Pro 256GB는 괜찮습니다. Pro Max는 너무 비쌉니다. 조금 더 낮춰 주세요. 목표는 1,150달러입니다.','q2|zh':'200台全部有货，本周内发货。','q3|zh':'只能供150台。','q2|en':'All 200 available; ships within this week.','q3|en':'Only 150 available.'},
+  log:[L(ago(3),'penny','오더 등록 (Penny 직접)','','zh'),L(ago(2.6),'green','견적 입력: Supplier A $1,210 (iPhone 17 Pro Max 256GB)'),L(ago(2.5),'green','Penny에게 가격 보고함'),
+   L(ago(1.5),'penny','가격 답변: 진행 1 / 재조율 1 / 제외 0 → 조율 #2','Pro 256GB 可以。Pro Max 太贵了，再低一点，目标1,150美元。','zh'),L(ago(0.4),'green','견적 입력: Supplier A $1,165 (iPhone 17 Pro Max 256GB)'),L(ago(0.3),'green','Penny에게 가격 보고함 (조율 #2)')]}),
+ mk({id:2,no:'ORD-002',by:'penny',at:ago(0.05),status:'s1',lastAt:ago(0.05),raw:'Dyson Airwrap Complete Long 30台，预计 380美元左右',
+  items:[{name:'Dyson Airwrap Complete Long',qty:'30',hint:'',estAmt:'380',estCur:'USD',estCond:'정도'}],
+  tr:{'raw|ko':'Dyson Airwrap Complete Long 30대, 예상 380달러 정도','l0|ko':'빠른 견적 부탁드립니다. 감사합니다.'},
+  log:[L(ago(0.05),'penny','오더 등록 (Penny 직접)','尽快报价，谢谢。','zh')]}),
+ mk({id:3,no:'ORD-003',by:'penny',at:ago(3),company:'성신',status:'s3',lastAt:ago(0.2),raw:'',
+  items:[{name:'AirPods Pro 3',qty:'500',hint:'',estAmt:'215',estCur:'USD',estCond:'이하',st:'ok',ap:{vendor:'Supplier C',price:'208',cur:'USD',qty:'500',round:1}}],
+  quotes:[{item:'',vendor:'Supplier C',price:'208',cur:'USD',qty:'500',memo:'',ml:'ko',t:ago(2),by:'hoon',round:1}],
+  tr:{'l3|ko':'좋습니다. 진행하세요.'},
+  log:[L(ago(3),'penny','오더 등록 (Penny 직접)','','zh'),L(ago(2),'hoon','견적 입력: Supplier C $208'),L(ago(1.9),'hoon','Penny에게 가격 보고함'),L(ago(0.2),'penny','Penny: 이 가격이면 진행','好的，做吧。','zh')]}),
+ mk({id:4,no:'ORD-004',by:'penny',at:ago(5),company:'CH',status:'s4',lastAt:ago(0.4),raw:'',
+  items:[{name:'Galaxy S26 Ultra 512GB',qty:'100',hint:'',estAmt:'1300',estCur:'USD',estCond:'이하',st:'ok',ap:{vendor:'Supplier B',price:'1850000',cur:'KRW',qty:'100',round:1}}],
+  quotes:[{item:'',vendor:'Supplier B',price:'1850000',cur:'KRW',qty:'100',memo:'',ml:'ko',t:ago(4),by:'green',round:1}],
+  docs:['거래명세서_SupplierB.pdf'],pay:[{item:'Galaxy S26 Ultra 512GB',vendor:'Supplier B',qty:'100',price:'1850000',cur:'KRW'}],payEdited:true,
+  tr:{'l3|ko':'가격 괜찮습니다.'},
+  log:[L(ago(5),'penny','오더 등록 (Penny 직접)','','zh'),L(ago(4),'green','견적 입력: Supplier B ₩1,850,000'),L(ago(3.9),'green','Penny에게 가격 보고함'),L(ago(3),'penny','Penny: 이 가격이면 진행','价格可以。','zh'),L(ago(0.4),'green','Penny에게 서류 확인 요청함')]}),
+ mk({id:5,no:'ORD-005',by:'penny',at:ago(5),company:'성신',status:'s5',lastAt:ago(0.5),posted:true,raw:'',
+  items:[{name:'Nintendo Switch 2',qty:'50',hint:'',estAmt:'400',estCur:'USD',estCond:'이하',st:'ok',ap:{vendor:'Supplier D',price:'380',cur:'USD',qty:'50',round:1}}],
+  quotes:[{item:'',vendor:'Supplier D',price:'380',cur:'USD',qty:'50',memo:'',ml:'ko',t:ago(4),by:'green',round:1}],
+  docs:['견적서_SupplierD.pdf'],pay:[{item:'Nintendo Switch 2',vendor:'Supplier D',qty:'50',price:'380',cur:'USD'}],payEdited:true,
+  tr:{'l5|zh':'这是 Seongsin 的订单，已附交易明细。','l3|ko':'괜찮습니다. 이 가격으로 진행하세요.','l4|ko':'서류 문제 없습니다. 확정합니다.'},
+  log:[L(ago(5),'penny','오더 등록 (Penny 직접)','','zh'),L(ago(4),'green','견적 입력: Supplier D $380'),L(ago(3.5),'green','Penny에게 가격 보고함'),L(ago(3),'penny','Penny: 이 가격이면 진행','可以，按这个价格做。','zh'),L(ago(1),'penny','Penny 서류 확정','文件没问题，确认。','zh'),L(ago(0.5),'chloe','결제승인 요청 $19,000 (재무 확인: 경빈)','성신 건입니다. 거래명세서를 첨부했습니다.','ko')]}),
+ mk({id:6,no:'ORD-006',by:'penny',at:ago(9),company:'CH',status:'done',lastAt:ago(4),posted:true,finOk:true,raw:'',
+  items:[{name:'Apple Watch Ultra 3',qty:'40',hint:'',estAmt:'780',estCur:'USD',estCond:'이하',st:'ok',ap:{vendor:'Supplier E',price:'760',cur:'USD',qty:'40',round:1}}],
+  quotes:[{item:'',vendor:'Supplier E',price:'760',cur:'USD',qty:'40',memo:'',ml:'ko',t:ago(8),by:'hoon',round:1}],
+  docs:['거래명세서_SupplierE.pdf'],pay:[{item:'Apple Watch Ultra 3',vendor:'Supplier E',qty:'40',price:'760',cur:'USD'}],payEdited:true,
+  final:{vendor:'Supplier E',total:44688000,fx:1470,receipt:'이체증_1118.png',at:ago(4)},link:{type:'수출',ref:'EXP-2611-05'},
+  log:[L(ago(9),'penny','오더 등록 (Penny 직접)','','zh'),L(ago(8),'hoon','견적 입력: Supplier E $760'),L(ago(7),'penny','Penny: 이 가격이면 진행'),L(ago(6),'penny','Penny 서류 확정'),L(ago(5),'hoon','결제승인 요청 ₩44,688,000 ($30,400) (재무 확인: 지연)'),L(ago(4),'cc','이체 완료 (CC 승인) ₩44,688,000 ($30,400) · 환율 1,470')]}),
+ mk({id:7,no:'ORD-007',by:'penny',at:ago(12),status:'void',voidReason:'Penny 무응답',lastAt:ago(9),raw:'',
+  items:[{name:'PS5 Pro',qty:'100',hint:''}],
+  quotes:[{item:'',vendor:'Supplier F',price:'820000',cur:'KRW',qty:'100',memo:'',ml:'ko',t:ago(11),by:'green',round:1}],
+  log:[L(ago(12),'penny','오더 등록 (Penny 직접)','','zh'),L(ago(11),'green','견적 입력: Supplier F ₩820,000'),L(ago(11),'green','Penny에게 가격 보고함'),L(ago(9),'hoon','무산 처리 — Penny 무응답')]}),
+ mk({id:8,no:'ORD-008',by:'hoon',at:ago(1),status:'s2',lastAt:ago(0.2),raw:SAMP,
+  items:[{name:'DualSense GTA VI White Limited CFI-ZCT2',qty:'5000',hint:'',estAmt:'93.5',estCur:'USD',estCond:'정도'},{name:'DualSense GTA VI Black Limited CFI-ZCT2',qty:'5000',hint:''},{name:'Xbox Elite Controller Series 2 Black (1797)',qty:'300',hint:'',estAmt:'50',estCur:'USD',estCond:'이하'}],
+  quotes:[
+   {item:'DualSense GTA VI White Limited CFI-ZCT2',vendor:'Supplier G',price:'93',cur:'USD',qty:'5000',memo:'',ml:'ko',t:ago(0.6),by:'green',round:1},
+   {item:'DualSense GTA VI Black Limited CFI-ZCT2',vendor:'Supplier G',price:'104',cur:'USD',qty:'5000',memo:'블랙은 재고가 적어 단가가 높습니다',ml:'ko',t:ago(0.6),by:'green',round:1},
+   {item:'Xbox Elite Controller Series 2 Black (1797)',vendor:'Supplier H',price:'58',cur:'USD',qty:'300',memo:'',ml:'ko',t:ago(0.5),by:'chloe',round:1}],
+  tr:{'q1|zh':'黑色库存少，所以单价较高。','q1|en':'Black has low stock, so the unit price is higher.','raw|ko':'Sony 게임 컨트롤러🎮\n\nDualSense – GTA VI 화이트 한정판 CFI-ZCT2 5,000대\n\nDualSense – GTA VI 블랙 한정판 CFI-ZCT2 5,000대\n\nMicrosoft 게임 컨트롤러🎮\nXbox – Elite 컨트롤러 시리즈 2 블랙 코드 1797 300대'},
+  log:[L(ago(1),'hoon','오더 등록 (Penny 딩톡 메시지 → 대신 등록)'),L(ago(0.6),'green','견적 입력: Supplier G $93 (DualSense GTA VI White Limited CFI-ZCT2)'),L(ago(0.6),'green','견적 입력: Supplier G $104 (DualSense GTA VI Black Limited CFI-ZCT2)'),L(ago(0.5),'chloe','견적 입력: Supplier H $58 (Xbox Elite Controller Series 2 Black (1797))'),L(ago(0.2),'green','Penny에게 가격 보고함')]})
+ ]};
+}
+const PK='orderflow_prefs_v1';
+function loadPrefs(){try{const x=localStorage.getItem(PK);return x?JSON.parse(x):{}}catch(e){return {}}}
+let S={orders:[],seq:1,notifs:[],me:null,tab:'orders',openId:null,filter:'mine',q:'',mode:'app',autoTr:false,...loadPrefs()};
+S.autoTr=false;S.tab='orders';S.openId=null;S.mode=S.mode||'app';S.orders=[];S.notifs=[];S.me=null;
+let msg=null,draft=null;
+function save(){try{localStorage.setItem(PK,JSON.stringify({mode:S.mode,langBy:S.langBy,lastCur:S.lastCur,inclPrice:S.inclPrice}))}catch(e){}syncOut()}
+async function resetAll(kind){if(!isAdmin())return;
+ const sample=kind!=='empty';if(!confirm(sample?'지금 있는 모든 오더와 알림을 지우고 샘플 8건으로 바꿉니다. 계속할까요?':'지금 있는 모든 오더와 알림을 지웁니다. 계속할까요?'))return;
+ const rows=sample?seed().orders:[];const {error}=await sb.rpc('ord_reset',{p_orders:rows});
+ if(error){flash('실패: '+error.message,'err');return}
+ S.orders=[];S.notifs=[];resetSyncMaps();await pollNow();flash(sample?'샘플 데이터로 바꿨습니다.':'모두 지웠습니다.')}
+const O=id=>S.orders.find(o=>o.id===id);
+function log(o,a,m){o.log.push({t:Date.now(),w:S.me,a,m:m||'',ml:lang()});o.lastAt=Date.now();save()}
+function flash(m,type='okbox'){msg={m,type};render();setTimeout(()=>{msg=null;render()},3500)}
+const fv=id=>((document.getElementById(id)||{}).value||'').trim();
+
+// ===== 공통 도우미 =====
+const HAS_ZH=t=>/[\u4e00-\u9fff]/.test(t||''),HAS_KO=t=>/[가-힣]/.test(t||'');
+const rawFrom=o=>HAS_KO(o.raw)?'ko':'zh';
+function nm(o,x,k){const L=lang(),n=x.name||'';
+ if(L==='ko'&&HAS_ZH(n)&&!HAS_KO(n))return tx(o,'i'+k,n,'zh');
+ if(L!=='ko'&&HAS_KO(n))return tx(o,'i'+k,n,'ko');
+ return ut(n)}
+function bestQ(o,x){
+ if(x.st==='ok'&&x.ap)return {vendor:x.ap.vendor,price:x.ap.price,cur:x.ap.cur,qty:x.ap.qty};
+ const cur=o.round||1;const L=o.quotes.filter(q=>num(q.price)>0&&(q.round||1)===cur&&(!q.item||q.item===x.name));
+ return L.length?L.reduce((a,q)=>toKRW(q.price,q.cur||'KRW',fxOf(o))<toKRW(a.price,a.cur||'KRW',fxOf(o))?q:a):null}
+const isActive=x=>x.st!=='ok'&&x.st!=='drop';
+const isPend=x=>!x.st||x.st==='lower';
+function copyText(t,okMsg){
+ const done=()=>flash(okMsg||'복사했습니다');
+ const fb=()=>{const a=document.createElement('textarea');a.value=t;a.style.cssText='position:fixed;left:-999px';document.body.appendChild(a);a.select();try{document.execCommand('copy');done()}catch(e){flash('복사하지 못했습니다. 직접 선택해서 복사하세요','err')}a.remove()};
+ try{if(navigator.clipboard&&navigator.clipboard.writeText)navigator.clipboard.writeText(t).then(done,fb);else fb()}catch(e){fb()}}
+function inquiryText(o){
+ const L=lang();
+ const lines=o.items.map((x,k)=>[x,k]).filter(([x])=>isActive(x)).map(([x,k],n)=>{const tr=(o.tr||{})['i'+k+'|ko'];const name=(HAS_ZH(x.name)&&!HAS_KO(x.name)&&tr)?tr:x.name;
+  return (n+1)+') '+name+(x.qty?' / '+won(num(x.qty))+'대':'')+(S.inclPrice&&x.estAmt?' / 희망가 '+(COND[x.estCond||'정도'])+' '+(x.estCur==='KRW'?fKRW(num(x.estAmt)):fUSD(num(x.estAmt))):'')});
+ return '[견적 문의]\n'+lines.join('\n')+'\n단가와 가능 수량, 납기 회신 부탁드립니다.'}
+function copyInquiry(id){copyText(inquiryText(O(id)),'업체 문의용 문구를 복사했습니다')}
+function copyRaw(id){const o=O(id);copyText(o.raw||'', '원문을 복사했습니다')}
+function freqItems(){const m={};S.orders.slice().sort((a,b)=>a.at-b.at).forEach(o=>o.items.forEach(x=>{const k=(x.name||'').trim().toLowerCase();if(!k)return;const e=m[k]||(m[k]={name:x.name.trim(),n:0});e.n++;e.qty=x.qty;e.estAmt=x.estAmt;e.estCur=x.estCur;e.estCond=x.estCond;e.last=o.at}));return Object.values(m).sort((a,b)=>b.n-a.n||b.last-a.last)}
+
+// ===== 새 오더 =====
+function parseItems(txt){
+ const out=[];
+ txt.split('\n').forEach(l=>{l=l.trim();if(!l)return;
+  const m=l.match(/^(.*?)[\s:：\-–]*([0-9][0-9,\.]*)\s*(台|대|pcs|pc|ea|개|units?)(?![A-Za-z])/i);
+  if(m&&m[1].trim()){const it={name:m[1].trim().replace(/\s{2,}/g,' '),qty:m[2].replace(/,/g,''),hint:''};
+   const pm=l.match(/(?:US\$|\$|USD\s*)\s*(\d+(?:\.\d+)?)|(\d+(?:\.\d+)?)\s*(?:usd|달러|美元|美金|刀)/i);
+   if(pm){it.estAmt=pm[1]||pm[2];it.estCur='USD';it.estCond=/以下|이하|under|below|max|≤/i.test(l)?'이하':/以上|이상|over|min|≥/i.test(l)?'이상':'정도'}
+   out.push(it)}
+ });
+ return out;
+}
+const blankRow=()=>({name:'',qty:'',estAmt:'',estCur:'USD',estCond:'이하'});
+function rowHTML(r,i){const co=['이하','정도','이상'].map(c=>`<option value="${c}" ${(r.estCond||'이하')===c?'selected':''}>${COND[c]}</option>`).join('');
+ return `<div class="nrow" id="nr${i}"><input class="nm" list="dl_items" value="${esc(r.name)}" placeholder="품명 (예: iPhone 17 Pro Max 256GB)" oninput="rowSet(${i},'name',this.value)"><input class="qt" inputmode="numeric" value="${esc(r.qty)}" placeholder="수량" oninput="rowSet(${i},'qty',this.value)"><select onchange="rowSet(${i},'estCond',this.value)">${co}</select><input class="pr" inputmode="decimal" value="${esc(r.estAmt)}" placeholder="희망가" oninput="rowSet(${i},'estAmt',this.value)"><select class="cu" onchange="rowSet(${i},'estCur',this.value)"><option ${r.estCur==='USD'?'selected':''}>USD</option><option ${r.estCur==='KRW'?'selected':''}>KRW</option></select><button class="sm bad" onclick="rowDel(${i})">×</button></div>`}
+function drawRows(){const last=draft.rows[draft.rows.length-1];if(!last||last.name)draft.rows.push(blankRow());$('#d_rows').innerHTML=draft.rows.map(rowHTML).join('');applyI18n()}
+function rowSet(i,f,v){draft.rows[i][f]=v;if(f==='name'&&v&&i===draft.rows.length-1){draft.rows.push(blankRow());$('#d_rows').insertAdjacentHTML('beforeend',rowHTML(draft.rows[draft.rows.length-1],draft.rows.length-1));applyI18n()}}
+function rowDel(i){draft.rows.splice(i,1);drawRows()}
+function fillFreq(k){const f=draft.freq[k];let r=draft.rows.find(x=>!x.name);if(!r){r=blankRow();draft.rows.push(r)}Object.assign(r,{name:f.name,qty:f.qty||'',estAmt:f.estAmt||'',estCur:f.estCur||'USD',estCond:f.estCond||'이하'});drawRows()}
+function parseRaw(){const it=parseItems(draft.raw||'');if(!it.length){flash('품목을 읽지 못했습니다. 직접 입력해 주세요','err');return}draft.rows=draft.rows.filter(r=>r.name).concat(it.map(x=>({name:x.name,qty:x.qty,estAmt:x.estAmt||'',estCur:x.estCur||'USD',estCond:x.estCond||'이하'})));drawRows()}
+function openNew(){
+ draft={rows:[blankRow(),blankRow()],raw:'',memo:'',owners:EDITORS.map(u=>u.id),company:'',freq:freqItems().slice(0,10)};
+ $('#modal').style.display='block';drawNew();
+}
+function drawNew(){
+ const stf=isEdit();
+ $('#modalBody').innerHTML=`<h3 style="margin:0 0 4px">새 오더</h3>
+ <div class="small mut">품명, 수량, 희망가만 적으면 됩니다. 수량·희망가는 비워도 됩니다.</div>
+ <datalist id="dl_items">${freqItems().map(f=>`<option value="${esc(f.name)}">`).join('')}</datalist>
+ <div id="d_rows" style="margin-top:10px"></div>
+ ${draft.freq.length?`<label class="l">자주 낸 품목 (눌러서 추가)</label><div>${draft.freq.map((f,k)=>`<span class="fchip" onclick="fillFreq(${k})"><span data-nt>${esc(f.name)}</span></span>`).join('')}</div>`:''}
+ <label class="l">메모 (선택)</label><input id="d_memo" value="${esc(draft.memo)}" oninput="draft.memo=this.value" placeholder="예: 급함, 이번 주 안에 / 尽快">
+ <details style="margin-top:10px" ${stf?'open':''}><summary class="mut small" style="cursor:pointer">딩톡 메시지로 붙여넣기</summary>
+ <textarea id="d_raw" data-nt rows="5" oninput="draft.raw=this.value" placeholder="여기에 붙여넣기">${esc(draft.raw)}</textarea><div style="margin-top:6px"><button class="sm" onclick="parseRaw()">인식해서 채우기</button></div></details>
+ ${stf?`<details style="margin-top:10px"><summary class="mut small" style="cursor:pointer">담당·결제 회사 설정</summary><label class="l">담당 (조사하는 사람)</label><div>${EDITORS.map(u=>`<span class="pill ${draft.owners.includes(u.id)?'on':''}" onclick="togOwner('${u.id}')">${u.name}</span>`).join(' ')}</div><label class="l">결제 회사 (모르면 비워 두고 나중에 지정)</label><div>${COMPANIES.map(c=>`<span class="pill ${draft.company===c?'on':''}" onclick="draft.company=draft.company==='${c}'?'':'${c}';drawNew()">${c}</span>`).join(' ')}</div></details>`:''}
+ <div style="margin-top:14px;display:flex;gap:8px;justify-content:flex-end"><button onclick="closeModal()">닫기</button><button class="pri" style="min-height:48px;padding:0 26px;font-size:16px" onclick="createOrder()">오더 내리기</button></div>`;
+ drawRows();
+}
+function togOwner(id){const a=draft.owners;draft.owners=a.includes(id)?a.filter(x=>x!==id):[...a,id];drawNew()}
+function closeModal(){$('#modal').style.display='none'}
+function createOrder(){
+ let rows=draft.rows.filter(r=>r.name.trim());const raw=(draft.raw||'').trim();
+ if(!rows.length&&raw)rows=parseItems(raw);
+ if(!rows.length&&!raw){const e=document.createElement('div');e.className='box err';e.textContent='품명이나 메시지를 하나는 입력해 주세요';$('#modalBody').prepend(e);setTimeout(()=>e.remove(),2500);return}
+ const items=rows.map(r=>{const x={name:r.name.trim(),qty:String(r.qty||'').replace(/,/g,'').trim(),hint:r.hint||''};const a=String(r.estAmt||'').replace(/,/g,'').trim();if(a){x.estAmt=a;x.estCur=r.estCur||'USD';x.estCond=r.estCond||'이하'}return x});
+ const o={id:S.seq,no:'ORD-'+String(S.seq).padStart(3,'0'),raw,at:Date.now(),by:S.me,owners:draft.owners.length?draft.owners:EDITORS.map(u=>u.id),company:draft.company,fx:FX0,fxAt:todayStr(),status:'s1',round:1,lastAt:Date.now(),items:items.length?items:[{name:(raw.split('\n')[0]||'').slice(0,60),qty:'',hint:''}],quotes:[],docs:[],posted:false,final:null,link:null,voidReason:null,log:[]};
+ S.seq++;S.orders.unshift(o);
+ log(o,S.me==='penny'?'오더 등록 (Penny 직접)':'오더 등록 (Penny 딩톡 메시지 → 대신 등록)',(draft.memo||'').trim());
+ notify(o,o.owners,'새 오더: '+o.items.slice(0,2).map(x=>x.name).join(', ')+(o.items.length>2?' 외 '+(o.items.length-2):''));
+ closeModal();S.openId=o.id;S.tab='orders';flash('오더가 접수되었습니다. 조사 담당에게 알림이 갔습니다.');
+}
+
+// ===== 단계 동작 (모두 버튼 한 번) =====
+function go(id,to,text){const o=O(id);const memo=fv('memo_'+to)||fv('memo_'+o.status);o.status=to;log(o,text,memo);
+ if(to==='s2'||to==='s4')notify(o,['penny'],to==='s2'?'가격 확인 요청':'서류 확인 요청');else notify(o,o.owners,stName(to)+' 단계로 이동'+(memo?': '+memo:''));render()}
+function pennyLower(id){const o=O(id);const memo=fv('memo_s2');const a=fv('tgt').replace(/,/g,''),c=fv('tgt_c')||'USD';
+ o.round=(o.round||1)+1;o.status='s1';o.ask={amt:a,cur:c,round:o.round,li:o.log.length};
+ const tg=a?(c==='USD'?fUSD(num(a)):fKRW(num(a))):'';
+ log(o,'Penny: 더 낮게 조율 필요'+(tg?' (목표 '+tg+')':'')+' → 조율 #'+o.round,memo);
+ notify(o,o.owners,'더 낮게 조율 요청 (조율 #'+o.round+')'+(tg?' 목표 '+tg:''));render()}
+function voidWith(id,r){const o=O(id);const m=fv('memo_'+o.status);o.voidReason=r;o.status='void';log(o,`무산 처리 — ${r}`,m);notify(o,o.owners,'무산 처리: '+r);render()}
+function requestPay(id){const o=O(id);if(!o.company){flash('먼저 결제 회사를 지정하세요 (재무 담당이 정해집니다)','err');return}if(payTotal(o)<=0){flash('결제 내역(품목·수량·단가)을 입력하세요','err');return}o.posted=true;log(o,'결제승인 요청 '+totTxt(o)+(FIN[o.company]?' (재무 확인: '+FIN[o.company]+')':''));notify(o,finIds(o),'결제승인 요청 '+totTxt(o)+': 재무 확인이 필요합니다');render()}
+function finConfirm(id){const o=O(id);if(payTotal(o)<=0||!allChecked()){flash('결제 내역을 확인하고 모든 줄을 체크하세요','err');return}o.finOk=true;o.finBy=S.me;const m=fv('memo_fin');log(o,'재무 확인 완료 '+totTxt(o),m);notify(o,['cc'],'재무 확인 완료 '+totTxt(o)+': 승인·이체를 진행해 주세요');render()}
+function finReject(id){const o=O(id);const m=fv('memo_fin');o.posted=false;o.finOk=false;o.status='s3';log(o,'재무 반려 → 서류 준비',m);notify(o,o.owners,'재무 반려'+(m?': '+m:''));render()}
+function payReject(id){const o=O(id);const m=fv('memo_fin');o.finOk=false;log(o,'CC 반려 → 재무 재확인',m);notify(o,finIds(o),'CC 반려'+(m?': '+m:''));render()}
+function addQuote(id){
+ const o=O(id);const v=fv('q_v'),p=fv('q_p');if(!v){flash('업체명을 입력하세요','err');return}if(!p){flash('단가를 입력하세요','err');return}
+ const cur=fv('q_c')||'KRW';S.lastCur=cur;
+ o.quotes.push({item:fv('q_i'),vendor:v,price:p.replace(/,/g,''),cur,qty:fv('q_q').replace(/,/g,''),memo:fv('q_m'),ml:lang(),t:Date.now(),by:S.me,round:o.round||1});
+ log(o,`견적 입력: ${v} ${cur==='USD'?fUSD(num(p)):fKRW(num(p))}${fv('q_i')?' ('+fv('q_i')+')':''}`);render();
+}
+function addMemo(id){const m=fv('note');if(!m)return;const o=O(id);log(o,'메모',m);render()}
+function addDoc(id,name){const o=O(id);o.docs.push(name);log(o,'서류 첨부: '+name);render()}
+function pickDoc(id){const i=document.createElement('input');i.type='file';i.onchange=()=>{if(i.files[0])addDoc(id,i.files[0].name)};i.click()}
+function postPay(id){const o=O(id);o.posted=true;log(o,'딩톡에 결제승인 올림');render()}
+function finish(id){
+ const o=O(id);if(S.mode==='app'&&(payTotal(o)<=0||!allChecked())){flash('결제 내역을 확인하고 모든 줄을 체크하세요','err');return}
+ o.final={vendor:[...new Set((o.pay||[]).map(l=>l.vendor).filter(Boolean))].join(', '),total:payTotal(o),fx:fxOf(o),receipt:fv('f_r'),at:Date.now()};
+ o.status='done';o.posted=true;log(o,`이체 완료 (CC 승인) ${totTxt(o)} · 환율 ${won(fxOf(o))}`);notify(o,o.owners,'이체 완료');render();
+}
+function voidIt(id){const o=O(id);const r=document.querySelector('input[name=vr]:checked');if(!r){flash('무산 사유를 고르세요','err');return}
+ o.voidReason=r.value;const m=fv('v_memo');o.status='void';log(o,`무산 처리 — ${r.value}`,m);render()}
+function reopen(id){const o=O(id);o.status='s1';o.voidReason=null;log(o,'다시 진행 (재개)');render()}
+function setStatus(id,v){const o=O(id);if(v===o.status)return;const f=stName(o.status);o.status=v;if(v!=='void')o.voidReason=null;log(o,`상태 직접 변경: ${f} → ${stName(v)}`);render()}
+function setCompany(id,c){const o=O(id);o.company=c;log(o,c?`결제 회사 지정: ${c}${FIN[c]?` (재무 확인 담당: ${FIN[c]})`:''}`:'결제 회사 지정 해제');render()}
+function setLink(id){const r=fv('lk_r');if(!r)return;const o=O(id);o.link={type:fv('lk_t'),ref:r};log(o,`${o.link.type} 건과 연결: ${r}`);render()}
+function editItem(id,i,f,v){const o=O(id);o.items[i][f]=String(v).trim();log(o,`품목 수정: ${o.items[i].name}`);if(S.me==='penny')notify(o,o.owners,'Penny가 품목을 수정했습니다');render()}
+function delItem(id,i){const o=O(id);const n=o.items[i].name;o.items.splice(i,1);log(o,'품목 삭제: '+n);if(S.me==='penny')notify(o,o.owners,'Penny가 품목을 삭제했습니다: '+n);render()}
+function togEdit(id){S.ie=S.ie||{};S.ie[id]=!S.ie[id];render()}
+function addItem(id){const o=O(id);const n=fv('ni_n');if(!n)return;const it={name:n,qty:fv('ni_q').replace(/,/g,''),hint:''};const a=fv('ni_a').replace(/,/g,'');if(a){it.estAmt=a;it.estCur=fv('ni_c')||'USD';it.estCond=fv('ni_k')||'이하'}o.items.push(it);log(o,'품목 추가: '+n);if(S.me==='penny')notify(o,o.owners,'Penny가 품목을 추가했습니다: '+n);render()}
+function toggleOwner(id,u){const o=O(id);o.owners=o.owners.includes(u)?o.owners.filter(x=>x!==u):[...o.owners,u];save();render()}
+
+// ===== 화면 =====
+function render(){
+ if(!S.me)return;
+ $('#who').textContent=uname(S.me);
+ renderPanel();renderMenu();
+ $('#langWrap').style.display=(S.me==='penny'||S.me==='cc')?'block':'none';$('#langSel').value=lang();$('#langSel').querySelector('[value=en]').style.display=S.me==='cc'?'none':'';
+ const m=msg?`<div class="box ${msg.type}">${esc(msg.m)}</div>`:'';
+ const back=S.tab==='spec'?`<button class="ghost" onclick="S.tab='orders';render()">← 오더 목록</button>`:'';
+ $('#main').innerHTML=m+back+(S.tab==='orders'?(S.openId?detail(O(S.openId)):list()):specTab());
+ applyI18n();setTimeout(autoTranslate,0);
+}
+function renderMenu(){const stf=isEdit();
+ $('#menu').innerHTML=`<div class="ct">설정</div><div class="small mut" style="margin-bottom:8px">${syncLabel()}</div>${stf?`<label class="l">승인 방식</label><select id="modeSel" onchange="S.mode=this.value;save();render()"><option value="app" ${S.mode==='app'?'selected':''}>앱에서 승인</option><option value="ding" ${S.mode==='ding'?'selected':''}>딩톡 병행(대신 기록)</option></select>`:''}
+ <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px"><button onclick="doLogout()">로그아웃</button>${stf?`<button onclick="S.tab='spec';S.openId=null;toggleMenu();render()">딩톡 요청서·쓰는 법</button>${isAdmin()?`<button class="bad" onclick="resetAll();toggleMenu()">샘플 데이터로 바꾸기 (전체 초기화)</button><button class="bad" onclick="resetAll('empty');toggleMenu()">모든 오더 비우기</button>`:''}`:''}</div>`}
+function toggleMenu(){const p=$('#menu');p.style.display=p.style.display==='block'?'none':'block';$('#panel').style.display='none';renderMenu();applyI18n()}
+function togglePanel(){const p=$('#panel');p.style.display=p.style.display==='block'?'none':'block';$('#menu').style.display='none';renderPanel();applyI18n()}
+function toggleTr(){S.autoTr=!S.autoTr;save();render()}
+function renderPanel(){const m=S.notifs.filter(n=>n.to===S.me);const un=m.filter(n=>!n.read).length;$('#bellN').textContent=un?'('+un+')':'';$('#panel').innerHTML='<div class="bold">알림 ('+uname(S.me)+')</div>'+(m.length?m.slice(0,30).map(n=>`<div style="padding:7px 0;border-bottom:1px solid var(--line);cursor:pointer;${n.read?'':'background:#f3f7ff'}" onclick="n_open(${n.o},${n.t})">${esc(n.text)}<div class="small mut">${fmt(n.t)}</div></div>`).join(''):'<div class="small mut">알림 없음 (앱에서 승인 모드에서만 생깁니다)</div>')}
+function n_open(id,t){const n=S.notifs.find(x=>x.t===t&&x.o===id&&x.to===S.me);if(n)n.read=true;save();$('#panel').style.display='none';S.tab='orders';S.openId=id;render();scrollTo(0,0)}
+function lang(){if(S.me==='cc'||S.me==='penny'){const l=(S.langBy||{})[S.me]||'zh';return (S.me==='cc'&&l==='en')?'zh':l}return 'ko'}
+function tx(o,key,text,from){
+ const L=lang();text=text||'';if(!text)return '';
+ if(!from||from===L)return `<span data-nt>${esc(text)}</span>`;
+ const t=(o.tr||{})[key+'|'+L];
+ if(t)return `<span data-nt>${esc(t)}</span> <span class="small mut">자동번역</span><div class="small mut" data-nt>${esc(text)}</div>`;
+ return `<span data-nt>${esc(text)}</span> `;
+}
+let SMP,trBusy=false;const trTried=new Set();
+async function getSample(){if(SMP!==undefined)return SMP;try{SMP=(window.claude&&window.claude.use)?await window.claude.use('sample'):null}catch(e){SMP=null}return SMP}
+function pendingTr(o){const L=lang();const out=[];const has=k=>(o.tr||{})[k+'|'+L];const tried=k=>trTried.has(o.id+'|'+L+'|'+k);
+ const add=(k,t)=>{if(t&&!has(k)&&!tried(k))out.push({k,text:t})};
+ if(o.raw&&rawFrom(o)!==L)add('raw',o.raw);
+ o.items.forEach((x,k)=>{const n=x.name||'';if(L==='ko'&&HAS_ZH(n)&&!HAS_KO(n))add('i'+k,n);if(L!=='ko'&&HAS_KO(n))add('i'+k,n)});
+ o.log.forEach((l,i)=>{if(l.m&&(l.ml||'ko')!==L)add('l'+i,l.m)});
+ o.quotes.forEach((q,i)=>{if(q.memo&&(q.ml||'ko')!==L)add('q'+i,q.memo)});
+ return out}
+async function autoTranslate(){
+ if(!S.autoTr||trBusy||S.tab!=='orders'||!S.openId)return;const o=O(S.openId);if(!o)return;
+ const L=lang();const todo=pendingTr(o);if(!todo.length)return;
+ todo.forEach(x=>trTried.add(o.id+'|'+L+'|'+x.k));
+ const sm=await getSample();if(!sm){S.autoTr=false;save();render();return}
+ trBusy=true;
+ try{
+  const tgt={ko:'Korean',zh:'Simplified Chinese',en:'English'}[L];
+  const payload=JSON.stringify(Object.fromEntries(todo.map(x=>[x.k,x.text])));
+  const r=await sm(`Translate each value of this JSON object into ${tgt}. These are short business chat messages about purchasing products (prices, quantities, vendors). If a value is already in ${tgt}, keep it unchanged. Keep product names, model codes, numbers and currency symbols as they are. Return ONLY a JSON object with the same keys and the translated strings, with no code fence and no commentary.\n${payload}`,{modelTier:'quick'});
+  const mm=(r.text||'').match(/\{[\s\S]*\}/);const res=mm?JSON.parse(mm[0]):{};
+  o.tr=o.tr||{};todo.forEach(x=>{if(typeof res[x.k]==='string')o.tr[x.k+'|'+L]=res[x.k]});save();
+ }catch(e){if(e&&e.code==='not_granted'){S.autoTr=false;save()}}
+ trBusy=false;render();
+}
+const DICT=[
+['오더 기록 시험판','订单记录（试用版）','Order Log (Trial)'],['가짜 데이터 · 합치기 전 검증용','示例数据 · 合并前验证用','Sample data · pre-merge trial'],
+['앱에서 승인','在应用内审批','Approve in app'],['딩톡 병행(대신 기록)','钉钉并行（代为记录）','DingTalk parallel (record only)'],
+['접속: ','登录账号：','Account: '],['알림 없음 (앱에서 승인 모드에서만 생깁니다)','暂无通知（仅在应用内审批模式下产生）','No alerts (only in app-approval mode)'],['알림','通知','Alerts'],['+ 새 오더','+ 新订单','+ New order'],
+['자동번역 켬','自动翻译：开','Auto-translate: on'],['자동번역 끔','自动翻译：关','Auto-translate: off'],['자동번역','自动翻译','Auto-translated'],['(번역 중…)','（翻译中…）','(translating…)'],['(번역 꺼짐)','（未翻译）','(not translated)'],
+['오더 목록','订单列表','Orders'],['딩톡 요청서·쓰는 법','钉钉需求说明·使用方法','DingTalk spec · how to use'],
+['진행중','进行中','In progress'],['Penny 답변 대기','等待 Penny 回复','Waiting for Penny'],['3일 이상 변화 없음','3天以上无变化','No change 3+ days'],['무산 (기록)','已取消（记录）','Dropped (logged)'],
+['완료된 오더입니다. ','该订单已完成。','Order completed. '],['완료','已完成','Done'],['내 차례','轮到我','My turn'],['부터 대기','起等待',' waiting'],['무산(','已取消（','Dropped ('],[')으로 기록되어 있습니다. 시작된 오더라서 기록은 그대로 남습니다.','）。该订单已开始，记录会保留。',') — the order had started, so the record is kept.'],['무산 — ','已取消 — ','Dropped — '],['무산','已取消','Dropped'],['전체','全部','All'],
+['검색 (품목·메시지)','搜索（品名·消息）','Search (item/message)'],['오더','订单','Order'],['품목','品名','Item'],['금액','金额','Amount'],['단계','阶段','Stage'],['담당','负责人','Owner'],['마지막 변경','最后更新','Last update'],['해당하는 오더가 없습니다.','没有符合条件的订单。','No matching orders.'],
+['오늘','今天','Today'],['일 전','天前',' d ago'],['일째 답변 없음','天未回复',' days no reply'],
+['① 조사·견적','① 调研·报价','① Research & quotes'],['② Penny 가격 회신','② Penny 确认价格','② Penny price reply'],['③ 서류 준비','③ 准备单据','③ Prepare documents'],['④ Penny 서류 확인','④ Penny 确认单据','④ Penny document check'],['⑤ 결제승인(재무·CC)','⑤ 付款审批（财务·CC）','⑤ Payment approval (Finance·CC)'],['⑥ 완료','⑥ 完成','⑥ Done'],
+['가격이 안 맞음','价格不合适','Price too high'],['Penny 무응답','Penny 未回复','No reply from Penny'],['Penny 결정: 진행 안 함','Penny 决定：不进行','Penny decided: no go'],['물량·재고 없음','没有货源/库存','No stock'],['업체 연락 안 됨','供应商联系不上','Vendor unreachable'],['잘못 등록','登记错误','Registered by mistake'],['기타','其他','Other'],
+['← 목록','← 返回列表','← Back to list'],['Penny 딩톡 메시지 원문','Penny 的钉钉消息原文',"Penny's DingTalk message"],['결제 회사:','付款公司：','Paying company:'],['조사 담당:','调研负责人：','Research owners:'],['미정','未定','TBD'],['→ 재무 확인 담당: ','→ 财务确认负责人：','→ Finance contact: '],['→ 재무 담당 미지정','→ 未指定财务负责人','→ No finance contact set'],['등록 ','登记 ','Created by '],
+['환율 변경: ','汇率变更：','Rate changed: '],['환율','汇率','Rate'],['기준일','基准日','As of'],['(시험판 예시값)','（试用版示例值）','(trial sample value)'],
+['지금은 ','现在由 ',"Now: "],[' 차례입니다. (',' 处理。（',' to act. ('],['부터 대기)','起等待）',' waiting)'],
+['조사 담당(과장님·석훈·Chloe)','调研负责人（科长·Hoon·Chloe）','Research team (Gwajang·Hoon·Chloe)'],['재무팀','财务部','Finance'],['과장님','科长','Gwajang'],['석훈','Hoon','Hoon'],['지연','Jiyeon','Jiyeon'],['경빈','Kyungbin','Kyungbin'],['수빈','Subin','Subin'],['(CH 재무)','（CH财务）','(CH Finance)'],['(성신 재무)','（Seongsin财务）','(Seongsin Finance)'],['(에잇싱크 재무)','（Eightsync财务）','(Eightsync Finance)'],['성신','Seongsin','Seongsin'],['에잇싱크','Eightsync','Eightsync'],['부강','Bugang','Bugang'],
+['Penny가 딩톡으로 답했다면 위쪽 승인 방식을 "딩톡 병행"으로 바꿔 대신 기록할 수 있습니다.','如果 Penny 已在钉钉回复，可将上方审批方式切换为“钉钉并行”代为记录。','If Penny replied on DingTalk, switch the approval mode above to "DingTalk parallel" to record it for her.'],
+['가격 확인 요청','价格确认请求','Price check request'],['서류 확인 요청','单据确认请求','Document check request'],['견적: ','报价：','Quotes: '],['견적 입력 없음','暂无报价','No quotes entered'],['서류: ','单据：','Documents: '],['첨부 없음','无附件','None attached'],['결제 내역이 없습니다.','暂无付款明细。','No payment details.'],['결제 내역이 비어 있습니다. 줄을 추가하거나 견적에서 가져오세요.','付款明细为空。请添加行或从报价导入。','No lines yet. Add a line or import from quotes.'],['결제 내역 확인 완료 → CC에게','付款明细确认完毕 → 交给 CC','Payment details confirmed → to CC'],['결제 내역','付款明细','Payment details'],
+['메모 (선택)','备注（可选）','Note (optional)'],['가격 OK','价格OK','Price OK'],['가격 다시 조율','重新议价','Renegotiate price'],['진행 안 함','不进行','Do not proceed'],['서류 확정','确认单据','Confirm documents'],['수정 필요','需要修改','Needs revision'],
+['결제승인: 요청 → 재무팀 확인 → CC 승인·이체','付款审批：申请 → 财务确认 → CC 审批·转账','Payment approval: request → Finance check → CC approve & transfer'],['결제 회사 미정','付款公司未定','Paying company TBD'],['결제 회사 ','付款公司 ','Paying company '],[' → 재무 확인 담당 ',' → 财务确认负责人 ',' → finance contact '],['(재무 담당 미지정)','（未指定财务负责人）','(no finance contact)'],['결제 회사를 위쪽에서 지정하세요 (재무 담당이 정해집니다)','请在上方指定付款公司（将确定财务负责人）','Set the paying company above (determines the finance contact)'],['첨부 서류: ','附件单据：','Attached documents: '],['없음','无','None'],
+['결제승인 요청 (재무팀에 알림)','申请付款审批（通知财务）','Request payment approval (notify Finance)'],['결제승인 요청','付款审批申请','Payment approval request'],['재무 확인 완료','财务确认完成','Finance check done'],['재무 확인','财务确认','Finance check'],['CC 승인·이체','CC审批·转账','CC approve & transfer'],['반려 (서류 수정)','退回（修改单据）','Reject (fix documents)'],['승인·이체 완료','审批·转账完成','Approved & transferred'],['반려 (재무 재확인)','退回（财务重新确认）','Reject (Finance recheck)'],['모든 줄의 확인 칸을 체크하면 버튼이 눌립니다.','勾选所有行的确认框后按钮才可点击。','The button enables after every line is checked.'],['이체증 파일명 (선택)','转账凭证文件名（可选）','Transfer receipt file name (optional)'],
+['업체','供应商','Vendor'],['수량','数量','Qty'],['단가','单价','Unit price'],['확인','确认','Check'],['결제 합계','付款合计','Payment total'],[' · 재무 확인 ',' · 财务确认 ',' · finance check '],['+ 줄 추가','+ 添加行','+ Add line'],['견적에서 다시 가져오기','重新从报价导入','Re-import from quotes'],
+['(수량은 오더 참고용, 매입 확정 수량이 아닙니다)','（数量仅供订单参考，并非确定采购数量）','(Quantity is a reference only, not a confirmed purchase quantity)'],['Penny 예상가','Penny 预估价','Penny estimate'],['메모 남기기 (예: 과장님 통화, 업체 재고 확인됨)','留言（例：与科长通话，供应商库存已确认）','Leave a note (e.g. called vendor, stock confirmed)'],['남기기','留言','Post'],['메모','备注','Note'],['품목 추가','添加品名','Add item'],['추가','添加','Add'],['견적','报价','Quotes'],['가능 수량','可供数量','Available qty'],['메모·입력자','备注·录入人','Note · by'],['입력된 견적이 없습니다.','暂无报价。','No quotes yet.'],
+['진행 기록','进度记录','Activity log'],['(지우거나 고칠 수 없고 추가만 됩니다)','（不可删除或修改，只能追加）','(append-only; cannot be edited or deleted)'],['상황이 실제와 다르면 단계를 직접 바꿀 수 있습니다: ','如与实际不符，可手动更改阶段：','If reality differs you can change the stage manually: '],
+['오더 등록 (Penny 딩톡 메시지)','登记订单（Penny 的钉钉消息）','Order registered (Penny DingTalk message)'],['견적 입력: ','录入报价：','Quote entered: '],['Penny에게 가격 보고함','已向 Penny 汇报价格','Reported price to Penny'],['Penny: 이 가격이면 진행','Penny：按此价格进行','Penny: OK at this price'],['Penny: 가격 다시 조율 요청','Penny：要求重新议价','Penny: asked to renegotiate'],['Penny에게 서류 확인 요청함','已请 Penny 确认单据','Asked Penny to check documents'],['Penny 서류 확정','Penny 已确认单据','Penny confirmed documents'],['Penny 가격 OK','Penny 价格OK','Penny: price OK'],['Penny: 서류 수정 필요','Penny：单据需修改','Penny: documents need revision'],['재무 반려 → 서류 준비','财务退回 → 准备单据','Finance rejected → prepare documents'],['CC 반려 → 재무 재확인','CC退回 → 财务重新确认','CC rejected → Finance recheck'],['이체 완료 (CC 승인) ','转账完成（CC审批） ','Transfer done (CC approved) '],['이체 완료','转账完成','Transfer done'],['다시 진행 (재개)','重新进行（恢复）','Resumed'],['다시 진행','重新进行','Resume'],['상태 직접 변경: ','手动更改阶段：','Stage changed manually: '],['결제 회사 지정: ','指定付款公司：','Paying company set: '],['(재무 확인: ','（财务确认：','(finance: '],['재무 반려','财务退回','Finance rejected'],['CC 반려','CC退回','CC rejected'],['단계로 이동','阶段已更新','stage updated'],['무산 처리: ','已取消：','Dropped: '],['무산 처리','已取消','Dropped'],
+['무산으로 정리 (가격 안 맞음, 무응답 등)','标记为取消（价格不合适、无回复等）','Mark as dropped (price, no reply, etc.)'],['무산 기록','记录为取消','Log as dropped'],
+['이체증 ','转账凭证 ','Transfer receipt '],['이후 연결','后续关联','Linked to'],['아직 없음','暂无','None yet'],['연결','关联','Link'],['번호','编号','No.'],['온라인 주문','线上订单','Online order'],['오프라인 입고','线下入库','Offline receiving'],['수출','出口','Export'],
+['Penny 오더 품목','Penny 订单品目',"Penny's order items"],['(수량은 참고용, 매입 확정 수량이 아닙니다)','（数量仅供参考，并非确定采购数量）','(quantity is a reference, not a confirmed purchase qty)'],['현재 최저 견적','当前最低报价','Lowest quote now'],['견적 없음','暂无报价','No quote'],[' 외 ',' 等 ',' +'],['오더 설정','订单设置','Order settings'],['지금 할 일: ','待办：','To do: '],['견적을 받아 입력하고, Penny에게 보고하세요','请录入报价并向 Penny 汇报','enter quotes and report to Penny'],['담당 ','负责人 ','Owners '],['+ 새 오더 내리기','+ 提交新订单','+ Place new order'],['오더 내리기','提交订单','Submit order'],['오더가 접수되었습니다. 조사 담당에게 알림이 갔습니다.','订单已提交，已通知调研负责人。','Order submitted. The research team has been notified.'],['품명이나 메시지를 하나는 입력해 주세요','请至少填写一个品名或消息','Enter at least one item or a message'],
+['품명, 수량, 희망가만 적으면 됩니다. 수량·희망가는 비워도 됩니다.','只需填写品名、数量和期望价。数量和期望价可以留空。','Just enter item, quantity and target price. Quantity and price may be left blank.'],['품명 (예: iPhone 17 Pro Max 256GB)','品名（例：iPhone 17 Pro Max 256GB）','Item (e.g. iPhone 17 Pro Max 256GB)'],['자주 낸 품목 (눌러서 추가)','常订品目（点击添加）','Frequent items (tap to add)'],['예: 급함, 이번 주 안에 / 尽快','例：加急、本周内 / 尽快','e.g. urgent, within this week'],['딩톡 메시지로 붙여넣기','粘贴钉钉消息','Paste a DingTalk message'],['인식해서 채우기','识别并填入','Detect & fill'],
+['품명','品名','Item'],['희망가','期望价','Target price'],['내 희망가','我的期望价','My target price'],['현재 견적','当前报价','Current quote'],['견적가','报价','Quote'],['견적 대기','等待报价','Awaiting quote'],['견적 없음','暂无报价','No quote'],['차이','差异','Diff'],['오더 내용','订单内容','Order details'],
+['내가 할 일: ','我要做的：','To do: '],['기다리는 중: ','等待：','Waiting for: '],['견적 받아 입력 → Penny에게 보고','获取报价并录入 → 向 Penny 汇报','Get quotes → report to Penny'],['가격 확인하고 한 번 클릭으로 답하기','确认价格，一键回复','Check the price and reply with one click'],['거래명세서 올리고 Penny에게 확인 요청','上传交易明细并请 Penny 确认','Upload the statement and ask Penny to check'],['서류 확인하고 확정','确认并定稿单据','Check and confirm documents'],
+['지금 할 일 — 내 차례','待办 — 轮到我','To do — your turn'],['기다리는 중 — ','等待中 — ','Waiting — '],['결과','结果','Result'],['조율 #','议价 #','Round #'],['이전 견적 — 조율 #','之前的报价 — 议价 #','Earlier quotes — round #'],['이번 차수에 입력된 견적이 없습니다.','本轮暂无报价。','No quotes entered this round.'],
+['가격을 확인해 주세요','请确认价格','Please check the price'],['서류를 확인해 주세요','请确认单据','Please check the documents'],['견적 기준 총액(수량은 참고용)','按报价合计（数量仅供参考）','Total at quoted price (qty is a reference)'],['메모 (선택) — 중국어·영어로 써도 됩니다','备注（可选）— 可用中文或英文','Note (optional) — Chinese or English is fine'],
+['✅ 가격 OK — 이 가격으로 진행','✅ 价格OK — 按此价格进行','✅ Price OK — proceed at this price'],['🔻 더 낮게 조율 필요','🔻 需要再压低价格','🔻 Negotiate lower'],['목표가 (선택)','目标价（可选）','Target (optional)'],['❌ 가격 안 맞음 — 진행 안 함','❌ 价格不合适 — 不进行','❌ Price does not fit — do not proceed'],['✅ 서류 확정','✅ 确认单据','✅ Confirm documents'],['✏️ 수정 필요','✏️ 需要修改','✏️ Needs revision'],['✏️ 수정','✏️ 修改','✏️ Edit'],['✔ 수정 끝','✔ 完成修改','✔ Done editing'],
+['Penny: 더 낮게 조율 필요','Penny：需要再压低价格','Penny: negotiate lower'],[' (목표 ','（目标 ',' (target '],['→ 조율 #','→ 议价 #','→ round #'],['Penny에게 가격 보고함 (조율 #','已向 Penny 汇报价格（议价 #','Reported price to Penny (round #'],['오더 등록 (Penny 직접)','订单提交（Penny 本人）','Order placed (by Penny)'],['오더 등록 (Penny 딩톡 메시지 → 대신 등록)','订单登记（代 Penny 从钉钉消息录入）','Order registered (from Penny\'s DingTalk message)'],['품목 수정: ','品目修改：','Item edited: '],['품목 추가: ','添加品目：','Item added: '],['품목 삭제: ','删除品目：','Item removed: '],
+['내 차례','轮到我','My turn']
+,['전부 진행','全部进行','Proceed with all'],['바로 진행','直接进行','Proceed now'],['답변 보내기','发送回复','Send reply'],['✅ 진행','✅ 进行','✅ Proceed'],['🔻 더 낮게','🔻 再压价','🔻 Lower'],['❌ 안 함','❌ 不要','❌ Skip'],['목표가 (선택)','目标价（可选）','Target (optional)'],['진행 확정','已确认进行','Confirmed'],['재조율','重新议价','Renegotiate'],['제외','已排除','Skipped'],
+['품목마다 하나씩 골라 주세요. 전부 같으면 \'전부 진행\' 한 번이면 됩니다.','请为每个品目选择一项。如果全部相同，点一次“全部进行”即可。','Pick one for each item. If all are the same, tap "Proceed with all" once.'],['품목마다 하나씩 골라 주세요. 전부 같으면 \'바로 진행\' 한 번이면 됩니다.','请为每个品目选择一项。如果全部相同，点一次“直接进行”即可。','Pick one for each item. If all are the same, tap "Proceed now" once.'],['모든 품목에 하나씩 선택해 주세요','请为所有品目各选择一项','Please choose one for every item'],
+['희망가 대비 ','较期望价 ','vs target '],['이전 요청 목표 ','上次要求的目标价 ','Previously requested target '],['목표 ','目标 ','Target '],['진행 상황','进度','Progress'],['가격 답변: 진행 ','价格回复：进行 ','Price reply: proceed '],[' / 재조율 ',' / 重新议价 ',' / renegotiate '],[' / 제외 ',' / 排除 ',' / skipped '],['메모 남기기','留言','Leave a note'],
+['다른 사람 차례','等待他人处理','Waiting on others'],['지금 처리할 오더가 없습니다','目前没有需要处理的订单','Nothing needs your action right now'],['내 차례가 되면 여기에 나타납니다.','轮到您时会显示在这里。','Orders appear here when it is your turn.'],['새 오더','新订单','New order'],['저장했습니다.','已保存。','Saved.'],['Penny의 딩톡 메시지를 그대로 붙여넣으면 품목과 수량을 읽어 옵니다. 수량은 참고용이라 비워도 됩니다.','将 Penny 的钉钉消息直接粘贴，系统会读取品名和数量。数量仅供参考，可留空。','Paste Penny\'s DingTalk message; items and quantities are read automatically. Quantity is a reference and may be left blank.'],['딩톡 메시지','钉钉消息','DingTalk message'],['예시 붙여넣기','粘贴示例','Paste sample'],['여기에 붙여넣기','在此粘贴','Paste here'],['인식된 품목 (고치거나 지울 수 있음)','识别出的品名（可修改或删除）','Detected items (editable)'],['인식된 품목이 없습니다. 메시지만 저장해도 됩니다.','未识别到品名。仅保存消息也可以。','No items detected. You can save just the message.'],['+ 품목 직접 추가','+ 手动添加品名','+ Add item manually'],['담당 (조사하는 사람)','负责人（调研人员）','Owners (researchers)'],['결제 회사 (모르면 비워 두고 나중에 지정)','付款公司（不确定可留空，稍后指定）','Paying company (leave blank if unknown)'],['예상가','预估价','Estimate'],['닫기','关闭','Close'],['저장','保存','Save'],
+['지금 할 일: 견적을 받아 입력하고, Penny에게 보고하세요','待办：录入报价并向 Penny 汇报','To do: enter quotes and report to Penny'],
+['결제 내역을 확인하고 모든 줄을 체크하세요','请确认付款明细并勾选所有行','Review the payment details and check every line']
+];
+const DICTS=DICT.slice().sort((a,b)=>b[0].length-a[0].length);
+function trUI(str,L){let t=str;for(const d of DICTS){if(t.includes(d[0]))t=t.split(d[0]).join(L==='zh'?d[1]:d[2])}return t}
+function applyI18n(){
+ const L=(S.tab==='spec')?'ko':lang();
+ ['header','#main','#panel','#menu','#modalBody'].forEach(sel=>{const r=document.querySelector(sel);if(!r)return;
+  const w=document.createTreeWalker(r,NodeFilter.SHOW_TEXT);const nodes=[];while(w.nextNode())nodes.push(w.currentNode);
+  nodes.forEach(n=>{if(n.parentElement&&n.parentElement.closest('[data-nt]'))return;
+   const base=n._ko!==undefined?n._ko:n.nodeValue;if(!/[가-힣]/.test(base))return;
+   if(n._sub){n._sub.remove();n._sub=null}
+   if(L==='ko'){if(n._ko!==undefined)n.nodeValue=n._ko;return}
+   n._ko=base;const tt=trUI(base,L);n.nodeValue=tt;});
+  r.querySelectorAll('[placeholder],[title]').forEach(e=>{if(e.closest('[data-nt]'))return;['placeholder','title'].forEach(a=>{
+   const k='_ko_'+a;const base=e[k]!==undefined?e[k]:e.getAttribute(a);if(!base||!/[가-힣]/.test(base))return;
+   if(L==='ko'){if(e[k]!==undefined)e.setAttribute(a,e[k]);return}
+   e[k]=base;e.setAttribute(a,trUI(base,L))})});
+ });
+ document.title=L==='zh'?'订单记录':L==='en'?'Order Log':'오더 기록 시험판';
+}
+const rtag=o=>(o.round||1)>1?`<span class="tag rd">조율 #${o.round}</span>`:'';
+const chip=o=>`<span class="chip c-${o.status}">${stName(o.status)}</span>${rtag(o)}`;
+const stale=o=>{if(!['s2','s4','s5'].includes(o.status))return 0;const d=Math.floor((Date.now()-o.lastAt)/DAY);return d>=3?d:0};
+const summary=o=>{const n=o.items.length;return ut(o.items[0]?o.items[0].name:'-')+(n>1?` <span class="mut">+${n-1}</span>`:'')};
+function todo(o){
+ if(o.status==='done')return '완료'+(o.final&&o.final.total?' · '+fKRW(o.final.total):'');
+ if(o.status==='void')return '무산 · '+(o.voidReason||'');
+ const T=turn(o);if(!T.can)return '기다리는 중: '+T.lab;
+ const m={s1:'견적 받아 입력 → Penny에게 보고',s2:'가격 확인하고 한 번 클릭으로 답하기',s3:'거래명세서 올리고 Penny에게 확인 요청',s4:'서류 확인하고 확정',s5:{edit:'결제승인 요청',fin:'재무 확인',pay:'CC 승인·이체'}[T.role]};
+ return '내가 할 일: '+m[o.status]}
+function ocard(o){
+ const m=mine(o);
+ const li=o.items.slice(0,3).map(x=>`<div class="li">${x.st==='ok'?'✓ ':''}${x.st==='drop'?'<s>'+ut(x.name)+'</s>':'<b>'+ut(x.name)+'</b>'}${x.qty?` <span class="mut">× ${won(num(x.qty))}</span>`:''}${x.estAmt&&x.st!=='drop'?` <span class="small mut">· ${estTxt(o,x)}</span>`:''}</div>`).join('')+(o.items.length>3?`<div class="small mut">+${o.items.length-3}</div>`:'');
+ return `<div class="ocard st-${o.status} ${m?'mine':''}" onclick="S.openId=${o.id};render();scrollTo(0,0)"><div class="top"><span class="bold">${o.no}</span>${chip(o)}${m?'<span class="tag me">내 차례</span>':''}${o.company?`<span class="chip" style="background:#f2f4f7;color:#475467">${o.company}</span>`:''}${stale(o)?`<span class="small" style="color:var(--warn)">${stale(o)}일째 답변 없음</span>`:''}<span class="small mut" style="margin-left:auto">${fmt(o.at)}</span></div>${li}${payTotal(o)?`<div class="small" style="margin-top:4px">${fKRW(payTotal(o))} <span class="mut">(${fUSD(payTotal(o)/fxOf(o))})</span></div>`:''}<div class="nx">${todo(o)}</div></div>`}
+const visible=o=>{const R=ROLES[S.me]||[];if(R.includes('edit')||R.includes('approve'))return true;
+ if(R.includes('pay'))return ['s5','done'].includes(o.status)&&o.posted!==false;
+ const f=R.find(r=>r.startsWith('fin:'));if(f)return o.company===f.slice(4)&&['s5','done'].includes(o.status);return true};
+function list(){
+ const V=S.orders.filter(visible);
+ const cnt={mine:V.filter(mine).length,active:V.filter(o=>!['done','void'].includes(o.status)).length,done:V.filter(o=>o.status==='done').length,void:V.filter(o=>o.status==='void').length};
+ const waiting=V.filter(o=>['s2','s4'].includes(o.status)).length;const stl=V.filter(stale).length;
+ if(!cnt[S.filter])S.filter=S.filter in cnt?S.filter:'mine';
+ let rows=V.filter(o=>S.filter==='mine'?mine(o):(S.filter==='active'?!['done','void'].includes(o.status):o.status===S.filter));
+ const q=S.q.trim().toLowerCase();if(q)rows=rows.filter(o=>(o.raw+o.no+o.items.map(i=>i.name).join(' ')).toLowerCase().includes(q));
+ rows=[...rows].sort((a,b)=>(mine(b)-mine(a))||(b.lastAt-a.lastAt));
+ const canNew=isEdit()||S.me==='penny';
+ let body;
+ body=rows.map(ocard).join('')||(S.filter==='mine'?`<div class="card" style="text-align:center;padding:34px 18px"><div style="font-size:34px">✓</div><div class="bold" style="font-size:17px;margin-top:6px">지금 처리할 오더가 없습니다</div><div class="small mut" style="margin-top:4px">내 차례가 되면 여기에 나타납니다.</div></div>`:'<div class="card mut">해당하는 오더가 없습니다.</div>');
+ return `${canNew?'<button class="pri herobtn" onclick="openNew()">+ 새 오더 내리기</button>':''}
+ <div style="display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><div class="tabs2" style="flex:1">${[['mine','내 차례'],['active','진행중'],['done','완료'],['void','무산']].filter(f=>f[0]!=='void'||isEdit()||S.me==='penny').map(f=>`<span class="pill ${S.filter===f[0]?'on':''}" onclick="S.filter='${f[0]}';render()">${f[1]} ${cnt[f[0]]}</span>`).join(' ')}</div>${isEdit()?`<input placeholder="검색 (품목·메시지)" value="${esc(S.q)}" oninput="S.q=this.value;render();this.focus()" style="max-width:240px">`:''}</div>
+ ${isEdit()&&(waiting||stl)?`<div class="small mut" style="margin:6px 2px 0">Penny 답변 대기 ${waiting} · 3일 이상 변화 없음 ${stl}</div>`:''}
+ ${body}`
+}
+function decisionRows(o,inter){
+ const fx=fxOf(o);let tot=0;
+ const all=o.items.map((x,k)=>[x,k]);const done=all.filter(([x])=>!isPend(x));const pend=all.filter(([x])=>isPend(x));
+ const rows=pend.map(([x,k])=>{const q=bestQ(o,x);let px='<div class="px" style="font-size:14px;font-weight:500;color:var(--mut)">견적 대기</div>',sub='';
+  if(q){const qk=toKRW(q.price,q.cur||'KRW',fx);if(num(x.qty))tot+=qk*num(x.qty);px=`<div class="px">${dual(q.price,q.cur||'KRW',fx)}</div>`;sub=ut(q.vendor);
+   if(x.estAmt){const ek=toKRW(x.estAmt,x.estCur||'USD',fx);if(ek>0){const d=(qk-ek)/ek*100;sub+=` · <b style="color:${d<=0?'var(--ok)':'var(--bad)'}">희망가 대비 ${d>0?'+':''}${d.toFixed(1)}%</b>`}}}
+  const meta=[x.qty?'수량 '+won(num(x.qty)):'',x.estAmt?'희망가 '+estTxt(o,x):''].filter(Boolean).join(' · ');
+  const prev=x.st==='lower'&&x.tg&&x.tg.amt?`<div class="small" style="color:var(--warn);margin-top:2px">이전 요청 목표 ${dual(x.tg.amt,x.tg.cur||'USD',fx)}</div>`:'';
+  const seg=inter?`<div class="seg"><label><input type="radio" name="dc${k}" value="ok" onchange="dcPick()"><span>✅ 진행</span></label><label><input type="radio" name="dc${k}" value="lower" onchange="dcPick()"><span>🔻 더 낮게</span></label><label><input type="radio" name="dc${k}" value="drop" onchange="dcPick()"><span>❌ 안 함</span></label></div><div class="tgbox" id="tgbox${k}"><span>목표가 (선택)</span><input id="tg${k}" class="fix" style="width:110px" inputmode="decimal" placeholder="1150"><select id="tgc${k}" class="fix" style="width:82px"><option>USD</option><option>KRW</option></select></div>`:'';
+  return `<div class="dcrow"><div><div class="nm">${nm(o,x,k)}</div><div class="meta">${meta}</div>${x.st==='lower'?'<span class="stt lower">재조율</span>':''}${prev}</div><div class="dcq">${px}<div class="sub">${sub}</div></div>${seg}</div>`}).join('');
+ const dn=done.map(([x,k])=>`<div class="dcdone"><div>${x.st==='ok'?'<span class="stt ok">진행 확정</span>':'<span class="stt drop">제외</span>'} <span style="${x.st==='drop'?'text-decoration:line-through':''}">${nm(o,x,k)}</span>${x.qty?` <span class="small">× ${won(num(x.qty))}</span>`:''}</div><div class="small">${x.st==='ok'&&x.ap?dual(x.ap.price,x.ap.cur||'KRW',fx)+' · '+ut(x.ap.vendor):''}</div></div>`).join('');
+ return `${rows}${tot&&pend.length?`<div style="text-align:right;margin:8px 0 0" class="small mut">견적 기준 총액(수량은 참고용) <b style="font-size:16px;color:var(--ink)">${fKRW(tot)}</b> (${fUSD(tot/fx)})</div>`:''}${dn?`<div style="margin-top:14px">${dn}</div>`:''}`}
+const priceReview=o=>decisionRows(o,false);
+function decisionUI(o){const n=o.items.filter(isPend).length;
+ return `<div class="bold" style="font-size:18px">가격을 확인해 주세요${(o.round||1)>1?` <span class="tag rd">조율 #${o.round}</span>`:''}</div><div class="small mut" style="margin:2px 0 14px">품목마다 하나씩 골라 주세요. 전부 같으면 '${n>1?'전부 진행':'바로 진행'}' 한 번이면 됩니다.</div>${decisionRows(o,true)}
+ <input id="memo_s2" placeholder="메모 (선택) — 중국어·영어로 써도 됩니다" style="margin-top:14px">
+ <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap"><button class="ok" style="flex:1;min-width:150px;min-height:50px;font-size:16px" onclick="pennySubmit(${o.id},true)">${n>1?'전부 진행':'바로 진행'}</button><button id="dcSend" class="pri" style="flex:2;min-width:180px;min-height:50px;font-size:16px" disabled onclick="pennySubmit(${o.id})">답변 보내기</button></div>`}
+function dcPick(){const names=[...new Set([...document.querySelectorAll('.seg input')].map(i=>i.name))];let all=true;names.forEach(n=>{const c=document.querySelector('input[name='+n+']:checked');if(!c)all=false;const tb=document.getElementById('tgbox'+n.slice(2));if(tb)tb.style.display=(c&&c.value==='lower')?'flex':'none'});const b=document.getElementById('dcSend');if(b)b.disabled=!all}
+function pennySubmit(id,allOk){
+ const o=O(id);const memo=fv('memo_s2');const pend=o.items.map((x,k)=>[x,k]).filter(([x])=>isPend(x));const ch={};
+ for(const [x,k] of pend){const c=document.querySelector('input[name=dc'+k+']:checked');const v=allOk?'ok':(c&&c.value);if(!v){flash('모든 품목에 하나씩 선택해 주세요','err');return}ch[k]=v}
+ let nOk=0,nLow=0,nDrop=0;
+ pend.forEach(([x,k])=>{const v=ch[k];
+  if(v==='ok'){const q=bestQ(o,x);x.st='ok';x.tg=null;x.ap=q?{vendor:q.vendor,price:q.price,cur:q.cur||'KRW',qty:q.qty||x.qty,round:o.round||1}:{vendor:'',price:'',cur:'KRW',qty:x.qty,round:o.round||1};nOk++}
+  else if(v==='lower'){x.st='lower';const a=(fv('tg'+k)||'').replace(/,/g,'');x.tg=a?{amt:a,cur:fv('tgc'+k)||'USD'}:null;nLow++}
+  else{x.st='drop';x.tg=null;nDrop++}});
+ let tail='';
+ if(nLow){o.round=(o.round||1)+1;o.status='s1';o.ask={round:o.round,li:o.log.length};tail=' → 조율 #'+o.round}
+ else if(o.items.some(x=>x.st==='ok'))o.status='s3';
+ else{o.status='void';o.voidReason='가격이 안 맞음'}
+ log(o,`가격 답변: 진행 ${nOk} / 재조율 ${nLow} / 제외 ${nDrop}${tail}`,memo);
+ notify(o,o.owners,nLow?`Penny 답변 — 진행 ${nOk}, 더 낮게 ${nLow}, 제외 ${nDrop} (조율 #${o.round})`:(o.status==='void'?'Penny: 전부 진행 안 함 (무산)':`Penny 가격 OK — 진행 ${nOk}, 제외 ${nDrop}`));
+ render()}
+function stCell(o,x){
+ if(x.st==='ok')return '<span class="stt ok">진행 확정</span>';
+ if(x.st==='drop')return '<span class="stt drop">제외</span>';
+ if(x.st==='lower')return `<span class="stt lower">재조율</span>${x.tg&&x.tg.amt?`<div class="small mut">목표 ${dual(x.tg.amt,x.tg.cur||'USD',fxOf(o))}</div>`:''}`;
+ return ''}
+function heroCard(o){
+ const open=!['done','void'].includes(o.status);
+ const stf=isEdit();const can=open&&(stf||(S.me==='penny'&&['s1','s2'].includes(o.status)));const ed=can&&S.ie&&S.ie[o.id];
+ const co=x=>['이하','정도','이상'].map(c=>`<option value="${c}" ${(x.estCond||'이하')===c?'selected':''}>${COND[c]}</option>`).join('');
+ const rows=o.items.map((x,k)=>{
+  if(ed)return `<tr><td><input value="${esc(x.name)}" onchange="editItem(${o.id},${k},'name',this.value)"></td><td><input style="width:84px" inputmode="numeric" value="${esc(x.qty)}" onchange="editItem(${o.id},${k},'qty',this.value)"></td><td style="white-space:nowrap"><select style="width:60px;display:inline-block" onchange="editItem(${o.id},${k},'estCond',this.value)">${co(x)}</select> <input style="width:86px;display:inline-block" inputmode="decimal" value="${esc(x.estAmt||'')}" onchange="editItem(${o.id},${k},'estAmt',this.value)"> <select style="width:74px;display:inline-block" onchange="editItem(${o.id},${k},'estCur',this.value)"><option ${(x.estCur||'USD')==='USD'?'selected':''}>USD</option><option ${x.estCur==='KRW'?'selected':''}>KRW</option></select></td><td><button class="sm bad" onclick="delItem(${o.id},${k})">×</button></td></tr>`;
+  const q=bestQ(o,x);
+  return `<tr class="${x.st==='drop'?'dropped':''}"><td class="nmcell">${nm(o,x,k)}${x.hint?`<div class="small mut">${ut(x.hint)}</div>`:''}</td><td class="qcell">${x.qty?won(num(x.qty)):'<span class="mut">-</span>'}</td><td>${x.estAmt?estTxt(o,x):'<span class="mut">-</span>'}</td><td>${q&&x.st!=='drop'?`${dual(q.price,q.cur||'KRW',fxOf(o))}<div class="small mut">${ut(q.vendor)}</div>`:'<span class="mut small">'+(x.st==='drop'?'':'견적 없음')+'</span>'}</td><td>${stCell(o,x)}</td></tr>`}).join('');
+ const head=ed?'<tr><th>품명</th><th>수량</th><th>희망가</th><th></th></tr>':'<tr><th>품명</th><th>수량</th><th>희망가</th><th>현재 견적</th><th></th></tr>';
+ const add=ed?`<div class="row" style="margin-top:10px"><input id="ni_n" placeholder="품목 추가"><input class="fix" id="ni_q" style="width:90px" inputmode="numeric" placeholder="수량"><select class="fix" id="ni_k" style="width:62px"><option>이하</option><option>정도</option><option>이상</option></select><input class="fix" id="ni_a" style="width:90px" inputmode="decimal" placeholder="희망가"><select class="fix" id="ni_c" style="width:76px"><option>USD</option><option>KRW</option></select><button class="fix sm" onclick="addItem(${o.id})">추가</button></div>`:'';
+ const tools=`<div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">${stf?`<button class="sm" onclick="copyInquiry(${o.id})">📋 업체 문의용 복사</button><label class="small mut" style="display:flex;align-items:center;gap:4px;margin:0"><input type="checkbox" style="width:auto" ${S.inclPrice?'checked':''} onchange="S.inclPrice=this.checked;save()"> 희망가 포함</label>`:''}${can?`<button class="sm" onclick="togEdit(${o.id})">${ed?'✔ 수정 끝':'✏️ 수정'}</button>`:''}</div>`;
+ const raw=o.raw?`<details style="margin-top:12px" ${stf?'open':''}><summary class="mut small" style="cursor:pointer">Penny 딩톡 메시지 원문</summary><div class="raw" data-nt style="margin-top:6px">${tx(o,'raw',o.raw,rawFrom(o))}</div>${stf?`<button class="sm" style="margin-top:6px" onclick="copyRaw(${o.id})">원문 복사</button>`:''}</details>`:'';
+ return `<section class="card hero"><div style="display:flex;justify-content:space-between;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:6px"><div class="ct" style="margin:0">오더 내용</div>${tools}</div><div style="overflow:auto"><table>${head}${rows}</table></div>${add}${raw}</section>`}
+function detail(o){
+ const i=ST.findIndex(s=>s.k===o.status);
+ const stepper=`<div class="stepper">${o.status==='void'?`<div class="void" style="flex:3">무산 — ${esc(o.voidReason)}</div>`:ST.map((s,j)=>`<div class="${j<i?'past':j===i?'cur':''}">${s.n}</div>`).join('')}</div>`;
+ const itemOpts=o.items.filter(isActive).map(x=>`<option>${esc(x.name)}</option>`).join('');
+ const open=!['done','void'].includes(o.status);
+ let act='';
+ const memoRow=k=>`<input id="memo_${k}" placeholder="메모 (선택)" style="margin-top:8px">`;
+  if(o.status==='s1'){const vend=[...new Set(S.orders.flatMap(x=>x.quotes.map(q=>q.vendor)).filter(Boolean))];const cur=o.round||1;
+   const lows=o.items.map((x,k)=>[x,k]).filter(([x])=>x.st==='lower');const am=o.ask&&o.log[o.ask.li]&&o.log[o.ask.li].m?o.log[o.ask.li]:null;
+   const ask=(cur>1&&lows.length)?`<div class="box warn"><b>🔻 Penny 요청 — 다시 조율할 품목 (조율 #${cur})</b>${lows.map(([x,k])=>`<div style="margin-top:5px">· ${nm(o,x,k)} ${x.tg&&x.tg.amt?`<span class="small">목표 ${dual(x.tg.amt,x.tg.cur||'USD',fxOf(o))}</span>`:''}</div>`).join('')}${am?`<div class="small" style="margin-top:6px">${tx(o,'l'+o.ask.li,am.m,am.ml||'zh')}</div>`:''}${o.items.some(x=>x.st==='ok')?'<div class="small" style="margin-top:6px">진행 확정된 품목은 그대로 다음 단계로 갑니다.</div>':''}</div>`:'';
+   const sendKey=" onkeydown=\"if(event.key==='Enter')addQuote("+o.id+")\"";
+   act=`${ask}<datalist id="dl_v">${vend.map(v=>`<option value="${esc(v)}">`).join('')}</datalist><div class="bold">업체에서 받은 가격 입력</div>
+   <div class="row" style="margin-top:6px"><select id="q_i">${itemOpts}</select><input id="q_v" list="dl_v" placeholder="업체명"><input id="q_p" inputmode="decimal" placeholder="단가"${sendKey}><select id="q_c" class="fix" style="width:78px"><option ${S.lastCur!=='KRW'?'selected':''}>USD</option><option ${S.lastCur==='KRW'?'selected':''}>KRW</option></select><input id="q_q" class="fix" style="width:92px" inputmode="numeric" placeholder="가능 수량"><input id="q_m" placeholder="메모 (선택)"${sendKey}><button class="pri fix" onclick="addQuote(${o.id})">추가</button></div>
+   <div class="bold" style="margin-top:14px">Penny에게 이렇게 보입니다</div><div style="margin-top:4px">${priceReview(o)}</div>
+   ${memoRow('s2')}<button class="pri big" onclick="go(${o.id},'s2','Penny에게 가격 보고함'+(${cur}>1?' (조율 #${cur})':''))">Penny에게 가격 보고하기${cur>1?' (조율 #'+cur+')':''}</button>
+   <div class="small mut" style="margin-top:4px">견적이 없어도 눌러집니다. 상황 그대로 기록하는 용도입니다.</div>`}
+  else if(o.status==='s2')act=`<div class="bold">Penny 답변 대기 중 (${rel(o.lastAt)} 보고) — 딩톡으로 답이 왔다면 아래에서 대신 기록하세요</div><div style="margin-top:10px">${decisionUI(o)}</div>`;
+ else if(o.status==='s3')act=`<div class="bold">견적서·거래명세서를 받아 붙이세요</div>
+  <div style="margin:8px 0">${o.docs.length?o.docs.map(d=>`<span class="chip c-done"><span data-nt>${esc(d)}</span></span>`).join(' '):'<span class="mut small">아직 첨부 없음</span>'} <button class="sm" onclick="pickDoc(${o.id})">파일 선택</button> <button class="sm" onclick="addDoc(${o.id},'거래명세서_샘플.pdf')">샘플 첨부</button></div>
+  <div class="bold" style="margin-top:12px">결제 내역 <span class="small mut">(서류 기준 확정 품목·수량·단가. 견적에서 자동으로 채웠습니다)</span></div>${payTable(o,{edit:true})}
+  ${memoRow('s4')}<div style="margin-top:8px"><button class="pri" onclick="go(${o.id},'s4','Penny에게 서류 확인 요청함')">Penny에게 서류 확인 요청함</button></div>`;
+ else if(o.status==='s4')act=`<div class="bold">Penny가 서류를 확인하는 중입니다</div>${memoRow('s5')}
+  <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="ok" onclick="go(${o.id},'s5','Penny 서류 확정')">Penny 확정</button><button onclick="go(${o.id},'s3','서류 수정 필요')">서류 수정 필요</button></div>`;
+ else if(o.status==='s5')act=`<div class="bold">딩톡 결제승인 → 재무팀 확인 → CC 승인·이체</div>
+  <div class="small" style="margin-top:4px">${o.company?(FIN[o.company]?`결제 회사 <b>${o.company}</b> → 재무 확인 담당 <b>${FIN[o.company]}</b>`:`결제 회사 <b>${o.company}</b> (재무 담당 미지정)`):'<span style="color:var(--warn)">결제 회사를 위쪽에서 지정하면 재무 확인 담당이 표시됩니다.</span>'}</div>
+  <div style="margin:8px 0">${o.posted?'<span class="chip c-done">딩톡에 올림</span>':`<button class="pri" onclick="postPay(${o.id})">딩톡에 결제승인 올림</button>`}</div>
+  <div class="small mut">CC 이체가 끝나면 아래를 채우고 마무리하세요 (모두 선택 입력).</div>
+  <div class="row" style="margin-top:6px"><input id="f_v" placeholder="최종 업체" value="${esc((o.quotes[o.quotes.length-1]||{}).vendor||'')}"><input id="f_q" placeholder="확정 수량"><input id="f_p" placeholder="확정 단가"><input id="f_r" placeholder="이체증 파일명 (선택)"></div>
+  <div style="margin-top:8px"><button class="ok" onclick="finish(${o.id})">이체 완료로 마무리</button></div>`;
+ else if(o.status==='void')act=`<div class="box warn">무산(${esc(o.voidReason)})으로 기록되어 있습니다. 시작된 오더라서 기록은 그대로 남습니다.</div><button onclick="reopen(${o.id})">다시 진행</button>`;
+ else act=`<div class="box okbox">완료된 오더입니다. ${o.final&&o.final.receipt?'이체증 '+esc(o.final.receipt):''}</div>${payTable(o,{})}
+  <div><b>이후 연결</b> ${o.link?`<span class="chip c-done">${esc(o.link.type)} · ${esc(o.link.ref)}</span>`:'<span class="mut small">아직 없음</span>'}</div>
+  <div class="row" style="margin-top:6px"><select id="lk_t"><option>온라인 주문</option><option>오프라인 입고</option><option>수출</option></select><input id="lk_r" placeholder="번호"><button class="fix" onclick="setLink(${o.id})">연결</button></div>`;
+ ensurePay(o);const T=turn(o);
+ const s5head=()=>{const cn=o.company?`결제 회사 <b>${o.company}</b>${FIN[o.company]?' → 재무 확인 담당 <b>'+FIN[o.company]+'</b>':' (재무 담당 미지정)'}`:'<span style="color:var(--warn)">결제 회사를 위쪽에서 지정하세요 (재무 담당이 정해집니다)</span>';return `<div class="bold">결제승인: 요청 → 재무팀 확인 → CC 승인·이체</div><div class="small" style="margin-top:4px">${cn}</div><div class="small" style="margin-top:6px">첨부 서류: ${o.docs.length?o.docs.map(d=>`<span class="chip c-done"><span data-nt>${esc(d)}</span></span>`).join(' '):'<span class="mut">없음</span>'}</div><div style="margin:8px 0;line-height:2">${o.posted?'✔':'□'} 결제승인 요청 → ${o.finOk?'✔':'□'} 재무 확인${o.finOk&&o.finBy?' ('+uname(o.finBy)+')':''} → □ CC 승인·이체</div>`};
+ if(open&&!T.can)act=`<div class="small mut" style="margin-bottom:6px">${rel(o.lastAt)}부터 대기</div>`+(o.status==='s5'?s5head()+payTable(o,{}):'')+(o.status==='s2'?priceReview(o):'')+(S.mode==='app'&&isEdit()?'<div class="small mut">Penny가 딩톡으로 답했다면 위쪽 승인 방식을 "딩톡 병행"으로 바꿔 대신 기록할 수 있습니다.</div>':'');
+  else if(open&&S.mode==='app'&&T.role==='approve'){
+   if(o.status==='s2')act=decisionUI(o);
+   else act=`<div class="bold" style="font-size:17px">서류를 확인해 주세요</div><div class="small" style="margin:6px 0">${o.docs.length?o.docs.map(d=>`<span class="chip c-done"><span data-nt>${esc(d)}</span></span>`).join(' '):'<span class="mut">첨부 없음</span>'}</div>${payTable(o,{})}<input id="memo_s4" placeholder="메모 (선택) — 중국어·영어로 써도 됩니다" style="margin-top:10px"><button class="ok big" onclick="go(${o.id},'s5','Penny 서류 확정')">✅ 서류 확정</button><button class="warnb big" onclick="go(${o.id},'s3','Penny: 서류 수정 필요')">✏️ 수정 필요</button>`}
+ else if(open&&S.mode==='app'&&o.status==='s5'){let ctl='';
+  if(T.role==='edit')ctl=`<button class="pri" onclick="requestPay(${o.id})">결제승인 요청 (재무팀에 알림)</button>`;
+  if(T.role==='fin')ctl=`<input id="memo_fin" placeholder="메모 (선택)"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="ok" onclick="finConfirm(${o.id})">재무 확인 완료 → CC에게</button><button class="bad" onclick="finReject(${o.id})">반려 (서류 수정)</button></div>`;
+  if(T.role==='pay')ctl=`<div class="row"><input id="f_v" placeholder="최종 업체" value="${esc((o.quotes[o.quotes.length-1]||{}).vendor||'')}"><input id="f_q" placeholder="확정 수량"><input id="f_p" placeholder="확정 단가"><input id="f_r" placeholder="이체증 파일명 (선택)"></div><input id="memo_fin" placeholder="메모 (선택)" style="margin-top:6px"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="ok" onclick="finish(${o.id})">승인·이체 완료</button><button class="bad" onclick="payReject(${o.id})">반려 (재무 재확인)</button></div>`;
+  if(T.role==='edit')ctl=`${payTable(o,{edit:true})}<div style="margin-top:8px"><button class="pri" onclick="requestPay(${o.id})">결제승인 요청 (재무팀에 알림)</button></div>`;
+  if(T.role==='fin')ctl=`${payTable(o,{check:true})}<input id="memo_fin" placeholder="메모 (선택)" style="margin-top:8px"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button id="okbtn" class="ok" disabled onclick="finConfirm(${o.id})">결제 내역 확인 완료 → CC에게</button><button class="bad" onclick="finReject(${o.id})">반려 (서류 수정)</button></div><div class="small mut" style="margin-top:4px">모든 줄의 확인 칸을 체크하면 버튼이 눌립니다.</div>`;
+  if(T.role==='pay')ctl=`${payTable(o,{check:true})}<div class="row" style="margin-top:8px"><input id="f_r" placeholder="이체증 파일명 (선택)"></div><input id="memo_fin" placeholder="메모 (선택)" style="margin-top:6px"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button id="okbtn" class="ok" disabled onclick="finish(${o.id})">승인·이체 완료</button><button class="bad" onclick="payReject(${o.id})">반려 (재무 재확인)</button></div><div class="small mut" style="margin-top:4px">모든 줄의 확인 칸을 체크하면 버튼이 눌립니다.</div>`;
+  act=s5head()+ctl}
+ else if(open&&S.mode==='ding'&&o.status==='s5')act=`${s5head()}${payTable(o,{edit:true})}<div style="margin:8px 0">${o.posted?'<span class="chip c-done">딩톡에 올림</span>':`<button class="pri" onclick="postPay(${o.id})">딩톡에 결제승인 올림</button>`}</div><div class="row"><input id="f_r" placeholder="이체증 파일명 (선택)"></div><div style="margin-top:8px"><button class="ok" onclick="finish(${o.id})">이체 완료로 마무리</button></div>`;
+ const voidBox=(open&&(isEdit()||(S.mode==='app'&&T.role==='approve')))?`<details style="margin-top:12px"><summary class="mut" style="cursor:pointer">무산으로 정리 (가격 안 맞음, 무응답 등)</summary><div style="margin-top:8px">${VOID_REASONS.map((r,k)=>`<label style="display:inline-block;margin-right:12px"><input type="radio" name="vr" value="${r}" style="width:auto"> ${r}</label>`).join('')}</div><input id="v_memo" placeholder="메모 (선택)" style="margin-top:6px"><div style="margin-top:8px"><button class="bad" onclick="voidIt(${o.id})">무산 기록</button></div></details>`:'';
+const cur=o.round||1;
+ const qrow=(q,qi)=>`<tr><td>${q.item?ut(q.item):'전체'}</td><td style="white-space:nowrap">${ut(q.vendor)}</td><td>${q.price?dual(q.price,q.cur||'KRW',fxOf(o)):'-'}</td><td style="white-space:nowrap">${esc(q.qty||'-')}</td><td class="small">${tx(o,'q'+qi,q.memo,q.ml||'ko')} <span class="mut">${uname(q.by)} ${fmt(q.t)}</span></td></tr>`;
+ const qhead='<tr><th>품목</th><th>업체</th><th>단가</th><th>가능 수량</th><th>메모·입력자</th></tr>';
+ const rr=[...new Set(o.quotes.map(q=>q.round||1))].sort((a,b)=>b-a);
+ const tbl=r=>`<div style="overflow:auto"><table>${qhead}${o.quotes.map((q,i)=>[q,i]).filter(([q])=>(q.round||1)===r).map(([q,i])=>qrow(q,i)).join('')}</table></div>`;
+ const quotesCard=`<section class="card"><div class="ct">견적 ${cur>1?`<span class="tag rd">조율 #${cur}</span>`:''}</div>${o.quotes.length?(rr.includes(cur)?tbl(cur):'<div class="small mut">이번 차수에 입력된 견적이 없습니다.</div>')+rr.filter(r=>r!==cur).map(r=>`<details style="margin-top:8px"><summary class="mut small" style="cursor:pointer">이전 견적 — 조율 #${r}</summary>${tbl(r)}</details>`).join(''):'<div class="small mut">입력된 견적이 없습니다.</div>'}</section>`;
+ const ed=isEdit();
+ const setCard=`<details class="card"><summary class="ct" style="cursor:pointer;margin:0">오더 설정 <span class="small mut">결제 회사 ${o.company||'미정'} · 환율 ${won(fxOf(o))} · 담당 ${o.owners.map(uname).join(', ')||'-'}</span></summary>
+ <div style="margin-top:8px" class="small"><span class="mut">결제 회사:</span> ${COMPANIES.map(c=>`<span class="pill ${o.company===c?'on':''}" onclick="setCompany(${o.id},'${o.company===c?'':c}')">${c}</span>`).join(' ')} <span class="mut">${o.company?(FIN[o.company]?'→ 재무 확인 담당: '+FIN[o.company]:'→ 재무 담당 미지정'):'미정'}</span></div>
+ <div style="margin-top:6px" class="small"><span class="mut">환율</span> 1 USD = ${ed?`<input style="width:90px;display:inline-block" value="${fxOf(o)}" onchange="setFx(${o.id},this.value)">`:`<b>${won(fxOf(o))}</b>`} KRW <span class="mut">· 기준일 ${esc(o.fxAt||'-')}</span> ${o.fxEdited?'':'<span class="mut">(시험판 예시값)</span>'}</div>
+ <div style="margin-top:6px" class="small"><span class="mut">조사 담당:</span> ${EDITORS.map(u=>`<span class="pill ${o.owners.includes(u.id)?'on':''}" onclick="toggleOwner(${o.id},'${u.id}')">${u.name}</span>`).join(' ')}</div></details>`;
+ const dec=open&&T.can&&T.role==='approve'&&o.status==='s2'&&S.mode==='app';
+ const acthd=!open?`<div class="acthd done">결과</div>`:(T.can?`<div class="acthd mine">🔔 지금 할 일 — 내 차례</div>`:`<div class="acthd wait"><span>⏳ 기다리는 중 — </span><b>${T.lab}</b></div>`);
+ const prog=`<section class="card"><div class="ct">진행 상황</div><ul class="prog">${o.status==='void'?`<li class="cur"><span class="dot" style="background:#98a2b3;border-color:#98a2b3;box-shadow:none"></span><span>무산 — ${esc(o.voidReason)}</span></li>`:ST.map((s,j)=>`<li class="${(o.status==='done'||j<i)?'past':j===i?'cur':''}"><span class="dot"></span><span>${s.n}${j===i&&open?`<span class="who">${T.can?'내 차례':T.lab}</span>`:''}</span></li>`).join('')}</ul></section>`;
+ const logCard=`<section class="card"><div class="ct">진행 기록</div>
+ <div class="row" style="margin-bottom:10px"><input id="note" placeholder="메모 남기기"><button class="fix sm" onclick="addMemo(${o.id})">남기기</button></div>
+ <div class="log">${o.log.map((l,i)=>[l,i]).reverse().map(([l,i])=>`<div><span class="mut small">${fmt(l.t)}</span><br><b>${esc(uname(l.w))}</b> ${esc(l.a)}${l.m?' — '+tx(o,'l'+i,l.m,l.ml||'ko'):''}</div>`).join('')}</div>
+ ${isEdit()?`<div class="small mut" style="margin-top:12px">단계를 직접 바꾸기: <select style="width:auto" onchange="setStatus(${o.id},this.value)">${ALL.map(s=>`<option value="${s.k}" ${s.k===o.status?'selected':''}>${s.n}</option>`).join('')}</select></div>`:''}</section>`;
+ return `<button class="ghost" onclick="S.openId=null;render()">← 목록</button>
+ <div class="titlebar"><div><div class="eyebrow">${o.no} · ${fmt(o.at)} · 등록 ${uname(o.by)}</div><h2>${summary(o)}</h2></div><div>${chip(o)}</div></div>
+ <div class="cols"><div class="colmain">
+ ${dec?'':heroCard(o)}
+ <section class="card act ${open&&T.can?'mine':''}">${acthd}<div class="actbd">${act}${voidBox}</div></section>
+ ${dec?'':quotesCard}
+ </div><aside class="colside">${prog}${logCard}${setCard}</aside></div>`;
+ }
+function specText(){return `[오더 기록 프로그램 요구사항]
+
+1. 목적
+ - Penny(실무 대표)가 딩톡에 올리는 오더를 건별로 기록한다. 조사·견적 → Penny 가격 확인 → 서류 확인 → 딩톡 결제승인 → 이체 완료까지의 과정과, 중간에 무산된 건도 기록으로 남긴다.
+ - 기록용이다. 평소 업무(딩톡 대화, 딩톡 결제승인)를 바꾸지 않고, 입력은 최소로 한다.
+
+2. 오더 등록
+ - Penny의 딩톡 메시지를 붙여넣으면 한 건으로 저장된다 (원문 보관).
+ - 메시지에서 품목·수량(예: 5,000台)을 자동으로 읽고 사람이 고칠 수 있다. 수량은 참고용이며 매입 확정 수량이 아니다.
+ - 한 오더에 품목이 여러 개일 수 있다. Penny 예상가·홍콩 제시가 같은 참고 메모를 품목별로 적을 수 있다.
+ - 담당(조사하는 사람, 현재 과장님·석훈·Chloe)을 지정한다.
+ - 결제 회사(CH·성신·에잇싱크·부강)는 메시지에 없을 수 있으므로 비워 두고 나중에 지정할 수 있다. 회사에 따라 재무 확인 담당이 정해진다 (CH 지연, 성신 경빈, 에잇싱크 수빈).
+ - 오더는 Penny가 지금처럼 딩톡에 올리고, 등록은 조사 담당이 붙여넣어 한다 (Penny의 오더 방식은 바뀌지 않는다).
+
+3. 단계
+ ① 조사·견적 → ② Penny 가격 회신 → ③ 서류 준비(견적서·거래명세서) → ④ Penny 서류 확인 → ⑤ 결제승인(딩톡 → 재무팀 → CC 이체) → ⑥ 완료
+ - 단계 이동은 버튼 한 번. 견적 입력, 서류 첨부 등은 비어 있어도 넘어갈 수 있다 (현실 그대로 기록).
+ - 현실과 다르면 단계를 직접 바꿀 수 있다. 가격 재조율, 서류 수정 시 이전 단계로 돌아갈 수 있다.
+
+4. 무산 기록
+ - 어느 단계에서든 '무산'으로 정리할 수 있다. 사유: 가격 안 맞음 / Penny 무응답 / 물량·재고 없음 / 업체 연락 안 됨 / 잘못 등록 / 기타 + 메모
+ - 무산된 건도 목록에 남고, 필요하면 다시 진행할 수 있다.
+ - 답변 대기 중 3일 이상 변화가 없는 건은 목록에서 표시한다.
+
+5. 견적
+ - 업체별로 품목, 단가, 가능 수량, 메모를 여러 건 입력한다 (견적 비교 기록).
+
+ - 결제 내역: 서류 기준으로 품목·업체·수량·단가·금액·합계를 한 표로 확정한다 (견적에서 자동으로 채우고 고칠 수 있다). 결제 회사, 재무 확인 담당, 첨부 서류를 같이 보여 준다.
+ - Penny(서류 확인), 재무팀, CC는 같은 표를 본다. 재무팀과 CC는 줄마다 '확인' 칸을 모두 체크해야 확인 완료 버튼이 눌린다.
+
+6. 완료
+ - 결제 합계와 이체증(선택)을 기록한다.
+ - 완료된 오더에 온라인 주문, 오프라인 입고, 수출 번호를 연결할 수 있다.
+
+7. 기록·안전
+ - 모든 단계 변경과 메모에 처리자·시각이 남는다. 지우거나 고칠 수 없고 추가만 된다.
+ - 승인 방식 (A) 앱 승인: Penny는 '가격 OK / 다시 조율 / 진행 안 함', '서류 확정 / 수정 필요' 버튼만 누른다. 재무팀(회사별 담당)은 '재무 확인', CC는 '승인·이체 완료'를 누른다. 각자 '내 차례' 목록과 알림으로 자기 대기 건만 본다.
+ - 승인 방식 (B) 딩톡 병행: 승인은 딩톡에서 받고 조사 담당이 결과를 대신 기록한다. (A)가 불편하면 (B)로 전환할 수 있어야 한다.
+ - 역할: 입력(조사 담당: 과장님·석훈·Chloe) / 가격·서류 승인(Penny) / 재무 확인(회사별: CH 지연, 성신 경빈, 에잇싱크 수빈) / 승인·이체(CC). 단계마다 담당이 달라 한 사람이 겸하지 않는다.
+
+8. 조회
+ - 내 차례/진행중/완료/무산/전체 필터, 품목·메시지 검색, 단계별 건수.
+ - (추후) 엑셀 내보내기, 이메일 알림
+
+9. 통화·환율
+ - 가격(견적, 결제 내역, Penny 예상가)은 USD와 KRW 중 골라 입력하고, 화면에는 항상 달러와 원화를 함께 보여 준다 (예: $50 ≈ ₩73,500).
+ - 오더마다 환율(1 USD = N원, 기준일)을 입력·기록하고 변경 이력을 남긴다. 결제 완료 시점의 환율도 기록한다.
+ - 대표님의 예상가는 '50달러 이하'처럼 조건(이하/정도/이상)과 함께 입력한다.
+
+10. 언어
+ - 화면 언어: 한국 직원은 한국어, Penny는 중국어·영어 선택, CC는 중국어.
+ - 메모, 견적 메모, 딩톡 메시지 원문은 작성자 언어 그대로 저장하고, 보는 사람의 언어로 자동 번역해 원문과 함께 보여 준다.
+ - 단계명·버튼·안내문은 고정 번역표를 쓴다. (실제 도입 시 번역은 딩톡 번역 기능 또는 번역 서비스 연동이 필요하다)
+
+11. 오더 내리기 (Penny)
+ - Penny 화면은 '새 오더 내리기' 큰 버튼 하나로 시작한다. 품명, 수량, 희망가(이하·정도·이상, USD/KRW)만 적는다. 수량과 희망가는 비워도 된다.
+ - 이전에 낸 품목은 '자주 낸 품목' 버튼으로 눌러 추가하고, 마지막 수량·희망가가 채워진다. 품명 입력 중에도 이전 품목이 자동 제안된다.
+ - 딩톡 메시지를 붙여넣고 '인식해서 채우기'를 눌러도 된다.
+ - 낸 뒤에도 Penny가 품목을 수정·삭제·추가할 수 있고, 수정하면 조사 담당에게 알림이 간다.
+
+12. 가격 협의 (여러 번 조율)
+ - 조사 담당이 업체 견적을 넣고 'Penny에게 가격 보고'를 누르면, Penny는 품명별 희망가와 견적가, 차이(%)를 한 화면에서 본다.
+ - Penny는 세 가지 중 하나를 클릭한다: 가격 OK(진행) / 더 낮게 조율 필요(목표가 선택 입력) / 가격 안 맞음(진행 안 함, 무산 기록).
+ - '더 낮게 조율'을 누르면 조율 차수가 올라가고(#2, #3…) 조사 담당 화면 맨 위에 Penny 요청과 목표가가 뜬다. 차수별 견적은 따로 기록되고 이전 차수는 접어서 볼 수 있다. 횟수 제한은 없다.
+ - Penny가 가격 OK를 누르면 그때 서류(거래명세서) 단계로 넘어간다.
+
+13. 조사 담당 편의
+ - 오더 내용(품명·수량·희망가·현재 최저 견적)이 화면 맨 위에 먼저 보이고, 그 아래에 '지금 할 일'이 나온다.
+ - '업체 문의용 복사' 버튼으로 한국어 견적 문의 문구를 복사한다. 기본은 Penny의 희망가를 넣지 않는다(협상에 불리하므로). 필요하면 '희망가 포함'을 체크한다.
+ - Penny가 중국어로 쓴 원문과 품명은 한국어로 자동 번역해 같이 보여 준다.
+ - 업체 견적은 업체명(이전 입력 업체 자동 제안), 단가, 통화만 넣고 Enter로 추가한다.
+ - 목록은 '내 차례' 오더를 맨 위에 초록 테두리로 보여 주고, 각 오더에 지금 해야 할 일을 한 줄로 적는다.`;}
+function specTab(){
+ return `<div class="card"><div class="ct">쓰는 법 (목표: 한 건 기록에 버튼 몇 번)</div><ol class="small" style="line-height:2">
+ <li class="mut">역할: 조사 담당(과장님·석훈·Chloe)이 입력하고, Penny는 오더·가격 답변·서류 확인, 재무팀(회사별)과 CC는 결제 단계만 누릅니다. 위쪽 '접속'에서 계정을 바꿔 가며 시험하세요.</li>
+ <li><b>Penny가 오더를 내면</b>: 새 오더 내리기 → 품명·수량·희망가 → 오더 내리기. 자주 낸 품목은 버튼 한 번</li>
+ <li><b>조사 담당은</b>: 오더 내용 확인 → 업체 문의용 복사 → 견적 입력 → Penny에게 가격 보고</li>
+ <li><b>Penny는 품목마다</b>: 진행 / 더 낮게 / 안 함 중 하나를 고르고 답변 보내기 (전부 같으면 '전부 진행' 한 번)</li>
+ <li><b>조율이 필요한 품목만</b> 다시 견적을 받고, 진행 확정된 품목은 그대로 두고 다음 단계로 갑니다</li>
+ <li><b>서류를 받으면</b>: 파일 첨부 → Penny 확인 → 재무 확인 → CC 승인·이체</li></ol>
+ <div class="small mut">모든 입력은 선택입니다. 빈 칸이 있어도 다음 단계로 넘어갈 수 있습니다.</div></div>
+ <div class="card"><div class="bold">딩톡 개발 요청용 요구사항 (이 시험판 기준)</div><div class="small mut">편하다고 확인되면 그대로 딩톡 쪽에 요청하는 용도입니다. 시험하며 바뀌는 내용은 여기에 반영합니다.</div>
+ <pre id="spec">${esc(specText())}</pre><button onclick="copySpec()">복사</button> <span id="cp" class="small mut"></span></div>`;
+}
+function copySpec(){navigator.clipboard.writeText(specText()).then(()=>$('#cp').textContent='복사했습니다').catch(()=>{const r=document.createRange();r.selectNodeContents($('#spec'));const s=getSelection();s.removeAllRanges();s.addRange(r);$('#cp').textContent='선택했습니다. Ctrl+C로 복사하세요'})}
+
+/* ===== 서버(Supabase) 연결: 로그인 · 권한 · 저장 · 새로고침 ===== */
+const SB_URL="https://etgcjgeqnzqisxokycfh.supabase.co";
+const SB_KEY="sb_publishable_GeVNu4dRdz2fvxnRT8v5aw_0JqLJJyn";
+const sb=window.supabase.createClient(SB_URL,SB_KEY,{auth:{persistSession:true,autoRefreshToken:true,storageKey:'pm-admin-auth'}});
+let syncState='wait',pollTimer=null,rerenderWait=false,polling=false,flushing=false,flushAgain=false;
+let synced={orders:{},notifs:{}},revs={};
+const resetSyncMaps=()=>{synced={orders:{},notifs:{}};revs={}};
+const stable=v=>JSON.stringify(v,(k,x)=>x&&typeof x==='object'&&!Array.isArray(x)?Object.keys(x).sort().reduce((a,c)=>(a[c]=x[c],a),{}):x);
+const clone=v=>JSON.parse(JSON.stringify(v));
+const nkey=n=>n.t+'-'+n.to+'-'+n.o;
+function syncLabel(){return {ok:'서버에 저장됩니다 — 모두 같은 내용을 봅니다',err:'서버에 연결하지 못했습니다. 잠시 후 자동으로 다시 시도합니다'}[syncState]||'연결 중…'}
+function softRender(){const a=document.activeElement;if(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName)&&a.id!=='langSel'){rerenderWait=true;return}render()}
+document.addEventListener('focusout',()=>{if(rerenderWait)setTimeout(()=>{const a=document.activeElement;if(!(a&&/INPUT|TEXTAREA|SELECT/.test(a.tagName))){rerenderWait=false;render()}},120)});
+function showErr(e){const m=(e&&e.message)||'';if(m==='conflict'||/conflict/.test(m)){flash('다른 분이 먼저 수정했습니다. 최신 내용으로 다시 불러왔습니다. 한 번 더 눌러 주세요.','warn');return 'conflict'}flash('저장하지 못했습니다: '+m,'err');return 'err'}
+async function pollNow(){
+ if(polling||!S.me)return;polling=true;
+ try{
+  const [a,b]=await Promise.all([sb.rpc('ord_list'),sb.rpc('ord_notif_list')]);
+  if(a.error)throw a.error;if(b.error)throw b.error;
+  syncState='ok';applyOrders(a.data||[]);applyNotifs(b.data||[]);
+  softRender();
+ }catch(e){syncState='err'}finally{polling=false}
+}
+function applyOrders(rows){
+ const remote={};rows.forEach(r=>{remote[String(r.id)]=r});
+ const local={};S.orders.forEach(o=>{local[String(o.id)]=o});const out=[];
+ Object.keys(remote).forEach(k=>{const l=local[k];const sy=synced.orders[k];
+  const pending=l&&sy!==undefined&&sy!==stable(l);const fresh=l&&sy===undefined;
+  if(pending||fresh){out.push(l);if(revs[k]===undefined)revs[k]=remote[k].rev;return}
+  revs[k]=remote[k].rev;synced.orders[k]=stable(remote[k].data);out.push(clone(remote[k].data))});
+ Object.keys(local).forEach(k=>{if(remote[k]!==undefined)return;if(synced.orders[k]===undefined)out.push(local[k]);else{delete synced.orders[k];delete revs[k]}});
+ out.sort((a,b)=>b.id-a.id);S.orders=out;S.seq=Math.max(1,...out.map(o=>o.id+1));
+ if(S.openId&&!S.orders.some(o=>o.id===S.openId))S.openId=null;
+}
+function applyNotifs(rows){
+ const remote={};rows.forEach(r=>{remote[r.key]=r.data});const local={};S.notifs.forEach(n=>{local[nkey(n)]=n});const out=[];
+ Object.keys(remote).forEach(k=>{const l=local[k];const sy=synced.notifs[k];const pending=l&&sy!==undefined&&sy!==stable(l);
+  if(pending){out.push(l)}else{synced.notifs[k]=stable(remote[k]);out.push(clone(remote[k]))}});
+ Object.keys(local).forEach(k=>{if(remote[k]===undefined&&synced.notifs[k]===undefined)out.push(local[k])});
+ out.sort((a,b)=>b.t-a.t);S.notifs=out;
+}
+function syncOut(){if(!S.me)return;if(flushing){flushAgain=true;return}clearTimeout(syncOut.t);syncOut.t=setTimeout(syncFlush,300)}
+async function syncFlush(){
+ if(flushing||!S.me)return;flushing=true;flushAgain=false;let changed=false;
+ try{
+  for(const o of S.orders.slice()){const k=String(o.id);const str=stable(o);if(synced.orders[k]===str)continue;
+   const body=clone(o);
+   try{
+    const {data,error}=await sb.rpc('ord_save',{p_order:body,p_base_rev:revs[k]||0});
+    if(error)throw error;
+    changed=true;
+    if(data.id!==body.id){delete synced.orders[k];delete revs[k];o.id=data.id;o.no=data.no;if(S.openId===body.id)S.openId=data.id;const nk=String(o.id);revs[nk]=data.rev;synced.orders[nk]=stable(o)}
+    else{revs[k]=data.rev;synced.orders[k]=str}
+   }catch(e){
+    const r=showErr(e);
+    if(r==='conflict'){S.orders=S.orders.filter(x=>x!==o);delete synced.orders[k];delete revs[k]}
+    else synced.orders[k]=undefined;
+    syncState=r==='conflict'?syncState:'err';
+   }
+  }
+  for(const n of S.notifs.slice()){const k=nkey(n);const str=stable(n);if(synced.notifs[k]===str)continue;
+   try{const {error}=await sb.rpc('ord_notif_put',{p_key:k,p_to:n.to,p_data:clone(n)});if(error)throw error;synced.notifs[k]=str;
+    if(n.to!==S.me){S.notifs=S.notifs.filter(x=>x!==n);delete synced.notifs[k]}}
+   catch(e){synced.notifs[k]=str}}
+ }finally{flushing=false}
+ if(flushAgain)syncOut();
+ await pollNow();
+}
+function startPolling(){clearInterval(pollTimer);pollTimer=setInterval(()=>{if(document.visibilityState==='visible'&&!flushing)pollNow()},7000)}
+document.addEventListener('visibilitychange',()=>{if(document.visibilityState==='visible'&&S.me)pollNow()});
+
+/* ===== 로그인 ===== */
+function hideApp(on){const h=document.querySelector('header');if(h)h.style.display=on?'none':'';}
+function authCard(inner){hideApp(true);$('#main').innerHTML=`<div class="card" style="max-width:380px;margin:60px auto 0">${inner}</div>`}
+function showLogin(msgText){
+ authCard(`<div class="bold" style="font-size:20px;margin-bottom:2px">오더 기록</div><div class="small mut" style="margin-bottom:14px">登录 · Sign in · 로그인 (픽업매니저와 같은 계정)</div>
+ <label class="l">ID / Email</label><input id="lg_e" type="email" autocomplete="username" style="width:100%">
+ <label class="l">Password · 密码</label><input id="lg_p" type="password" autocomplete="current-password" style="width:100%">
+ <div id="lg_m" class="small" style="color:var(--bad);min-height:20px;margin-top:6px">${esc(msgText||'')}</div>
+ <button class="pri" id="lg_b" style="width:100%;margin-top:6px" onclick="doLogin()">로그인 · 登录 · Sign in</button>`);
+ const go=e=>{if(e.key==='Enter')doLogin()};$('#lg_e').addEventListener('keydown',go);$('#lg_p').addEventListener('keydown',go);
+}
+async function doLogin(){const b=$('#lg_b');b.disabled=true;
+ const {error}=await sb.auth.signInWithPassword({email:$('#lg_e').value.trim(),password:$('#lg_p').value});
+ if(error){showLogin('로그인에 실패했습니다 · 登录失败 · Login failed');return}
+ await boot()}
+async function doLogout(){clearInterval(pollTimer);try{await sb.auth.signOut()}catch(e){}S.me=null;S.orders=[];S.notifs=[];resetSyncMaps();$('#menu').style.display='none';$('#panel').style.display='none';showLogin()}
+async function boot(){
+ try{
+  const {data:ss}=await sb.auth.getSession();if(!ss.session){showLogin();return}
+  const me=await sb.rpc('ord_me');if(me.error)throw me.error;
+  if(!me.data||!me.data.app_id){authCard(`<div class="bold" style="margin-bottom:6px">오더 권한이 없는 계정입니다</div><div class="small mut" style="margin-bottom:12px">관리자에게 오더 사용 권한을 요청하세요. · 此账号没有订单权限 · No access for this account</div><button onclick="doLogout()">다른 계정으로 로그인</button>`);return}
+  const ro=await sb.rpc('ord_roster');if(ro.error)throw ro.error;
+  applyRoster(ro.data||[]);S.me=me.data.app_id;S.openId=null;S.filter='mine';hideApp(false);
+  syncState='wait';render();await pollNow();startPolling();
+ }catch(e){authCard(`<div class="bold" style="margin-bottom:6px">연결하지 못했습니다</div><div class="small mut" style="margin-bottom:12px">${esc((e&&e.message)||'')}</div><button onclick="boot()">다시 시도</button> <button onclick="doLogout()">로그아웃</button>`)}
+}
+
+boot();
+
+</script>
+</body>
+</html>
