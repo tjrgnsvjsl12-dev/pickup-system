@@ -91,6 +91,7 @@ hr{border:none;border-top:1px solid var(--border);margin:14px 0}
 .tile .tn{font-size:26px;font-weight:800;line-height:1.15;margin-top:4px;font-variant-numeric:tabular-nums}
 .tile .tn .u{font-size:13px;font-weight:700;margin-left:2px;color:var(--muted)}
 .tile .ts{font-size:12.5px;font-weight:700;color:var(--fg);margin-top:2px;font-variant-numeric:tabular-nums}
+.cobreak{font-size:14px;font-weight:700;color:var(--fg);margin-top:3px}
 .tile .td{font-size:11px;color:var(--muted);margin-top:3px;line-height:1.35}
 .alertbtn{width:100%;text-align:left;margin-bottom:8px;border-color:var(--danger)}
 .alertbtn.sel{background:var(--chip)}
@@ -1049,10 +1050,11 @@ function renderAdminView(){
     const oa = ov('arr'), os = ov('ship');
     const alertCard = h('div',{class:'card',style:(oa.n||os.n)?'border-color:var(--danger)':''});
     alertCard.appendChild(h('div',{style:'font-weight:800;margin-bottom:'+((oa.n||os.n)?'8':'0')+'px;color:'+((oa.n||os.n)?'var(--danger)':'var(--success)'),text:(oa.n||os.n)?'⚠ 도착 예정일이 지난 주문 (마지막으로 등록된 예정일 기준)':'✓ 도착 예정일이 지난 주문 없음 (마지막으로 등록된 예정일 기준)'}));
+    const coBreak = (kind)=>{ const m = {}; overdue.filter(r=>r.kind===kind && byCo(r) && (!onlineMonth || r.ym===onlineMonth)).forEach(r=>{ m[r.company]=(m[r.company]||0)+Number(r.units); }); return Object.keys(m).sort().map(c=>c+' '+nf(m[c])+'대').join('  ·  '); };
     const mkAlert = (kind, label, hint, v)=>{
       if(!v.n) return;
       alertCard.appendChild(h('button',{type:'button',class:'btn-ghost alertbtn'+(onlineAlertKind===kind?' sel':''),onclick:()=>{ onlineAlertKind = onlineAlertKind===kind?'':kind; onlineStage=''; onlineDay=''; drawDashboard(); }},[
-        h('div',{class:'at',text:label}), h('div',{class:'an',text:nf(v.u)+'대'})
+        h('div',{class:'at',text:label}), h('div',{class:'an',text:nf(v.u)+'대'}), h('div',{class:'cobreak',text:coBreak(kind)})
       ]));
     };
     mkAlert('ship','배송 전인데 예정일 경과','도착 예정일이 지났는데 운송장이 없음 — 출고가 안 됐거나 운송장 파일이 아직 등록되지 않음',os);
@@ -3384,7 +3386,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261124-173507';
+const BUILD = 'b20261125-092242';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
