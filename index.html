@@ -944,6 +944,15 @@ function renderAdminView(){
     return st;
   }
 
+  // 주문 취소(무효) — 관리자만. 수령된 주문은 서버에서 막힘. 기록은 남고 집계에서만 빠짐.
+  async function voidOnlineOrder(orderNo){
+    const why = window.prompt('주문 '+orderNo+' 을(를) 취소합니다.\n취소 사유를 입력해 주세요. (취소 기록은 남고, 집계에서 빠집니다)','잘못 입력');
+    if(why===null) return false;
+    if(!why.trim()){ alert('취소 사유를 입력해 주세요.'); return false; }
+    const { error } = await sb.rpc('online_void_order',{ p_order_no:orderNo, p_reason:why.trim() });
+    if(error){ alert(error.message); return false; }
+    return true;
+  }
   async function drawOnlineSummary(body){
     body.appendChild(h('div',{class:'muted',text:t('loading')}));
     let mrows, overdue = [];
@@ -995,7 +1004,8 @@ function renderAdminView(){
             h('div',{class:'flexbetween'},[ h('div',{class:'mono',style:'font-weight:800',text:r.order_no}), h('span',{class:'statusbadge '+(done?'done':r.stage==='배송중'?'in_progress':'before'),text:r.stage==='취소'?'취소됨':stageLabel(r.stage)}) ]),
             h('div',{class:'muted',style:'margin-top:4px',text:[r.company,parts,(r.qty||0)+'대',r.order_date?('주문 '+r.order_date.slice(5).replace('-','/')):''].filter(Boolean).join(' · ')}),
             h('div',{style:'margin-top:4px',text: done ? ('✓ 도착 '+onlineTime(r.received_at)+(r.received_by?' · '+r.received_by:'')+(r.source&&r.source!=='scan'?' ('+srcLabel(r.source)+')':' (현장 스캔)')) : r.stage==='배송중' ? '아직 도착 확인 전입니다 (운송장 등록됨)' : r.stage==='취소' ? '' : '아직 도착 전입니다 (운송장 없음)'}),
-            r.tracking ? h('div',{class:'mono muted',style:'margin-top:2px',text:'운송장 '+r.tracking}) : null
+            r.tracking ? h('div',{class:'mono muted',style:'margin-top:2px',text:'운송장 '+r.tracking}) : null,
+            (onlineHas('admin') && !done && r.stage!=='취소') ? h('button',{type:'button',class:'btn-ghost btn-sm',style:'margin-top:8px;color:var(--danger)',text:'이 주문 취소',onclick:async()=>{ if(await voidOnlineOrder(r.order_no)){ await run(); drawDashboard(); } }}) : null
           ].filter(Boolean)));
         });
       };
@@ -1157,7 +1167,8 @@ function renderAdminView(){
     const wrap = h('div',{class:'ptwrap'});
     const pt = h('table',{class:'ptable'});
     const alertMode = !!onlineAlertKind;
-    pt.appendChild(h('thead',{html:'<tr><th>주문번호</th><th>회사</th><th>배송지</th><th>도착 예정</th><th>운송장번호</th><th>'+(alertMode?'지연':'상태')+'</th></tr>'}));
+    const canVoid = onlineHas('admin');
+    pt.appendChild(h('thead',{html:'<tr><th>주문번호</th><th>회사</th><th>배송지</th><th>도착 예정</th><th>운송장번호</th><th>'+(alertMode?'지연':'상태')+'</th>'+(canVoid?'<th></th>':'')+'</tr>'}));
     const list = h('tbody'); pt.appendChild(list); wrap.appendChild(pt); lc.appendChild(wrap);
     const more = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'더 보기 (50건씩)'});
     lc.appendChild(more);
@@ -1178,13 +1189,14 @@ function renderAdminView(){
         const last = alertMode ? h('td',{class:'late',text:late}) : h('td',{},[h('span',{class:'statusbadge '+(r.stage==='배송중'?'in_progress':'before'),text:stageLabel(r.stage)})]);
         list.appendChild(h('tr',{},[
           h('td',{class:'mono',text:r.order_no}), h('td',{text:r.company||''}), h('td',{text:r.ship_to||''}), h('td',{text:r.window_text||''}),
-          (r.tracking ? h('td',{class:'mono'},[h('a',{class:'trklink',href:trackUrl(r),target:'_blank',rel:'noopener noreferrer',title:'배송 조회 (새 창)',text:r.tracking+' ↗'})]) : h('td',{class:'mono none',text:'운송장 없음'})), last
-        ]));
+          (r.tracking ? h('td',{class:'mono'},[h('a',{class:'trklink',href:trackUrl(r),target:'_blank',rel:'noopener noreferrer',title:'배송 조회 (새 창)',text:r.tracking+' ↗'})]) : h('td',{class:'mono none',text:'운송장 없음'})), last,
+          canVoid ? h('td',{},[h('button',{type:'button',class:'btn-ghost btn-sm',text:'취소',onclick:async()=>{ if(await voidOnlineOrder(r.order_no)) drawDashboard(); }})]) : null
+        ].filter(Boolean)));
       });
       offset += rows.length;
       cnt.className='muted'; cnt.textContent = total ? ('총 '+nf(total)+'건 중 '+nf(offset)+'건 표시') : '';
       more.classList.toggle('hidden', offset>=total);
-      if(reset && !rows.length){ list.appendChild(h('tr',{},[h('td',{colspan:'6',class:'muted',style:'text-align:center;padding:18px',text:alertMode||onlineStage||onlineMonth||onlineDay||onlineItem||q.value.trim()?'해당하는 주문이 없습니다 ✓':t('none')})])); }
+      if(reset && !rows.length){ list.appendChild(h('tr',{},[h('td',{colspan:'7',class:'muted',style:'text-align:center;padding:18px',text:alertMode||onlineStage||onlineMonth||onlineDay||onlineItem||q.value.trim()?'해당하는 주문이 없습니다 ✓':t('none')})])); }
     }
     more.onclick = ()=>load(false);
     let tm = null; q.addEventListener('input',()=>{ clearTimeout(tm); tm = setTimeout(()=>load(true), 300); });
@@ -3638,7 +3650,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-120914';
+const BUILD = 'b20261125-121020';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
