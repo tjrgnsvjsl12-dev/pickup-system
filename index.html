@@ -854,9 +854,9 @@ function renderAdminView(){
   function onlineModelParts(raw){
     raw = String(raw||'');
     const cap = (raw.match(/(\d+)\s*(tb|gb)/i)||[])[0]||'';
-    const m = raw.match(/^\s*iphone\s*(\d+)\s*(pro\s*max|promax|pro|plus|air|mini)?/i);
-    const model = m ? ('iPhone '+m[1]+(m[2]?(' '+m[2].replace(/promax/i,'Pro Max').replace(/^pro\s*max$/i,'Pro Max').replace(/^pro$/i,'Pro').replace(/^plus$/i,'Plus').replace(/^air$/i,'Air').replace(/^mini$/i,'Mini')):'')) : raw;
-    const color = (raw.replace(/^\s*iphone\s*\d+\s*(pro\s*max|promax|pro|plus|air|mini)?/i,'').replace(/(\d+)\s*(tb|gb)/i,'').replace(/\b(kr|spec|jp|us|hk|cn)\b/ig,'').trim());
+    const m = raw.match(/^\s*iphone\s*(\d+|duo|fold|flip|se)\s*(pro\s*max|promax|pro|plus|air|mini)?/i);
+    const model = m ? ('iPhone '+(/^\d+$/.test(m[1])?m[1]:m[1].charAt(0).toUpperCase()+m[1].slice(1).toLowerCase())+(m[2]?(' '+m[2].replace(/promax/i,'Pro Max').replace(/^pro\s*max$/i,'Pro Max').replace(/^pro$/i,'Pro').replace(/^plus$/i,'Plus').replace(/^air$/i,'Air').replace(/^mini$/i,'Mini')):'')) : raw;
+    const color = (raw.replace(/^\s*iphone\s*(\d+|duo|fold|flip|se)\s*(pro\s*max|promax|pro|plus|air|mini)?/i,'').replace(/(\d+)\s*(tb|gb)/i,'').replace(/\b(kr|spec|jp|us|hk|cn)\b/ig,'').trim());
     return { model, cap: cap.toUpperCase().replace(/\s/g,''), color: color.replace(/\b\w/g,c=>c.toUpperCase()), raw };
   }
 
@@ -1168,6 +1168,7 @@ function renderAdminView(){
     const head = aoa.slice(0,3).map(r=>r.join(' ')).join(' ');
     if(/提货单|delivery|pickup/i.test(name) || /录入批次|子表单/.test(head)) return 'delivery';
     if(/总单/.test(name) || (/订单码/.test(head) && /型号/.test(head) && /银行卡|卡号/.test(head))) return 'order';
+    if(/订单状态/.test(head) && /下单日/.test(head) && /订单号/.test(head)) return 'status';
     if(/链接|link|追踪|추적/i.test(head) && /订单码|주문/.test(head)) return 'tracking';
     return '';
   };
@@ -1175,7 +1176,8 @@ function renderAdminView(){
   const WRONG = {
     delivery: ['이 파일은 "배송 온 건"(딩톡 수령 내역)입니다. 도착한 건은 [딩톡 가져오기]에 올려 주세요.','ding','딩톡 가져오기로 이동'],
     tracking: ['이 파일은 운송장 파일입니다 (배송중 등록용). 도착 확인이 아니므로 [운송장 등록]에 올려 주세요.','track','운송장 등록으로 이동'],
-    order: ['이 파일은 주문 파일입니다. [주문 등록]에 올려 주세요.','orders','주문 등록으로 이동']
+    order: ['이 파일은 주문 파일입니다. [주문 등록]에 올려 주세요.','orders','주문 등록으로 이동'],
+    status: ['이 파일은 "주문 추적 표"입니다. 주문은 [주문 등록]에 올리고, 운송장번호가 들어 있는 건은 [운송장 등록]에 올려 주세요.','orders','주문 등록으로 이동']
   };
   // 탭 맨 위 업무 순서 안내
   function flowGuide(cur){
@@ -1375,10 +1377,30 @@ function renderAdminView(){
       const mk = (mo,d)=>{ const y = mo<bm ? y0+1 : y0; return y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0'); };
       return { window_from: mk(+m[1],+m[2]), window_to: mk(+m[3],+m[4]) };
     };
+    // "주문 추적 표(자동 생성)" 형식: 운영사 / 주문 상태 / 주문일 / 운송장번호 / 모델 / 수량 / 주문번호 / 추적 링크
+    const coOfName = n=> /^CH\b|CH NETWORK/i.test(n)?'CH':/BUGANG|부강/i.test(n)?'부강':/성신|SEONGSIN|SUNGSIN/i.test(n)?'성신':/에잇|EIGHT|8SYNC/i.test(n)?'에잇싱크':'';
+    function readStatusTable(X, wb){
+      const aoa = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:'', dateNF:'yyyy-mm-dd'});
+      const hdr = (aoa[0]||[]).map(x=>String(x));
+      const fc = (...k)=> hdr.findIndex(x=>k.some(y=>x.includes(y)));
+      const io = fc('订单号'), im = fc('产品型号'), iq = fc('下单数量','数量'), id = fc('下单日'), ic = fc('运营公司'), it = fc('快递单号'), ist = fc('订单状态');
+      if(io<0 || im<0) throw new Error('주문번호 열(订单号)과 모델 열(产品型号)을 찾지 못했습니다.');
+      const rows = []; let withTracking = 0, unknownCo = 0;
+      aoa.slice(1).forEach(r=>{
+        const on = String(r[io]||'').trim(); if(!/^W\d{6,}$/i.test(on)) return;
+        const dm = id>=0 ? String(r[id]||'').match(/(\d{4})[\/\-.](\d{1,2})[\/\-.](\d{1,2})/) : null;
+        const od = dm ? dm[1]+'-'+dm[2].padStart(2,'0')+'-'+dm[3].padStart(2,'0') : '';
+        const co = ic>=0 ? coOfName(String(r[ic]||'')) : ''; if(!co) unknownCo++;
+        if(it>=0 && String(r[it]||'').trim()) withTracking++;
+        rows.push({ order_no:on.toUpperCase(), model_raw:String(r[im]||'').trim(), qty: iq>=0 ? (parseInt(r[iq],10)||2) : 2, order_date: od, company: co, status_txt: ist>=0?String(r[ist]||''):'' });
+      });
+      if(!rows.length) throw new Error('등록할 주문을 찾지 못했습니다.');
+      return { rows, skipped:0, withTracking, unknownCo, fromStatusTable:true };
+    }
     async function readOrders(f){
       const X = await loadSheetJS();
       const wb = X.read(await f.arrayBuffer(), {type:'array', cellDates:true, dateNF:'yyyy-mm-dd'});
-      { const k = sniffKind(X, wb); if(k==='delivery'||k==='tracking') throw wrongTab(...WRONG[k]); }
+      { const k = sniffKind(X, wb); if(k==='delivery'||k==='tracking') throw wrongTab(...WRONG[k]); if(k==='status') return readStatusTable(X, wb); }
       const main = wb.Sheets['总单'] ? '总单' : wb.SheetNames[0];
       const aoa = X.utils.sheet_to_json(wb.Sheets[main], {header:1, raw:false, defval:'', dateNF:'yyyy-mm-dd'});
       let hdr = aoa[0]||[];
@@ -1418,18 +1440,19 @@ function renderAdminView(){
       err.className='err hidden'; out.className='card hidden'; out.innerHTML=''; prevBtn.disabled = true;
       try{
         if(!file.files[0]) throw new Error('파일을 선택해 주세요.');
-        const { rows, skipped } = await readOrders(file.files[0]);
+        const { rows, skipped, withTracking, unknownCo, fromStatusTable } = await readOrders(file.files[0]);
         const { data, error } = await sb.rpc('online_import_orders', { p_rows: rows, p_apply: false });
         if(error) throw error;
         const res = data||[]; const cnt = {}; res.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
         out.className='card';
         out.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:'미리보기 · 파일 '+rows.length+'건'+(skipped?(' (결제 미완료로 제외 '+skipped+'건)'):'')}));
         Object.keys(LABEL).forEach(k=>{ if(cnt[k]) out.appendChild(h('div',{class:LABEL[k][0],style:'margin:2px 0',text:LABEL[k][1]+' '+cnt[k]+'건'})); });
+        if(fromStatusTable){ out.appendChild(h('div',{class:'muted',style:'margin:4px 0',text:'"주문 추적 표" 형식으로 읽었습니다. 회사는 운영사 열로 구분했고, 이 형식에는 배송지·예정 기간이 없어 비어 있습니다.'})); if(withTracking) out.appendChild(h('div',{class:'err',style:'margin:2px 0',text:'운송장번호가 들어 있는 주문 '+withTracking+'건이 있습니다. 같은 파일을 [운송장 등록]에도 올려 주세요.'})); if(unknownCo) out.appendChild(h('div',{class:'err',style:'margin:2px 0',text:'운영사를 알 수 없는 줄 '+unknownCo+'건 — 저장되지 않습니다(회사 미지정).'})); }
         const newRows = res.filter(r=>r.status==='new'||r.status==='complete');
         const byCo = {}; newRows.forEach(r=>byCo[r.company]=(byCo[r.company]||0)+1);
         if(newRows.length) out.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:'저장 회사별: '+Object.keys(byCo).map(c=>c+' '+nf(byCo[c])+'건').join(' · ')+' · 수량 '+nf(rows.filter(r=>newRows.some(n=>n.order_no===r.order_no)).reduce((a,r)=>a+r.qty,0))+'대'}));
         const noShip = rows.filter(r=>!r.ship_to && newRows.some(n=>n.order_no===r.order_no)).length;
-        if(noShip) out.appendChild(h('div',{class:'err',style:'margin-top:6px',text:'⚠ 배송지(서울/부산)를 읽지 못한 신규 주문 '+noShip+'건 — 저장은 되지만 사무실 불일치 확인이 되지 않습니다.'}));
+        if(noShip && !fromStatusTable) out.appendChild(h('div',{class:'err',style:'margin-top:6px',text:'⚠ 배송지(서울/부산)를 읽지 못한 신규 주문 '+noShip+'건 — 저장은 되지만 사무실 불일치 확인이 되지 않습니다.'}));
         // 회사가 정해지지 않은 카드: 바로 지정
         const unk = Array.from(new Set(res.filter(r=>r.status==='unknown_card').map(r=>r.card_last4||'')));
         unk.forEach(l4=>{
@@ -1496,7 +1519,7 @@ function renderAdminView(){
       const X = await loadSheetJS();
       const wb = X.read(await f.arrayBuffer(), {type:'array'});
       { const k = sniffKind(X, wb);
-        if(k==='tracking'||k==='order') throw wrongTab(...WRONG[k]);
+        if(k==='tracking'||k==='order'||k==='status') throw wrongTab(...WRONG[k]);
         if(k!=='delivery') throw wrongTab('딩톡 수령 내역(제货单/pickup) 파일이 아닌 것 같습니다. 도착한 건이 맞는지 확인해 주세요. 운송장만 있는 파일이면 [운송장 등록]에 올려 주세요.','track','운송장 등록으로 이동'); }
       const aoa = X.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], {header:1, raw:false, defval:''});
       const hdr = aoa[0].map((_,i)=> String(aoa[0][i]||'')+' '+String((aoa[1]||[])[i]||''));
@@ -1614,7 +1637,7 @@ function renderAdminView(){
           break;
         }
       }
-      if(!out.length) throw new Error('주문번호 열과 운송장번호(또는 배송 예정 기간) 열을 찾지 못했습니다. 첫 줄 제목에 "주문번호", "운송장번호"가 있는지 확인해 주세요.');
+      if(!out.length){ if(sniffKind(X, wb)==='status') throw new Error('이 "주문 추적 표"에는 아직 운송장번호가 들어 있는 주문이 없습니다. (모두 배송 전입니다) 주문은 [주문 등록]에 올려 주세요.'); throw new Error('주문번호 열과 운송장번호(또는 배송 예정 기간) 열을 찾지 못했습니다. 첫 줄 제목에 "주문번호", "운송장번호"가 있는지 확인해 주세요.'); }
       return out;
     }
     function readText(txt){
@@ -3557,7 +3580,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-095023';
+const BUILD = 'b20261125-105302';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
