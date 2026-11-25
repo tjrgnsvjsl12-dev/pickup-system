@@ -593,7 +593,7 @@ function renderAdminView(){
   let lastCreated = null; // {code, store, albaName, orders}
   let myProfile = null; // {id, display_name, role}
   let onlineMe = null; // {perms:[...], companies:[...]} 온라인 주문 권한
-  let onlineTab = 'sum'; let onlineCompany = ''; let onlineAlertKind = ''; let onlineStage = ''; let onlineMonth = ''; let onlineDay = ''; let onlineShowDays = false; let onlineRows = null;
+  let onlineTab = 'sum'; let onlineCompany = ''; let onlineAlertKind = ''; let onlineStage = ''; let onlineMonth = ''; let onlineDay = ''; let onlineItem = ''; const onlineItemRaws = {}; let onlineShowDays = false; let onlineRows = null;
   let appSettings = { account_id:'', account_pw:'', pickup_link:'' }; // single shared pickup account (same across all stores)
   let editFromAll = false; // 전체 현황에서 수정 버튼으로 들어왔는지 (저장/취소 후 전체 현황으로 복귀)
   const canEditAll = ()=> !!(myProfile && myProfile.can_edit_all);
@@ -1059,22 +1059,22 @@ function renderAdminView(){
     {
       const mc2 = h('div',{class:'card'});
       mc2.appendChild(h('div',{style:'font-weight:800;margin-bottom:2px',text:'품목별 ('+scopeLabel+(onlineDay?' · '+onlineDay.slice(5).replace('-','/'):'')+')'}));
-      mc2.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'단위: 대'}));
+      mc2.appendChild(h('div',{class:'muted',style:'margin-bottom:6px',text:'단위: 대 · 모델을 누르면 그 모델의 안 온 주문번호가 아래에 나옵니다'}));
       const mbody = h('div',{style:'overflow-x:auto'}); mc2.appendChild(mbody); body.appendChild(mc2);
       mbody.appendChild(h('div',{class:'muted',text:t('loading')}));
       sb.rpc('online_model_summary',{ p_company:onlineCompany||null, p_ym:onlineMonth||null, p_day:onlineDay||null }).then(({data,error})=>{
         mbody.innerHTML='';
         if(error){ mbody.appendChild(h('div',{class:'err',text:error.message})); return; }
         const items = {};
-        (data||[]).forEach(r=>{ const k = itemName(r.model_raw); const o = items[k] = items[k] || {n:0,u:0,bu:0,wu:0,du:0}; const u = Number(r.units); o.n += Number(r.orders); o.u += u; if(r.stage==='배송완료') o.du += u; else if(r.stage==='배송중') o.wu += u; else o.bu += u; });
+        (data||[]).forEach(r=>{ const k = itemName(r.model_raw); (onlineItemRaws[k] = onlineItemRaws[k] || new Set()).add(r.model_raw); const o = items[k] = items[k] || {n:0,u:0,bu:0,wu:0,du:0}; const u = Number(r.units); o.n += Number(r.orders); o.u += u; if(r.stage==='배송완료') o.du += u; else if(r.stage==='배송중') o.wu += u; else o.bu += u; });
         const keys = Object.keys(items).sort((a,b)=> items[b].u-items[a].u);
         if(!keys.length){ mbody.appendChild(h('div',{class:'muted',text:t('none')})); return; }
-        const t5 = h('table',{class:'cotable'});
+        const t5 = h('table',{class:'cotable clickrows'});
         t5.appendChild(h('thead',{html:'<tr><th>품목 (모델 · 용량 · 색상)</th><th>주문</th><th>① 배송 전</th><th>② 배송중</th><th>③ 배송완료</th><th>아직 안 온</th></tr>'}));
         const b5 = h('tbody'); const tot = {u:0,bu:0,wu:0,du:0,n:0};
         const c5 = (u,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(u?'':' z'),text:nf(u)+'대'})]);
         keys.forEach(k=>{ const o = items[k]; tot.u+=o.u; tot.bu+=o.bu; tot.wu+=o.wu; tot.du+=o.du; tot.n+=o.n;
-          b5.appendChild(h('tr',{},[h('td',{class:'co',style:'white-space:normal',text:k}), c5(o.u,'b'), c5(o.bu), c5(o.wu), c5(o.du,'g'), c5(o.bu+o.wu,(o.bu+o.wu)?'r':'g')]));
+          b5.appendChild(h('tr',{class:onlineItem===k?'selrow':'',title:(o.bu+o.wu)?'눌러서 이 모델의 안 온 주문번호 보기':'',onclick:()=>{ if(!(o.bu+o.wu)) return; onlineItem = (onlineItem===k?'':k); onlineAlertKind=''; drawDashboard(); setTimeout(()=>{ const el = document.getElementById('pendList'); if(el) el.scrollIntoView({behavior:'smooth',block:'start'}); },400); }},[h('td',{class:'co',style:'white-space:normal',text:k}), c5(o.u,'b'), c5(o.bu), c5(o.wu), c5(o.du,'g'), c5(o.bu+o.wu,(o.bu+o.wu)?'r':'g')]));
         });
         const f5 = h('tfoot'); f5.appendChild(h('tr',{},[h('td',{class:'co',text:'합계'}), c5(tot.u,'b'), c5(tot.bu), c5(tot.wu), c5(tot.du,'g'), c5(tot.bu+tot.wu,(tot.bu+tot.wu)?'r':'g')]));
         t5.append(b5,f5); mbody.appendChild(t5);
@@ -1116,10 +1116,11 @@ function renderAdminView(){
     if(st['미분류']) body.appendChild(h('div',{class:'err',text:'⚠ 회사가 지정되지 않은 주문이 있습니다. 카드 등록이 필요합니다.'}));
 
     // ⑤ 아직 안 온 주문 목록 (서버에서 검색·페이지 처리, 50건씩)
-    const lc = h('div',{class:'card'});
+    const lc = h('div',{class:'card',id:'pendList'});
     const scope = (onlineMonth?ymLabel(onlineMonth)+' 주문 중 ':'')+(onlineDay?onlineDay.slice(5).replace('-','/')+' 주문 중 ':'');
-    const modeTitle = scope+(onlineAlertKind==='arr'?'배송중인데 예정일이 지난 주문':onlineAlertKind==='ship'?'배송 전인데 예정일이 지난 주문':onlineStage==='송장 대기'?'① 배송 전 주문':onlineStage==='배송중'?'② 배송중 주문':'아직 안 온 주문 (① 배송 전 + ② 배송중)');
+    const modeTitle = scope+(onlineItem&&!onlineAlertKind?onlineItem+' · ':'')+(onlineAlertKind==='arr'?'배송중인데 예정일이 지난 주문':onlineAlertKind==='ship'?'배송 전인데 예정일이 지난 주문':onlineStage==='송장 대기'?'① 배송 전 주문':onlineStage==='배송중'?'② 배송중 주문':'아직 안 온 주문 (① 배송 전 + ② 배송중)');
     lc.appendChild(h('div',{style:'font-weight:800;margin-bottom:8px',text:modeTitle}));
+    if(onlineItem&&!onlineAlertKind) lc.appendChild(h('button',{class:'btn-ghost btn-sm',style:'margin:0 8px 8px 0',text:'모델 선택 해제 ✕ (전체 보기)',onclick:()=>{ onlineItem=''; drawDashboard(); }}));
     if(onlineDay) lc.appendChild(h('button',{class:'btn-ghost btn-sm',style:'margin-bottom:8px',text:'날짜 선택 해제 ✕',onclick:()=>{ onlineDay=''; drawDashboard(); }}));
     const q = h('input',{type:'search',placeholder:'주문번호 / 운송장번호 검색'});
     lc.appendChild(q);
@@ -1138,7 +1139,7 @@ function renderAdminView(){
       const my = ++seq;
       const { data, error } = alertMode
         ? await sb.rpc('online_overdue', { p_company: onlineCompany||null, p_kind: onlineAlertKind, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset, p_ym: onlineMonth||null })
-        : await sb.rpc('online_pending', { p_company: onlineCompany||null, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset, p_stage: onlineStage||null, p_ym: onlineMonth||null, p_day: onlineDay||null });
+        : await sb.rpc('online_pending', { p_company: onlineCompany||null, p_q: q.value.trim()||null, p_limit: 50, p_offset: offset, p_stage: onlineStage||null, p_ym: onlineMonth||null, p_day: onlineDay||null, p_models: (onlineItem&&onlineItemRaws[onlineItem])?Array.from(onlineItemRaws[onlineItem]):null });
       if(my!==seq) return;
       if(error){ list.innerHTML=''; cnt.textContent = error.message; cnt.className='err'; more.classList.add('hidden'); return; }
       const rows = data||[];
@@ -1154,7 +1155,7 @@ function renderAdminView(){
       offset += rows.length;
       cnt.className='muted'; cnt.textContent = total ? ('총 '+nf(total)+'건 중 '+nf(offset)+'건 표시') : '';
       more.classList.toggle('hidden', offset>=total);
-      if(reset && !rows.length){ list.appendChild(h('tr',{},[h('td',{colspan:'6',class:'muted',style:'text-align:center;padding:18px',text:alertMode||onlineStage||onlineMonth||onlineDay||q.value.trim()?'해당하는 주문이 없습니다 ✓':t('none')})])); }
+      if(reset && !rows.length){ list.appendChild(h('tr',{},[h('td',{colspan:'6',class:'muted',style:'text-align:center;padding:18px',text:alertMode||onlineStage||onlineMonth||onlineDay||onlineItem||q.value.trim()?'해당하는 주문이 없습니다 ✓':t('none')})])); }
     }
     more.onclick = ()=>load(false);
     let tm = null; q.addEventListener('input',()=>{ clearTimeout(tm); tm = setTimeout(()=>load(true), 300); });
@@ -3580,7 +3581,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-105302';
+const BUILD = 'b20261125-113128';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
