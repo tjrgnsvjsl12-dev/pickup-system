@@ -860,6 +860,30 @@ function renderAdminView(){
     return { model, cap: cap.toUpperCase().replace(/\s/g,''), color: color.replace(/\b\w/g,c=>c.toUpperCase()), raw };
   }
 
+    // 애플 배송 예정 기간 문자열 → {from,to} (YYYY-MM-DD). 예: "11월 25 - 11월 27", "11/25~11/27", "2026-11-25 ~ 2026-11-27", "Nov 25 - Nov 27"
+    const MON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+    function parseWindow(v){
+      const t = String(v==null?'':v).trim(); if(!t) return null;
+      const now = new Date(Date.now()+9*3600*1000); const cy = now.getUTCFullYear(), cm = now.getUTCMonth()+1;
+      const found = [];
+      const re = /(?:(\d{4})\s*[-./년年]\s*)?(\d{1,2})\s*[-./월月]\s*(\d{1,2})\s*(?:일|日)?|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*(\d{1,2})/gi;
+      let m;
+      while((m = re.exec(t))){
+        const y = m[1]?Number(m[1]):null, mo = m[2]?Number(m[2]):MON[m[4].toLowerCase()], d = Number(m[3]||m[5]);
+        if(mo>=1&&mo<=12&&d>=1&&d<=31) found.push({y,mo,d,end:re.lastIndex});
+      }
+      if(!found.length) return null;
+      if(found.length===1){ // "11월 25일 - 27일" 처럼 뒤쪽에 일만 있는 경우
+        const m2 = /^\s*[-~–—]\s*(\d{1,2})\s*(?:일|日)?\s*$/.exec(t.slice(found[0].end));
+        if(m2) found.push({y:found[0].y,mo:found[0].mo,d:Number(m2[1])});
+      }
+      const yr = (f)=> f.y || (f.mo < cm-6 ? cy+1 : f.mo > cm+6 ? cy-1 : cy);
+      const iso = (y,mo,d)=> y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+      const a = found[0], b = found[found.length-1];
+      const ya = yr(a); let yb = b.y || ya; if(!b.y && (b.mo<a.mo)) yb = ya+1;
+      return { from: iso(ya,a.mo,a.d), to: iso(yb,b.mo,b.d) };
+    }
+
   function drawOnlineSection(){
     const defs = [];
     if(onlineHas('view')) defs.push(['sum','집계']);
@@ -867,6 +891,7 @@ function renderAdminView(){
     if(onlineHas('admin')) defs.push(['orders','주문 등록']);
     if(onlineHas('admin')) defs.push(['track','운송장 등록']);
     if(onlineHas('admin')) defs.push(['ding','딩톡 가져오기']);
+    if(onlineHas('receive')) defs.push(['dingout','딩톡에 올리기']);
     if(onlineHas('view')) defs.push(['export','내보내기']);
     if(!defs.length){ app.appendChild(h('div',{class:'lockmsg',text:'온라인 주문 권한이 없습니다.'})); return; }
     document.body.style.maxWidth = '980px';
@@ -881,6 +906,7 @@ function renderAdminView(){
     else if(onlineTab==='track') drawOnlineTracking(body);
     else if(onlineTab==='orders') drawOnlineOrders(body);
     else if(onlineTab==='ding') drawOnlineDingImport(body);
+    else if(onlineTab==='dingout') drawOnlineDingOut(body);
     else drawOnlineExport(body);
   }
 
@@ -1170,6 +1196,163 @@ function renderAdminView(){
     wrap.appendChild(grid); return wrap;
   }
 
+
+  // ---- 주문 직접 입력 / 붙여넣기 (주문 등록 화면 아래) ----
+  function drawManualOrders(body){
+    const card = h('div',{class:'card'});
+    card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'주문 직접 입력 (한 건씩 / 붙여넣기)'}));
+    card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'파일 없이 주문을 넣는 방법입니다. 낱개로 주문한 건은 아래 칸에 한 건씩 입력하고, 딩톡·엑셀에 있는 여러 줄은 복사해서 붙여넣으세요. 이미 등록된 주문번호는 건너뜁니다.'}));
+    let company = '', ship = ''; try{ ship = localStorage.getItem('pm_online_office') || ''; }catch(e){}
+    let qty = 2;
+    const today = new Date(Date.now()+9*3600*1000).toISOString().slice(0,10);
+    const chipRow = (label, opts, get, set)=>{
+      const wrap = h('div',{style:'margin-bottom:8px'}); wrap.appendChild(h('label',{text:label}));
+      const row = h('div',{class:'chiprow'}); const bs = {};
+      opts.forEach(([v,t])=>{ const b = h('button',{type:'button',class:'chip-btn'+(get()===v?' selected':''),text:t,onclick:()=>{ set(v); Object.keys(bs).forEach(k=>bs[k].classList.toggle('selected',k===String(v))); }}); bs[v]=b; row.appendChild(b); });
+      wrap.appendChild(row); return wrap;
+    };
+    card.appendChild(chipRow('회사 (꼭 선택)', [['CH','CH'],['부강','부강']], ()=>company, v=>{ company=v; }));
+    card.appendChild(chipRow('배송지(받는 사무실)', [['서울','서울'],['부산','부산']], ()=>ship, v=>{ ship=v; }));
+    const tabs = h('div',{class:'chiprow',style:'margin:6px 0 10px'}); let mode = 'one';
+    const one = h('div',{}), paste = h('div',{class:'hidden'});
+    const tb1 = h('button',{type:'button',class:'chip-btn selected',text:'한 건 입력',onclick:()=>{ mode='one'; tb1.classList.add('selected'); tb2.classList.remove('selected'); one.classList.remove('hidden'); paste.classList.add('hidden'); }});
+    const tb2 = h('button',{type:'button',class:'chip-btn',text:'여러 줄 붙여넣기',onclick:()=>{ mode='paste'; tb2.classList.add('selected'); tb1.classList.remove('selected'); paste.classList.remove('hidden'); one.classList.add('hidden'); }});
+    tabs.append(tb1, tb2); card.appendChild(tabs);
+    // 한 건 입력
+    const fNo = h('input',{type:'text',placeholder:'W1234567890',autocomplete:'off'});
+    const fModel = h('input',{type:'text',placeholder:'딩톡/엑셀의 모델명 그대로 (예: iphone18promax 1TB burgundy kr spec)',autocomplete:'off'});
+    const fDate = h('input',{type:'date',value:today});
+    const fWin = h('input',{type:'text',placeholder:'예: 11월 25 - 11월 27 (모르면 비워 두세요)',autocomplete:'off'});
+    one.append(h('label',{text:'주문코드 (W로 시작)'}), fNo, h('label',{text:'모델명'}), fModel);
+    one.appendChild(chipRow('수량', [[2,'2대'],[1,'1대']], ()=>qty, v=>{ qty=v; }));
+    one.append(h('label',{text:'주문일'}), fDate, h('label',{text:'배송 예정 기간 (선택)'}), fWin);
+    // 붙여넣기
+    const ta = h('textarea',{placeholder:'딩톡 온라인 구매 표와 같은 순서(모델명 · 수량 · 매장 · 주문코드 · … · 주문일 · 수령시간)로 복사한 줄을 붙여넣으세요. 한 줄에 주문 한 건입니다.',style:'min-height:110px'});
+    paste.append(ta, h('div',{class:'muted',text:'모델명, 수량, 주문코드(W…), 주문일, 예정 기간은 줄 안에서 자동으로 찾습니다. 회사와 배송지는 위에서 고른 값이 적용됩니다(줄에 서울/부산이 있으면 그 값이 우선).'}));
+    card.append(one, paste);
+    const err = h('div',{class:'err hidden'}); const prev = h('button',{class:'btn-primary',text:'미리보기'});
+    card.append(err, prev); body.appendChild(card);
+    const out = h('div',{class:'card hidden'}); body.appendChild(out);
+
+    const rowOf = (o)=>{ const w = o.window_text ? parseWindow(o.window_text) : null;
+      return { order_no:o.order_no, model_raw:o.model_raw||'', qty:o.qty||2, order_date:o.order_date||'', ship_to:o.ship_to||ship||'', company, window_text:o.window_text||'', window_from:w?w.from:'', window_to:w?w.to:'' }; };
+    function parsePaste(txt){
+      const rows = [];
+      txt.split(/\r?\n/).forEach(line=>{
+        if(!line.trim()) return;
+        const cells = line.split('\t').map(x=>x.trim());
+        const cs = cells.length>1 ? cells : line.split(/\s{2,}|\s*,\s*/).map(x=>x.trim());
+        const no = cs.find(c=>/^W\d{6,}$/i.test(c)); if(!no) return;
+        const model = cs.find(c=>/iphone|아이폰|ipad|macbook|watch|airpods|\d\s?(tb|gb)/i.test(c)) || cs.find(c=>c && c!==no && !/^\d{1,3}$/.test(c) && !/^\d{4}[-/.]/.test(c)) || '';
+        const q = cs.find(c=>/^\d{1,2}$/.test(c));
+        const sh = cs.find(c=>/서울|seoul|부산|busan/i.test(c));
+        const dm = cs.map(c=>c.match(/(\d{4})[-/.](\d{1,2})[-/.](\d{1,2})/)).find(Boolean);
+        const wcell = cs.find(c=>/[-~–]/.test(c) && !/^\d{4}[-/.]\d{1,2}[-/.]\d{1,2}$/.test(c) && parseWindow(c) && /월|\//.test(c));
+        rows.push({ order_no:no.toUpperCase(), model_raw:model, qty:q?Number(q):2, order_date:dm?dm[1]+'-'+dm[2].padStart(2,'0')+'-'+dm[3].padStart(2,'0'):'', ship_to: sh?(/서울|seoul/i.test(sh)?'서울':'부산'):'', window_text:wcell||'' });
+      });
+      return rows;
+    }
+    const LABEL = {new:['ok','신규 등록'], complete:['ok','딩톡에서 먼저 가져온 건 → 주문 정보 보완'], exists:['muted','이미 등록됨 (건너뜀)'], dup_in_file:['err','입력 안에서 중복 (건너뜀)'], bad_row:['err','주문코드 형식 오류 (건너뜀)'], unknown_card:['err','회사 미지정 (건너뜀)']};
+    prev.onclick = async ()=>{
+      err.className='err hidden'; out.className='card hidden'; out.innerHTML=''; prev.disabled = true;
+      try{
+        if(!company) throw new Error('회사(CH/부강)를 먼저 선택해 주세요.');
+        let rows;
+        if(mode==='one'){
+          const no = fNo.value.trim().toUpperCase();
+          if(!/^W\d{6,}$/.test(no)) throw new Error('주문코드를 W로 시작하는 형식으로 입력해 주세요. (예: W1234567890)');
+          if(!fModel.value.trim()) throw new Error('모델명을 입력해 주세요.');
+          rows = [rowOf({order_no:no, model_raw:fModel.value.trim(), qty, order_date:fDate.value, ship_to:ship, window_text:fWin.value.trim()})];
+          if(fWin.value.trim() && !parseWindow(fWin.value)) throw new Error('배송 예정 기간을 읽지 못했습니다. 예: 11월 25 - 11월 27 (또는 비워 두세요)');
+        } else {
+          rows = parsePaste(ta.value).map(rowOf);
+          if(!rows.length) throw new Error('붙여넣은 내용에서 주문코드(W…)가 있는 줄을 찾지 못했습니다.');
+        }
+        const { data, error } = await sb.rpc('online_import_orders', { p_rows: rows, p_apply: false });
+        if(error) throw error;
+        const res = data||[]; const cnt = {}; res.forEach(r=>cnt[r.status]=(cnt[r.status]||0)+1);
+        out.className='card';
+        out.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:'미리보기 · '+rows.length+'건 · 회사 '+company}));
+        Object.keys(LABEL).forEach(k=>{ if(cnt[k]) out.appendChild(h('div',{class:LABEL[k][0],style:'margin:2px 0',text:LABEL[k][1]+' '+cnt[k]+'건'})); });
+        const okRows = res.filter(r=>r.status==='new'||r.status==='complete');
+        const noShip = rows.filter(r=>!r.ship_to && okRows.some(n=>n.order_no===r.order_no)).length;
+        if(noShip) out.appendChild(h('div',{class:'err',style:'margin-top:6px',text:'⚠ 배송지(서울/부산)가 비어 있는 주문 '+noShip+'건 — 저장은 되지만 사무실 불일치 확인이 되지 않습니다. 위에서 배송지를 선택해 주세요.'}));
+        if(okRows.length){
+          const t = h('table',{class:'cotable',style:'margin-top:8px'}); t.appendChild(h('thead',{html:'<tr><th>주문코드</th><th>모델</th><th>수량</th><th>주문일</th><th>배송지</th></tr>'}));
+          const tb = h('tbody'); okRows.slice(0,50).forEach(r=>{ const x = rows.find(y=>y.order_no===r.order_no)||{}; tb.appendChild(h('tr',{},[h('td',{class:'co',text:x.order_no}),h('td',{style:'white-space:normal',text:itemName(x.model_raw)||x.model_raw}),h('td',{text:(x.qty||'')+'대'}),h('td',{text:x.order_date||'-'}),h('td',{text:x.ship_to||'-'})])); });
+          t.appendChild(tb); out.appendChild(h('div',{style:'overflow-x:auto'},[t]));
+          const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:'신규 '+okRows.length+'건 저장'});
+          ok.onclick = async ()=>{
+            ok.disabled = true;
+            const { data:d2, error:e2 } = await sb.rpc('online_import_orders', { p_rows: rows, p_apply: true });
+            if(e2){ err.textContent=e2.message; err.className='err'; ok.disabled=false; return; }
+            const n = (d2||[]).filter(r=>r.status==='new'||r.status==='complete').length;
+            out.innerHTML=''; out.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+n+'건 저장했습니다. 집계의 "배송 전"에 반영됩니다.'}));
+            fNo.value=''; fModel.value=''; fWin.value=''; ta.value='';
+          };
+          out.appendChild(ok);
+        } else out.appendChild(h('div',{class:'muted',style:'margin-top:8px',text:'새로 저장할 주문이 없습니다.'}));
+      }catch(e){ err.textContent = e.message||String(e); err.className='err'; }
+      prev.disabled = false;
+    };
+  }
+
+  // ---- 딩톡에 올리기 (수령한 운송장번호를 200개씩 복사 → 딩톡 빠른 입력에 붙여넣기 → 올렸어요 기록) ----
+  function drawOnlineDingOut(body){
+    const CHUNK = 200;
+    let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
+    body.appendChild(h('div',{class:'card'},[
+      h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'딩톡에 올리기'}),
+      h('div',{class:'muted',text:'현장에서 스캔한 박스의 운송장번호를 딩톡 "提货单 delivery/送货单 pickup" 표에 붙여넣기 위한 화면입니다. 딩톡은 한 번에 200개까지만 받으므로 200개씩 나누어 보여 드립니다.'})
+    ]));
+    const info = h('div',{class:'card'});
+    info.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:'다른 딩톡 화면은 이렇게 합니다'}));
+    info.appendChild(h('div',{class:'muted',style:'margin-bottom:4px',text:'① 온라인 구매 (苹果店线上订购表单): 자동주문 프로그램이 내려준 엑셀을 [주문 등록]에 올리면 됩니다. 낱개 주문은 [주문 등록] 아래 "주문 직접 입력"을 쓰세요.'}));
+    info.appendChild(h('div',{class:'muted',text:'② 운송장 등록 (送货快递单录入): 딩톡 양식 그대로의 파일을 [운송장 등록]에 올리면 됩니다.'}));
+    body.appendChild(info);
+    const card = h('div',{class:'card'}); body.appendChild(card);
+    card.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:'③ 물건 수령 (提货单): 스캔한 운송장번호 올리기'}));
+    const oWrap = h('div',{}); oWrap.appendChild(h('label',{text:'어느 사무실에서 받은 박스입니까?'}));
+    const orow = h('div',{class:'chiprow',style:'margin-bottom:8px'}); const ob = {};
+    ['서울','부산'].forEach(n=>{ const b = h('button',{type:'button',class:'chip-btn'+(office===n?' selected':''),text:n+' 사무실',onclick:()=>{ office=n; try{ localStorage.setItem('pm_online_office',n); }catch(e){} Object.keys(ob).forEach(k=>ob[k].classList.toggle('selected',k===n)); load(); }}); ob[n]=b; orow.appendChild(b); });
+    oWrap.appendChild(orow); card.appendChild(oWrap);
+    const sum = h('div',{style:'font-weight:800;margin:4px 0 8px'}); card.appendChild(sum);
+    const list = h('div',{}); card.appendChild(list);
+    const msg = h('div',{class:'muted',style:'margin-top:6px'}); card.appendChild(msg);
+    async function load(){
+      sum.textContent = '불러오는 중…'; list.innerHTML = ''; msg.textContent = '';
+      const [p, d] = await Promise.all([ sb.rpc('online_ding_pending',{ p_office: office }), sb.rpc('online_ding_done_count',{ p_office: office }) ]);
+      if(p.error){ sum.textContent = ''; list.appendChild(h('div',{class:'err',text:p.error.message})); return; }
+      const rows = p.data||[]; const done = d.error ? 0 : Number(d.data||0);
+      sum.innerHTML = ''; 
+      sum.appendChild(h('span',{style:'color:var(--accent)',text:'딩톡에 아직 안 올린 박스 '+nf(rows.length)+'개'}));
+      sum.appendChild(h('span',{class:'muted',style:'margin-left:10px;font-weight:600',text:'오늘 올린 박스 '+nf(done)+'개'}));
+      if(!rows.length){ list.appendChild(h('div',{class:'alldone compare',text:'✓ 올릴 박스가 없습니다. ([수령]에서 스캔 후 [제출]한 박스가 여기에 쌓입니다)'})); return; }
+      for(let i=0;i<rows.length;i+=CHUNK){
+        const part = rows.slice(i,i+CHUNK); const from = i+1, to = i+part.length;
+        const box = h('div',{style:'border:1px solid var(--border);border-radius:12px;padding:12px;margin:8px 0'});
+        box.appendChild(h('div',{style:'font-weight:800;margin-bottom:6px',text:(rows.length>CHUNK?'묶음 '+(i/CHUNK+1)+' · ':'')+from+'~'+to+'번 ('+part.length+'박스 · '+part.reduce((a,r)=>a+Number(r.qty||0),0)+'대)'}));
+        const copyB = h('button',{class:'btn-primary',style:'width:100%',text:'① 운송장번호 '+part.length+'개 복사'});
+        const doneB = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'③ 딩톡에 제출했어요 (기록하기)',disabled:'disabled'});
+        const steps = h('div',{class:'muted',style:'margin:8px 0 0',text:'② 딩톡 [提货单 delivery/送货单 pickup 表单]에서 창고(사무실)를 고르고 "快速填报"을 누른 뒤, 첫 칸(운송장 번호)을 클릭하고 Ctrl+V → [下一步] → 제출'});
+        copyB.onclick = async ()=>{
+          try{ await copyAsExcel(part.map(r=>[r.tracking])); copyB.textContent = '✓ '+part.length+'개 복사됨 (다시 누르면 다시 복사)'; doneB.disabled = false; doneB.removeAttribute('disabled'); }
+          catch(e){ msg.style.color='var(--danger)'; msg.textContent = '복사 권한이 없어 복사하지 못했습니다. 브라우저 주소창의 권한을 허용해 주세요.'; }
+        };
+        doneB.onclick = async ()=>{
+          if(!confirm(part.length+'박스를 딩톡에 제출 완료로 기록할까요? 기록하면 이 목록에서 사라집니다.')) return;
+          doneB.disabled = true;
+          const { data, error } = await sb.rpc('online_ding_mark', { p_ids: part.map(r=>r.receipt_id) });
+          if(error){ msg.style.color='var(--danger)'; msg.textContent = error.message; doneB.disabled=false; return; }
+          msg.style.color='var(--success)'; msg.textContent = '✓ '+data+'박스를 딩톡 제출 완료로 기록했습니다.'; load();
+        };
+        box.append(copyB, steps, doneB); list.appendChild(box);
+      }
+      list.appendChild(h('div',{class:'muted',style:'margin-top:4px',text:'박스는 오래된 순서로 쌓입니다. 취소한 박스는 목록에서 자동으로 빠집니다.'}));
+    }
+    load();
+  }
+
   function drawOnlineOrders(body){
     body.appendChild(flowGuide('orders'));
     const card = h('div',{class:'card'});
@@ -1183,6 +1366,7 @@ function renderAdminView(){
     card.append(err, prevBtn);
     body.appendChild(card);
     const out = h('div',{class:'card hidden'}); body.appendChild(out);
+    drawManualOrders(body);
 
     const hasH = (hdr, name)=> hdr.map(x=>String(x).trim()).indexOf(name);
     const monthDay = (txt, base)=>{
@@ -1403,29 +1587,6 @@ function renderAdminView(){
     const CAR = ['택배사','快递公司','carrier'];
     const LNK = ['링크','link','url','跟踪'];
     const WIN = ['예정','도착일','배송기간','预计','预估','送达','eta','window','estimated','기간'];
-    // 애플 배송 예정 기간 문자열 → {from,to} (YYYY-MM-DD). 예: "11월 25 - 11월 27", "11/25~11/27", "2026-11-25 ~ 2026-11-27", "Nov 25 - Nov 27"
-    const MON = {jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
-    function parseWindow(v){
-      const t = String(v==null?'':v).trim(); if(!t) return null;
-      const now = new Date(Date.now()+9*3600*1000); const cy = now.getUTCFullYear(), cm = now.getUTCMonth()+1;
-      const found = [];
-      const re = /(?:(\d{4})\s*[-./년年]\s*)?(\d{1,2})\s*[-./월月]\s*(\d{1,2})\s*(?:일|日)?|(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s*(\d{1,2})/gi;
-      let m;
-      while((m = re.exec(t))){
-        const y = m[1]?Number(m[1]):null, mo = m[2]?Number(m[2]):MON[m[4].toLowerCase()], d = Number(m[3]||m[5]);
-        if(mo>=1&&mo<=12&&d>=1&&d<=31) found.push({y,mo,d,end:re.lastIndex});
-      }
-      if(!found.length) return null;
-      if(found.length===1){ // "11월 25일 - 27일" 처럼 뒤쪽에 일만 있는 경우
-        const m2 = /^\s*[-~–—]\s*(\d{1,2})\s*(?:일|日)?\s*$/.exec(t.slice(found[0].end));
-        if(m2) found.push({y:found[0].y,mo:found[0].mo,d:Number(m2[1])});
-      }
-      const yr = (f)=> f.y || (f.mo < cm-6 ? cy+1 : f.mo > cm+6 ? cy-1 : cy);
-      const iso = (y,mo,d)=> y+'-'+String(mo).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-      const a = found[0], b = found[found.length-1];
-      const ya = yr(a); let yb = b.y || ya; if(!b.y && (b.mo<a.mo)) yb = ya+1;
-      return { from: iso(ya,a.mo,a.d), to: iso(yb,b.mo,b.d) };
-    }
     const carrierOf = u=> /cjlogistics/i.test(u)?'CJ대한통운':/hanjin/i.test(u)?'한진':/lotte/i.test(u)?'롯데':/logen/i.test(u)?'로젠':/epost|koreapost/i.test(u)?'우체국':'';
     const findCol = (hdr, keys, skip)=> hdr.findIndex((x,i)=> i!==skip && keys.some(k=> String(x).toLowerCase().replace(/\s/g,'').includes(k.toLowerCase())));
     async function readFile(f){
@@ -3396,7 +3557,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-092849';
+const BUILD = 'b20261125-095023';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
