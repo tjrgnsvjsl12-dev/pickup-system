@@ -116,7 +116,7 @@ function applyRoster(list){FIN={};USERS=[];ROLES={};
  list.forEach(u=>{const rs=u.roles||[];ROLES[u.id]=rs;const fc=rs.filter(r=>r.startsWith('fin:')).map(r=>r.slice(4));fc.forEach(c=>{FIN[c]=u.name});
   USERS.push({id:u.id,name:u.name+(fc.length?' ('+fc.join('·')+' 재무)':'')})});
  EDITORS=USERS.filter(u=>ROLES[u.id].includes('edit'))}
-const isAdmin=()=>(ROLES[S.me]||[]).includes('admin');
+const isAdmin=()=>(ROLES[S.real||S.me]||[]).includes('admin');
 const isEdit=()=>ROLES[S.me].includes('edit');
 const turn=o=>{
  let role;
@@ -384,14 +384,16 @@ function render(){
  $('#who').textContent=uname(S.me);
  renderPanel();renderMenu();
  $('#langWrap').style.display=(S.me==='penny'||S.me==='cc')?'block':'none';$('#langSel').value=lang();$('#langSel').querySelector('[value=en]').style.display=S.me==='cc'?'none':'';
- const m=msg?`<div class="box ${msg.type}">${esc(msg.m)}</div>`:'';
+ const pvb=(S.real&&S.me!==S.real)?`<div class="box warn">시험용 미리보기 중: <b>${esc(uname(S.me))}</b> 입장으로 보고 있습니다. 저장은 ${esc(uname(S.real))} 계정으로 되고, 기록에는 ${esc(uname(S.me))} 이름으로 남습니다. <button class="sm" onclick="setPreview('${S.real}')">내 화면으로 돌아가기</button></div>`:'';
+ const m=pvb+(msg?`<div class="box ${msg.type}">${esc(msg.m)}</div>`:'');
+ try{sessionStorage.setItem('orderflow_view',JSON.stringify({o:S.openId,f:S.filter,t:S.tab,q:S.q,pv:S.me}))}catch(e){}
  const back=S.tab==='spec'?`<button class="ghost" onclick="S.tab='orders';render()">← 오더 목록</button>`:'';
  $('#main').innerHTML=m+back+(S.tab==='orders'?(S.openId?detail(O(S.openId)):list()):specTab());
  applyI18n();setTimeout(autoTranslate,0);
 }
 function renderMenu(){const stf=isEdit();
  $('#menu').innerHTML=`<div class="ct">설정</div><div class="small mut" style="margin-bottom:8px">${syncLabel()}</div>${stf?`<label class="l">승인 방식</label><select id="modeSel" onchange="S.mode=this.value;save();render()"><option value="app" ${S.mode==='app'?'selected':''}>앱에서 승인</option><option value="ding" ${S.mode==='ding'?'selected':''}>딩톡 병행(대신 기록)</option></select>`:''}
- <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px"><button onclick="doLogout()">로그아웃</button>${stf?`<button onclick="S.tab='spec';S.openId=null;toggleMenu();render()">딩톡 요청서·쓰는 법</button>${isAdmin()?`<button class="bad" onclick="resetAll();toggleMenu()">샘플 데이터로 바꾸기 (전체 초기화)</button><button class="bad" onclick="resetAll('empty');toggleMenu()">모든 오더 비우기</button>`:''}`:''}</div>`}
+ <div style="margin-top:12px;display:flex;flex-direction:column;gap:8px">${isAdmin()?`<label class="l">시험용: 다른 역할 화면으로 보기</label><select onchange="setPreview(this.value);toggleMenu()">${USERS.map(u=>`<option value="${u.id}" ${u.id===S.me?'selected':''}>${esc(u.name)}</option>`).join('')}</select>`:''}<button onclick="doLogout()">로그아웃</button>${stf?`<button onclick="S.tab='spec';S.openId=null;toggleMenu();render()">딩톡 요청서·쓰는 법</button>${isAdmin()?`<button class="bad" onclick="resetAll();toggleMenu()">샘플 데이터로 바꾸기 (전체 초기화)</button><button class="bad" onclick="resetAll('empty');toggleMenu()">모든 오더 비우기</button>`:''}`:''}</div>`}
 function toggleMenu(){const p=$('#menu');p.style.display=p.style.display==='block'?'none':'block';$('#panel').style.display='none';renderMenu();applyI18n()}
 function togglePanel(){const p=$('#panel');p.style.display=p.style.display==='block'?'none':'block';$('#menu').style.display='none';renderPanel();applyI18n()}
 function toggleTr(){S.autoTr=!S.autoTr;save();render()}
@@ -821,15 +823,19 @@ async function doLogin(){const b=$('#lg_b');b.disabled=true;
  const {error}=await sb.auth.signInWithPassword({email:$('#lg_e').value.trim(),password:$('#lg_p').value});
  if(error){showLogin('로그인에 실패했습니다 · 登录失败 · Login failed');return}
  await boot()}
-async function doLogout(){clearInterval(pollTimer);try{await sb.auth.signOut()}catch(e){}S.me=null;S.orders=[];S.notifs=[];resetSyncMaps();$('#menu').style.display='none';$('#panel').style.display='none';showLogin()}
+function setPreview(id){S.me=id;S.openId=null;S.filter='mine';S.tab='orders';render()}
+async function doLogout(){clearInterval(pollTimer);try{await sb.auth.signOut()}catch(e){}S.me=null;S.real=null;S.orders=[];S.notifs=[];resetSyncMaps();try{sessionStorage.removeItem('orderflow_view')}catch(e){}$('#menu').style.display='none';$('#panel').style.display='none';showLogin()}
 async function boot(){
  try{
+  let sv=null;try{sv=JSON.parse(sessionStorage.getItem('orderflow_view')||'null')}catch(e){}
   const {data:ss}=await sb.auth.getSession();if(!ss.session){showLogin();return}
   const me=await sb.rpc('ord_me');if(me.error)throw me.error;
   if(!me.data||!me.data.app_id){authCard(`<div class="bold" style="margin-bottom:6px">오더 권한이 없는 계정입니다</div><div class="small mut" style="margin-bottom:12px">관리자에게 오더 사용 권한을 요청하세요. · 此账号没有订单权限 · No access for this account</div><button onclick="doLogout()">다른 계정으로 로그인</button>`);return}
   const ro=await sb.rpc('ord_roster');if(ro.error)throw ro.error;
-  applyRoster(ro.data||[]);S.me=me.data.app_id;S.openId=null;S.filter='mine';hideApp(false);
+  applyRoster(ro.data||[]);S.me=me.data.app_id;S.real=S.me;S.openId=null;S.filter='mine';hideApp(false);
   syncState='wait';render();await pollNow();startPolling();
+  try{const v=sv;
+   if(v){if(v.pv&&v.pv!==S.me&&isAdmin()&&ROLES[v.pv])S.me=v.pv;if(v.f)S.filter=v.f;if(v.q)S.q=v.q;if(v.t)S.tab=v.t;if(v.o&&S.orders.some(o=>o.id===v.o))S.openId=v.o;render()}}catch(e){}
  }catch(e){authCard(`<div class="bold" style="margin-bottom:6px">연결하지 못했습니다</div><div class="small mut" style="margin-bottom:12px">${esc((e&&e.message)||'')}</div><button onclick="boot()">다시 시도</button> <button onclick="doLogout()">로그아웃</button>`)}
 }
 
