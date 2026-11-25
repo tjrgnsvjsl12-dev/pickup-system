@@ -892,6 +892,7 @@ function renderAdminView(){
     if(onlineHas('admin')) defs.push(['track','운송장 등록']);
     if(onlineHas('admin')) defs.push(['ding','딩톡 가져오기']);
     if(onlineHas('receive')) defs.push(['dingout','딩톡에 올리기']);
+    if(onlineHas('view')) defs.push(['pickup','픽업']);
     if(onlineHas('view')) defs.push(['export','내보내기']);
     if(!defs.length){ app.appendChild(h('div',{class:'lockmsg',text:'온라인 주문 권한이 없습니다.'})); return; }
     document.body.style.maxWidth = '980px';
@@ -907,6 +908,7 @@ function renderAdminView(){
     else if(onlineTab==='orders') drawOnlineOrders(body);
     else if(onlineTab==='ding') drawOnlineDingImport(body);
     else if(onlineTab==='dingout') drawOnlineDingOut(body);
+    else if(onlineTab==='pickup') drawOnlinePickup(body);
     else drawOnlineExport(body);
   }
 
@@ -1425,6 +1427,229 @@ function renderAdminView(){
       list.appendChild(h('div',{class:'muted',style:'margin-top:4px',text:'박스는 오래된 순서로 쌓입니다. 취소한 박스는 목록에서 자동으로 빠집니다.'}));
     }
     load();
+  }
+
+  // ================= 픽업 (애플스토어 매장 수령) =================
+  function drawOnlinePickup(body){
+    const canWrite = onlineHas('receive') || onlineHas('admin');
+    const canDone = onlineHas('receive');
+    let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
+    let fStatus = 'wait', fCompany = '';
+    body.appendChild(h('div',{class:'card'},[
+      h('div',{style:'font-weight:800;font-size:18px;margin-bottom:4px',text:'픽업 주문'}),
+      h('div',{class:'muted',text:'애플스토어에서 배송이 아니라 "매장 픽업"으로 주문한 건입니다. 배송 주문과 섞이지 않게 따로 관리합니다. ① 픽업 주문 등록 → ② 매장에서 수령 후 주문번호로 "픽업 완료" 처리 → ③ 딩톡에 주문번호 올리기 순서입니다.'})
+    ]));
+
+    // ---- 현황 + 목록 ----
+    const listCard = h('div',{class:'card'}); body.appendChild(listCard);
+    const sumBox = h('div',{}); listCard.appendChild(sumBox);
+    const chipRow = (opts, get, set)=>{ const row = h('div',{class:'chiprow',style:'margin:6px 0'}); const bs = {};
+      opts.forEach(([v,t])=>{ const b = h('button',{type:'button',class:'chip-btn'+(get()===v?' selected':''),text:t,onclick:()=>{ set(v); Object.keys(bs).forEach(k=>bs[k].classList.toggle('selected',k===v)); reloadList(); }}); bs[v]=b; row.appendChild(b); }); return row; };
+    listCard.appendChild(chipRow([['wait','픽업 대기'],['done','픽업 완료'],['','전체']], ()=>fStatus, v=>{ fStatus=v; }));
+    listCard.appendChild(chipRow([['','전체 회사'],['CH','CH'],['부강','부강']], ()=>fCompany, v=>{ fCompany=v; }));
+    const q = h('input',{type:'search',placeholder:'주문번호 검색',autocomplete:'off'}); listCard.appendChild(q);
+    const cnt = h('div',{class:'muted',style:'margin:8px 0 6px'}); listCard.appendChild(cnt);
+    const wrap = h('div',{class:'ptwrap'}); const pt = h('table',{class:'ptable'});
+    pt.appendChild(h('thead',{html:'<tr><th>주문번호</th><th>회사</th><th>모델</th><th>수량</th><th>주문일</th><th>상태</th><th>딩톡</th>'+(onlineHas('admin')?'<th></th>':'')+'</tr>'}));
+    const tb = h('tbody'); pt.appendChild(tb); wrap.appendChild(pt); listCard.appendChild(wrap);
+    const more = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'더 보기 (50건씩)'}); listCard.appendChild(more);
+    const xlsB = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'이 목록 엑셀로 내보내기'}); listCard.appendChild(xlsB);
+    let offset = 0, total = 0, seq = 0;
+    const ymd = v=> v ? String(v).slice(5).replace('-','/') : '';
+    function rowOf(r){
+      const done = !!r.done_at;
+      const cells = [
+        h('td',{class:'mono',text:r.order_no}), h('td',{text:r.company||''}), h('td',{style:'white-space:normal',text:itemName(r.model_raw)||''}),
+        h('td',{text:(r.qty||0)+'대'}), h('td',{text:ymd(r.order_date)}),
+        h('td',{},[h('span',{class:'statusbadge '+(done?'done':'before'),text:done?'픽업 완료':'픽업 대기'}), done?h('div',{class:'muted',text:onlineTime(r.done_at)+(r.done_by?' · '+r.done_by:'')}):null].filter(Boolean)),
+        h('td',{class:'muted',text:done?(r.ding_at?'올림':'안 올림'):''})
+      ];
+      if(onlineHas('admin')) cells.push(h('td',{},[
+        done ? h('button',{type:'button',class:'btn-ghost btn-sm',text:'완료 취소',onclick:()=>undo(r.order_no,false)}) : h('button',{type:'button',class:'btn-ghost btn-sm',text:'주문 취소',onclick:()=>undo(r.order_no,true)})
+      ]));
+      return h('tr',{},cells);
+    }
+    async function undo(no, isVoid){
+      const why = window.prompt((isVoid?'픽업 주문 ':'픽업 완료 ')+no+' 을(를) 취소합니다.\n사유를 입력해 주세요.', isVoid?'잘못 입력':'잘못 처리'); if(why===null) return;
+      if(!why.trim()){ alert('사유를 입력해 주세요.'); return; }
+      const { error } = await sb.rpc('online_pickup_undo',{ p_order_no:no, p_reason:why.trim(), p_void:isVoid });
+      if(error){ alert(error.message); return; }
+      reloadList(); loadDing();
+    }
+    async function loadSummary(){
+      const { data, error } = await sb.rpc('online_pickup_summary');
+      sumBox.innerHTML='';
+      if(error){ sumBox.appendChild(h('div',{class:'err',text:error.message})); return; }
+      const m = {}; (data||[]).forEach(r=>{ const o = m[r.company] = m[r.company]||{wn:0,wu:0,dn:0,du:0}; if(r.done){ o.dn+=Number(r.orders); o.du+=Number(r.units); } else { o.wn+=Number(r.orders); o.wu+=Number(r.units); } });
+      const cos = Object.keys(m).sort(); const tot = cos.reduce((a,c)=>({wn:a.wn+m[c].wn,wu:a.wu+m[c].wu,dn:a.dn+m[c].dn,du:a.du+m[c].du}),{wn:0,wu:0,dn:0,du:0});
+      sumBox.appendChild(h('div',{style:'font-weight:800;font-size:16px;margin-bottom:6px',text:'픽업 현황'}));
+      const t = h('table',{class:'cotable'}); t.appendChild(h('thead',{html:'<tr><th>회사</th><th>픽업 대기</th><th>픽업 완료</th></tr>'}));
+      const b = h('tbody'); const c2 = (n,u,cls)=> h('td',{class:cls||''},[h('div',{class:'n'+(n?'':' z'),text:nf(u)+'대 ('+nf(n)+'건)'})]);
+      cos.forEach(c=> b.appendChild(h('tr',{},[h('td',{class:'co',text:c}), c2(m[c].wn,m[c].wu,m[c].wn?'r':''), c2(m[c].dn,m[c].du,'g')])));
+      const f = h('tfoot'); f.appendChild(h('tr',{},[h('td',{class:'co',text:'합계'}), c2(tot.wn,tot.wu,tot.wn?'r':''), c2(tot.dn,tot.du,'g')]));
+      t.append(b,f); sumBox.appendChild(h('div',{style:'overflow-x:auto;margin-bottom:8px'},[t]));
+      if(!cos.length) sumBox.appendChild(h('div',{class:'muted',text:'등록된 픽업 주문이 없습니다. 아래 "픽업 주문 등록"에서 추가하세요.'}));
+    }
+    async function loadList(reset){
+      if(reset){ offset=0; tb.innerHTML=''; }
+      const my = ++seq;
+      const { data, error } = await sb.rpc('online_pickup_list',{ p_status:fStatus||null, p_company:fCompany||null, p_q:q.value.trim()||null, p_limit:50, p_offset:offset });
+      if(my!==seq) return;
+      if(error){ cnt.textContent=error.message; cnt.className='err'; more.classList.add('hidden'); return; }
+      const rows = data||[]; if(rows.length) total = Number(rows[0].total); else if(reset) total = 0;
+      rows.forEach(r=> tb.appendChild(rowOf(r))); offset += rows.length;
+      cnt.className='muted'; cnt.textContent = total ? ('총 '+nf(total)+'건 중 '+nf(offset)+'건 표시') : '해당하는 픽업 주문이 없습니다';
+      more.classList.toggle('hidden', offset>=total);
+    }
+    function reloadList(){ loadSummary(); loadList(true); }
+    more.onclick = ()=>loadList(false);
+    let qtm=null; q.addEventListener('input',()=>{ clearTimeout(qtm); qtm=setTimeout(()=>loadList(true),300); });
+    xlsB.onclick = async ()=>{
+      try{
+        const all=[]; for(let off=0; off<5000; off+=500){ const { data, error } = await sb.rpc('online_pickup_list',{ p_status:fStatus||null, p_company:fCompany||null, p_q:q.value.trim()||null, p_limit:500, p_offset:off }); if(error) throw error; all.push(...(data||[])); if(!data||data.length<500) break; }
+        if(!all.length){ cnt.textContent='내보낼 내역이 없습니다'; return; }
+        const X = await loadSheetJS(); const wb = X.utils.book_new();
+        const rows = all.map(r=>{ const mp = onlineModelParts(r.model_raw||''); return {'주문번호':r.order_no,'회사':r.company||'','모델':mp.model||r.model_raw||'','용량':mp.cap||'','색상':mp.color||'','수량':r.qty,'주문일':r.order_date||'','상태':r.done_at?'픽업 완료':'픽업 대기','픽업일시':onlineTime(r.done_at),'처리자':r.done_by||'','딩톡 제출':r.done_at?(r.ding_at?'올림':'안 올림'):'','사무실':r.office||''}; });
+        const ws = X.utils.json_to_sheet(rows); X.utils.book_append_sheet(wb, ws, '픽업 주문');
+        X.writeFile(wb, 'pickup_orders_'+(fStatus==='wait'?'대기':fStatus==='done'?'완료':'전체')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+      }catch(e){ cnt.className='err'; cnt.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); }
+    };
+
+    if(canWrite){
+      // ---- ① 픽업 주문 등록 ----
+      const reg = h('div',{class:'card'}); body.appendChild(reg);
+      reg.appendChild(h('div',{style:'font-weight:800;font-size:16px;margin-bottom:4px',text:'① 픽업 주문 등록'}));
+      reg.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'주문번호(W…)만 한 줄에 하나씩 붙여넣으면 됩니다. 모델·수량은 아래에서 한 번만 고르면 모든 줄에 적용됩니다. 줄마다 다르면 "주문번호 [탭] 모델명 [탭] 수량" 순서로 붙여넣으세요.'}));
+      let rCo = '', rOffice = office, rQty = 2;
+      const chips = (label, opts, get, set)=>{ const w = h('div',{style:'margin-bottom:8px'}); w.appendChild(h('label',{text:label})); const row = h('div',{class:'chiprow'}); const bs={};
+        opts.forEach(([v,t])=>{ const b = h('button',{type:'button',class:'chip-btn'+(get()===v?' selected':''),text:t,onclick:()=>{ set(v); Object.keys(bs).forEach(k=>bs[k].classList.toggle('selected',k===String(v))); }}); bs[v]=b; row.appendChild(b); }); w.appendChild(row); return w; };
+      reg.appendChild(chips('회사 (꼭 선택)', [['CH','CH'],['부강','부강']], ()=>rCo, v=>{ rCo=v; }));
+      reg.appendChild(chips('픽업할 사무실(딩톡 창고)', [['서울','서울'],['부산','부산']], ()=>rOffice, v=>{ rOffice=v; try{ localStorage.setItem('pm_online_office',v); }catch(e){} }));
+      const msel = h('select',{}); msel.appendChild(h('option',{value:'',text:'불러오는 중...'}));
+      const NEWV='__new__'; const mtxt = h('input',{type:'text',class:'hidden',placeholder:'목록에 없는 새 모델만 입력',autocomplete:'off'});
+      msel.addEventListener('change',()=>{ mtxt.classList.toggle('hidden', msel.value!==NEWV); });
+      sb.rpc('online_model_summary',{ p_company:null, p_ym:null, p_day:null }).then(({data})=>{
+        const u = {}; (data||[]).forEach(r=>{ if(r.model_raw) u[r.model_raw]=1; });
+        msel.innerHTML=''; msel.appendChild(h('option',{value:'',text:'모델 선택 (줄마다 모델을 붙여넣었다면 비워 두세요)'}));
+        Object.keys(u).sort((a,b)=>itemName(a).localeCompare(itemName(b),'en',{numeric:true})).forEach(r=> msel.appendChild(h('option',{value:r,text:itemName(r)})));
+        msel.appendChild(h('option',{value:NEWV,text:'＋ 목록에 없는 새 모델 (직접 입력)'}));
+      });
+      reg.append(h('label',{text:'모델 (모든 줄에 적용)'}), msel, mtxt);
+      reg.appendChild(chips('수량 (모든 줄에 적용)', [[2,'2대'],[1,'1대']], ()=>rQty, v=>{ rQty=v; }));
+      const today = new Date(Date.now()+9*3600*1000).toISOString().slice(0,10);
+      const rDate = h('input',{type:'date',value:today}); reg.append(h('label',{text:'주문일'}), rDate);
+      const ta = h('textarea',{placeholder:'W1234567890\nW1234567891\n…',style:'min-height:100px'}); reg.append(h('label',{text:'주문번호 (한 줄에 하나)'}), ta);
+      const rerr = h('div',{class:'err hidden'}); const rprev = h('button',{class:'btn-primary',text:'미리보기'}); reg.append(rerr, rprev);
+      const rout = h('div',{class:'hidden'}); reg.appendChild(rout);
+      const defModel = ()=> msel.value===NEWV ? mtxt.value.trim() : msel.value;
+      function parse(){
+        const rows=[]; ta.value.split(/\r?\n/).forEach(line=>{
+          if(!line.trim()) return; const cs = line.split('\t').map(x=>x.trim()).filter(Boolean);
+          const no = (cs.find(c=>/^w\d{6,}$/i.test(c))||(line.match(/W\d{6,}/i)||[])[0]||cs[0]||'').toUpperCase();
+          const rest = cs.filter(c=>c.toUpperCase()!==no);
+          const model = rest.find(c=>/iphone|ipad|\d\s?(tb|gb)/i.test(c)) || defModel();
+          const qn = rest.find(c=>/^[12]$/.test(c));
+          rows.push({ order_no:no, model_raw:model||'', qty:qn?Number(qn):rQty, order_date:rDate.value, company:rCo, office:rOffice });
+        }); return rows;
+      }
+      rprev.onclick = async ()=>{
+        rerr.className='err hidden'; rout.className='hidden'; rout.innerHTML='';
+        try{
+          if(!rCo) throw new Error('회사(CH/부강)를 먼저 선택해 주세요.');
+          const rows = parse(); if(!rows.length) throw new Error('주문번호를 한 줄에 하나씩 입력해 주세요.');
+          if(rows.some(r=>!r.model_raw)) throw new Error('모델을 선택해 주세요. (또는 줄마다 모델명을 붙여넣으세요)');
+          rprev.disabled = true;
+          const { data, error } = await sb.rpc('online_pickup_import',{ p_rows:rows, p_apply:false }); if(error) throw error;
+          const by = {}; (data||[]).forEach(r=>{ (by[r.status]=by[r.status]||[]).push(r.order_no); });
+          rout.className='';
+          rout.appendChild(h('div',{style:'font-weight:800;margin:10px 0 4px',text:'미리보기 · '+rows.length+'줄 · '+rCo+' · '+rOffice+' 사무실'}));
+          rout.appendChild(h('div',{style:'color:var(--success);font-weight:700',text:'신규 등록 '+(by.new||[]).length+'건'}));
+          if((by.exists||[]).length) rout.appendChild(h('div',{class:'muted',text:'이미 픽업 주문으로 등록됨 (건너뜀) '+by.exists.length+'건: '+by.exists.slice(0,5).join(', ')+(by.exists.length>5?' …':'')}));
+          if((by.exists_delivery||[]).length) rout.appendChild(h('div',{class:'err',text:'⚠ 이미 "배송 주문"으로 등록된 번호 '+by.exists_delivery.length+'건 (건너뜀): '+by.exists_delivery.slice(0,5).join(', ')+(by.exists_delivery.length>5?' …':'')}));
+          if((by.bad_row||[]).length) rout.appendChild(h('div',{class:'err',text:'⚠ 주문번호 형식이 아닌 줄 '+by.bad_row.length+'건 (건너뜀): '+by.bad_row.slice(0,5).join(', ')}));
+          const n = (by.new||[]).length;
+          if(n){
+            const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:'신규 '+n+'건 저장'});
+            ok.onclick = async ()=>{ ok.disabled=true; const { data:d2, error:e2 } = await sb.rpc('online_pickup_import',{ p_rows:rows, p_apply:true });
+              if(e2){ rerr.textContent=e2.message; rerr.className='err'; ok.disabled=false; return; }
+              rout.innerHTML=''; rout.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ 픽업 주문 '+(d2||[]).filter(r=>r.status==='new').length+'건을 저장했습니다. 위 "픽업 대기"에 나타납니다.'})); ta.value=''; reloadList(); };
+            const cancel = h('button',{type:'button',class:'btn-ghost',style:'width:100%;margin-top:8px',text:'취소 (저장하지 않음)',onclick:()=>{ rout.innerHTML=''; rout.className='hidden'; }});
+            rout.append(ok, cancel);
+          }
+        }catch(e){ rerr.textContent=e.message||String(e); rerr.className='err'; }
+        rprev.disabled=false;
+      };
+    }
+
+    if(canDone){
+      // ---- ② 픽업 완료 처리 ----
+      const dc = h('div',{class:'card'}); body.appendChild(dc);
+      dc.appendChild(h('div',{style:'font-weight:800;font-size:16px;margin-bottom:4px',text:'② 픽업 완료 처리'}));
+      dc.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'매장에서 물건을 받아 왔으면 그 주문번호를 붙여넣거나 한 줄씩 입력하세요. 등록된 픽업 주문과 주문번호로 맞춰서 "픽업 완료"로 바뀝니다.'}));
+      const dta = h('textarea',{placeholder:'W1234567890\nW1234567891\n…',style:'min-height:90px'}); dc.appendChild(dta);
+      const derr = h('div',{class:'err hidden'}); const dprev = h('button',{class:'btn-primary',text:'미리보기'}); dc.append(derr, dprev);
+      const dout = h('div',{class:'hidden'}); dc.appendChild(dout);
+      const nums = ()=> Array.from(new Set((dta.value.match(/W\d{6,}/gi)||[]).map(x=>x.toUpperCase())));
+      dprev.onclick = async ()=>{
+        derr.className='err hidden'; dout.className='hidden'; dout.innerHTML='';
+        const list = nums(); if(!list.length){ derr.textContent='주문번호(W…)를 입력해 주세요.'; derr.className='err'; return; }
+        dprev.disabled=true;
+        const { data, error } = await sb.rpc('online_pickup_complete',{ p_order_nos:list, p_apply:false });
+        dprev.disabled=false; if(error){ derr.textContent=error.message; derr.className='err'; return; }
+        const by = {}; (data||[]).forEach(r=>{ (by[r.status]=by[r.status]||[]).push(r); });
+        dout.className=''; dout.appendChild(h('div',{style:'font-weight:800;margin:10px 0 4px',text:'미리보기 · '+list.length+'건'}));
+        const ok = by.ok||[];
+        dout.appendChild(h('div',{style:'color:var(--success);font-weight:700',text:'픽업 완료로 바꿀 주문 '+ok.length+'건 ('+ok.reduce((a,r)=>a+Number(r.qty||0),0)+'대)'}));
+        ok.slice(0,30).forEach(r=> dout.appendChild(h('div',{class:'muted',text:r.order_no+' · '+r.company+' · '+itemName(r.model_raw)+' · '+r.qty+'대'})));
+        if((by.already||[]).length) dout.appendChild(h('div',{class:'muted',style:'margin-top:4px',text:'이미 픽업 완료 (건너뜀) '+by.already.length+'건: '+by.already.slice(0,5).map(r=>r.order_no).join(', ')}));
+        if((by.not_found||[]).length) dout.appendChild(h('div',{class:'err',style:'margin-top:4px',text:'⚠ 등록된 픽업 주문이 아님 '+by.not_found.length+'건: '+by.not_found.slice(0,8).map(r=>r.order_no).join(', ')+' — 먼저 "① 픽업 주문 등록"에서 등록해 주세요.'}));
+        if(ok.length){
+          const go = h('button',{class:'btn-primary',style:'margin-top:10px',text:ok.length+'건 픽업 완료 처리'});
+          go.onclick = async ()=>{ go.disabled=true; const { data:d2, error:e2 } = await sb.rpc('online_pickup_complete',{ p_order_nos:ok.map(r=>r.order_no), p_apply:true });
+            if(e2){ derr.textContent=e2.message; derr.className='err'; go.disabled=false; return; }
+            dout.innerHTML=''; dout.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+(d2||[]).filter(r=>r.status==='ok').length+'건을 픽업 완료로 처리했습니다. 아래 ③에서 딩톡에 올릴 수 있습니다.'})); dta.value=''; reloadList(); loadDing(); };
+          dout.append(go, h('button',{type:'button',class:'btn-ghost',style:'width:100%;margin-top:8px',text:'취소 (저장하지 않음)',onclick:()=>{ dout.innerHTML=''; dout.className='hidden'; }}));
+        }
+      };
+
+      // ---- ③ 딩톡에 올리기 ----
+      const gc = h('div',{class:'card'}); body.appendChild(gc);
+      gc.appendChild(h('div',{style:'font-weight:800;font-size:16px;margin-bottom:4px',text:'③ 딩톡에 올리기 (提货单 · 线上取货 온라인픽업)'}));
+      gc.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'딩톡 [提货单 delivery/送货单 pickup 表单]에서 날짜, 유형 "线上取货 온라인픽업", 창고(사무실)를 고른 뒤 "快速填报"을 누르고 첫 칸에 붙여넣으면 됩니다. 딩톡은 주문번호로 픽업 주문을 맞춥니다. 한 번에 200개까지입니다.'}));
+      const ow = h('div',{}); ow.appendChild(h('label',{text:'어느 사무실 픽업분입니까?'})); const orow = h('div',{class:'chiprow',style:'margin-bottom:8px'}); const ob={};
+      ['서울','부산'].forEach(n=>{ const b = h('button',{type:'button',class:'chip-btn'+(office===n?' selected':''),text:n+' 사무실',onclick:()=>{ office=n; try{ localStorage.setItem('pm_online_office',n); }catch(e){} Object.keys(ob).forEach(k=>ob[k].classList.toggle('selected',k===n)); loadDing(); }}); ob[n]=b; orow.appendChild(b); });
+      ow.appendChild(orow); gc.appendChild(ow);
+      const gsum = h('div',{style:'font-weight:800;margin:4px 0 8px'}); const glist = h('div',{}); const gmsg = h('div',{class:'muted',style:'margin-top:6px'}); gc.append(gsum, glist, gmsg);
+      window.loadDingRef = null;
+      async function loadDingImpl(){
+        gsum.textContent='불러오는 중…'; glist.innerHTML=''; gmsg.textContent='';
+        const { data, error } = await sb.rpc('online_pickup_ding_pending',{ p_office: office });
+        if(error){ gsum.textContent=''; glist.appendChild(h('div',{class:'err',text:error.message})); return; }
+        const rows = data||[]; gsum.innerHTML=''; gsum.appendChild(h('span',{style:'color:var(--accent)',text:'딩톡에 아직 안 올린 픽업 완료 주문 '+nf(rows.length)+'건'}));
+        if(!rows.length){ glist.appendChild(h('div',{class:'alldone compare',text:'✓ 올릴 주문이 없습니다. (② 픽업 완료 처리한 주문이 여기에 쌓입니다)'})); return; }
+        for(let i=0;i<rows.length;i+=200){
+          const part = rows.slice(i,i+200);
+          const box = h('div',{style:'border:1px solid var(--border);border-radius:12px;padding:12px;margin:8px 0'});
+          box.appendChild(h('div',{style:'font-weight:800;margin-bottom:6px',text:(rows.length>200?'묶음 '+(i/200+1)+' · ':'')+(i+1)+'~'+(i+part.length)+'번 ('+part.length+'건 · '+part.reduce((a,r)=>a+Number(r.qty||0),0)+'대)'}));
+          const b1 = h('button',{class:'btn-primary',style:'width:100%',text:'① 주문번호만 '+part.length+'개 복사 (딩톡이 주문번호로 맞춤)'});
+          const b2 = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'① 주문번호·모델명·수량·매장·운영사 5칸 복사 (딩톡 표 순서)'});
+          const done = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'③ 딩톡에 제출했어요 (기록하기)',disabled:'disabled'});
+          const enable = ()=>{ done.disabled=false; done.removeAttribute('disabled'); };
+          b1.onclick = async ()=>{ try{ await copyAsExcel(part.map(r=>[r.order_no])); b1.textContent='✓ '+part.length+'개 복사됨 (다시 누르면 다시 복사)'; enable(); }catch(e){ gmsg.style.color='var(--danger)'; gmsg.textContent='복사 권한이 없습니다. 브라우저 권한을 허용해 주세요.'; } };
+          b2.onclick = async ()=>{ try{ await copyAsExcel(part.map(r=>[r.order_no, r.model_raw||'', r.qty, '', r.company||''])); b2.textContent='✓ '+part.length+'건 5칸 복사됨 (다시 누르면 다시 복사)'; enable(); }catch(e){ gmsg.style.color='var(--danger)'; gmsg.textContent='복사 권한이 없습니다. 브라우저 권한을 허용해 주세요.'; } };
+          done.onclick = async ()=>{ if(!confirm(part.length+'건을 딩톡에 제출 완료로 기록할까요? 기록하면 이 목록에서 사라집니다.')) return; done.disabled=true;
+            const { data:n, error:e } = await sb.rpc('online_pickup_ding_mark',{ p_order_nos: part.map(r=>r.order_no) });
+            if(e){ gmsg.style.color='var(--danger)'; gmsg.textContent=e.message; done.disabled=false; return; }
+            gmsg.style.color='var(--success)'; gmsg.textContent='✓ '+n+'건을 딩톡 제출 완료로 기록했습니다.'; loadDingImpl(); reloadList(); };
+          box.append(b1, b2, h('div',{class:'muted',style:'margin:8px 0 0',text:'② 딩톡 "快速填报" 표의 첫 칸을 클릭하고 Ctrl+V로 붙여넣은 뒤 제출하세요. 5칸 복사는 모델명·수량이 필수로 표시된 경우에 쓰세요.'}), done);
+          glist.appendChild(box);
+        }
+      }
+      window.loadDingRef = loadDingImpl;
+      loadDingImpl();
+    }
+    function loadDing(){ if(window.loadDingRef) window.loadDingRef(); }
+    reloadList();
   }
 
   function drawOnlineOrders(body){
@@ -3667,7 +3892,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-143427';
+const BUILD = 'b20261125-150911';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
