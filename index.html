@@ -848,6 +848,24 @@ function renderAdminView(){
     return 'https://search.naver.com/search.naver?query='+encodeURIComponent('운송장 '+n);
   };
   const srcLabel = v => v==='딩톡 이관' ? '딩톡 가져옴' : v;
+  // 모델 선택 목록: 애플 출시 라인업(18 Pro Max / 18 Pro / Duo의 용량·색상 전부) + 지금까지 등록된 모델(기타)
+  const MODEL_LINEUP = [
+    ['iPhone 18 Pro Max', 'iphone18promax', ['256GB','512GB','1TB','2TB'], ['black','silver','glacier','burgundy']],
+    ['iPhone 18 Pro', 'iphone18pro', ['256GB','512GB','1TB','2TB'], ['black','silver','glacier','burgundy']],
+    ['iPhone Duo', 'iphone duo', ['256GB','512GB','1TB','2TB'], ['night sky','star white']]
+  ];
+  function fillModelSelect(sel, usedRaws, firstText, newValue, newText){
+    sel.innerHTML=''; sel.appendChild(h('option',{value:'',text:firstText}));
+    const have = new Set(); 
+    MODEL_LINEUP.forEach(([label, key, caps, colors])=>{
+      const g = h('optgroup',{label});
+      caps.forEach(c=> colors.forEach(col=>{ const raw = key+' '+c+' '+col+' kr spec'; have.add(raw); g.appendChild(h('option',{value:raw,text:itemName(raw)})); }));
+      sel.appendChild(g);
+    });
+    const others = (usedRaws||[]).filter(r=>r && !have.has(r)).sort((a,b)=>itemName(a).localeCompare(itemName(b),'en',{numeric:true}));
+    if(others.length){ const g = h('optgroup',{label:'기타 (지금까지 등록된 모델)'}); others.forEach(r=> g.appendChild(h('option',{value:r,text:itemName(r)}))); sel.appendChild(g); }
+    sel.appendChild(h('option',{value:newValue,text:newText}));
+  }
   const itemName = raw => { const m = onlineModelParts(raw); return [m.model,m.cap,m.color].filter(Boolean).join(' ') || String(raw||'(모델 없음)'); };
   const stageLabel = v => v==='송장 대기' ? '배송 전' : v;
 
@@ -1290,13 +1308,9 @@ function renderAdminView(){
     fSel.addEventListener('change',()=>{ fModel.classList.toggle('hidden', fSel.value!==NEWV); if(fSel.value===NEWV) fModel.focus(); });
     const modelVal = ()=> fSel.value===NEWV ? fModel.value.trim() : fSel.value;
     sb.rpc('online_model_summary',{ p_company:null, p_ym:null, p_day:null }).then(({data,error})=>{
-      const u = {}; (data||[]).forEach(r=>{ if(r.model_raw) u[r.model_raw] = (u[r.model_raw]||0)+Number(r.units||0); });
-      const raws = Object.keys(u).sort((a,b)=> itemName(a).localeCompare(itemName(b),'en',{numeric:true}));
-      fSel.innerHTML=''; fSel.appendChild(h('option',{value:'',text:'모델을 선택하세요'}));
-      raws.forEach(r=> fSel.appendChild(h('option',{value:r,text:itemName(r)})));
-      fSel.appendChild(h('option',{value:NEWV,text:'＋ 목록에 없는 새 모델 (직접 입력)'}));
-      if(error) fSel.appendChild(h('option',{value:'',text:'목록을 불러오지 못했습니다'}));
+      fillModelSelect(fSel, (data||[]).map(r=>r.model_raw), '모델을 선택하세요', NEWV, '＋ 목록에 없는 새 모델 (직접 입력)');
     });
+    fillModelSelect(fSel, [], '모델을 선택하세요', NEWV, '＋ 목록에 없는 새 모델 (직접 입력)');
     const fDate = h('input',{type:'date',value:today});
     const fWin = h('input',{type:'text',placeholder:'예: 11월 25 - 11월 27 (모르면 비워 두세요)',autocomplete:'off'});
     one.append(h('label',{text:'주문코드 (W로 시작)'}), fNo, h('label',{text:'모델명 (목록에서 선택)'}), fSel, fModel);
@@ -1542,11 +1556,9 @@ function renderAdminView(){
       const NEWV='__new__'; const mtxt = h('input',{type:'text',class:'hidden',placeholder:'목록에 없는 새 모델만 입력',autocomplete:'off'});
       msel.addEventListener('change',()=>{ mtxt.classList.toggle('hidden', msel.value!==NEWV); });
       sb.rpc('online_model_summary',{ p_company:null, p_ym:null, p_day:null }).then(({data})=>{
-        const u = {}; (data||[]).forEach(r=>{ if(r.model_raw) u[r.model_raw]=1; });
-        msel.innerHTML=''; msel.appendChild(h('option',{value:'',text:'모델 선택 (줄마다 모델을 붙여넣었다면 비워 두세요)'}));
-        Object.keys(u).sort((a,b)=>itemName(a).localeCompare(itemName(b),'en',{numeric:true})).forEach(r=> msel.appendChild(h('option',{value:r,text:itemName(r)})));
-        msel.appendChild(h('option',{value:NEWV,text:'＋ 목록에 없는 새 모델 (직접 입력)'}));
+        fillModelSelect(msel, (data||[]).map(r=>r.model_raw), '모델 선택 (줄마다 모델을 붙여넣었다면 비워 두세요)', NEWV, '＋ 목록에 없는 새 모델 (직접 입력)');
       });
+      fillModelSelect(msel, [], '모델 선택 (줄마다 모델을 붙여넣었다면 비워 두세요)', NEWV, '＋ 목록에 없는 새 모델 (직접 입력)');
       reg.append(h('label',{text:'모델 (모든 줄에 적용)'}), msel, mtxt);
       reg.appendChild(chips('수량 (모든 줄에 적용)', [[2,'2대'],[1,'1대']], ()=>rQty, v=>{ rQty=v; }));
       const today = new Date(Date.now()+9*3600*1000).toISOString().slice(0,10);
@@ -3909,7 +3921,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-152549';
+const BUILD = 'b20261125-153054';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
