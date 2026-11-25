@@ -569,6 +569,16 @@ function renderAlbaView(){
 // =====================================================================
 // ADMIN VIEW — login required
 // =====================================================================
+// 엑셀에서 복사한 것과 같은 형태(표 HTML + 탭 구분 텍스트, 줄바꿈 CRLF)로 클립보드에 넣는다. 딩톡 표 붙여넣기용.
+async function copyAsExcel(grid){
+  const esc = v=> String(v==null?'':v).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  const plain = grid.map(r=>r.map(v=>String(v==null?'':v)).join('\t')).join('\r\n')+'\r\n';
+  const html = '<table>'+grid.map(r=>'<tr>'+r.map(v=>'<td style="mso-number-format:\'\\@\'">'+esc(v)+'</td>').join('')+'</tr>').join('')+'</table>';
+  if(window.ClipboardItem && navigator.clipboard && navigator.clipboard.write){
+    await navigator.clipboard.write([ new ClipboardItem({ 'text/plain': new Blob([plain],{type:'text/plain'}), 'text/html': new Blob([html],{type:'text/html'}) }) ]);
+  } else await navigator.clipboard.writeText(plain);
+  return plain;
+}
 function renderAdminView(){
   let session = null;
   let stores = [];
@@ -1541,7 +1551,7 @@ function renderAdminView(){
       const list = listed(); outMsg.style.color=''; 
       if(!list.length){ outMsg.textContent = '표에 복사할 운송장이 없습니다.'; return; }
       const txt = list.map(r=>r.tracking).join('\n');
-      try{ await navigator.clipboard.writeText(txt); outMsg.textContent = '✓ 운송장번호 '+list.length+'건 복사됨 (한 줄에 하나씩). 딩톡이나 엑셀에 붙여넣기(Ctrl+V) 하세요.'; }
+      try{ await copyAsExcel(list.map(r=>[r.tracking])); outMsg.textContent = '✓ 운송장번호 '+list.length+'건 복사됨 (엑셀에서 복사한 것과 같은 형태). 딩톡이나 엑셀에 붙여넣기(Ctrl+V) 하세요.'; }
       catch(e){ outMsg.textContent = '복사 권한이 없어 아래 내용을 직접 복사하세요.'; const box = h('div',{class:'copybox'}); box.textContent = txt; outMsg.appendChild(box); }
       inp.focus();
     };
@@ -1578,7 +1588,7 @@ function renderAdminView(){
       const list = data||[];
       if(!list.length){ dingMsg.textContent = office+' 사무실로 오늘 제출한 운송장이 없습니다.'; return; }
       const txt = list.map(r=>r.tracking).join('\n');
-      try{ await navigator.clipboard.writeText(txt); dingMsg.textContent = '✓ '+list.length+'건 복사됨. 딩톡 빠른 입력 표에 붙여넣기(Ctrl+V) 하세요.'; }
+      try{ await copyAsExcel(list.map(r=>[r.tracking])); dingMsg.textContent = '✓ '+list.length+'건 복사됨 (엑셀에서 복사한 것과 같은 형태). 딩톡 빠른 입력 표에 붙여넣기(Ctrl+V) 하세요.'; }
       catch(e){ dingMsg.textContent = '복사 권한이 없어 아래 내용을 직접 복사하세요.'; const box = h('div',{class:'copybox'}); box.textContent = txt; dingCard.appendChild(box); }
     };
     const xlsBtn = h('button',{class:'btn-ghost',style:'width:100%;margin-top:8px',text:'오늘 제출분 엑셀로 내보내기 (선택한 사무실만)'});
@@ -3386,7 +3396,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-092242';
+const BUILD = 'b20261125-092849';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
