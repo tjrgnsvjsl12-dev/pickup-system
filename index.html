@@ -2027,7 +2027,7 @@ function renderAdminView(){
     const pick = ()=> rows.filter(r=>(!sel.value || r.company===sel.value) && (!msel.value || ymOf(r)===msel.value)
       && (!ssel.value || (ssel.value==='done' ? r.stage==='배송완료' : r.stage!=='배송완료'))
       && (!dfrom.value || (rdate(r) && rdate(r)>=dfrom.value)) && (!dto.value || (rdate(r) && rdate(r)<=dto.value)));
-    const toRow = r=>({'회사':r.company,'주문번호':r.order_no,'운송장번호':r.tracking||'','상태':stageLabel(r.stage),'모델':r.model_raw||'','수량':r.qty,'배송지':r.ship_to||'','주문일':r.order_date||'','도착예정':r.window_text||'','카드끝4자리':r.card_last4||'','수령일시':onlineTime(r.received_at),'수령자':r.received_by||'','수령방식':r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':srcLabel(r.receipt_source)):'','주문기록':r.no_order_record?'없음(딩톡 가져옴)':''});
+    const toRow = r=>{ const mp = onlineModelParts(r.model_raw||''); return {'회사':r.company,'주문번호':r.order_no,'운송장번호':r.tracking||'','상태':stageLabel(r.stage),'모델':mp.model||r.model_raw||'','용량':mp.cap||'','색상':mp.color||'','수량':r.qty,'배송지':r.ship_to||'','주문일':r.order_date||'','도착예정':r.window_text||'','카드끝4자리':r.card_last4||'','수령일시':onlineTime(r.received_at),'수령자':r.received_by||'','수령방식':r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':srcLabel(r.receipt_source)):'','주문기록':r.no_order_record?'없음(딩톡 가져옴)':''}; };
     bx.onclick = async ()=>{
       err.className='err hidden';
       const data = pick(); if(!data.length){ err.textContent='내보낼 내역이 없습니다'; err.className='err'; return; }
@@ -2050,9 +2050,11 @@ function renderAdminView(){
         const items2 = itemAgg(base,true).sort((a,b)=> a.ym<b.ym?1:a.ym>b.ym?-1:b.u-a.u); if(items2.length) addSheet('월별품목', items2.map(x=>fmtItem(x,true)));
         const notYet = data.filter(r=>r.stage!=='배송완료').sort((a,b)=> String(a.order_date||'9999').localeCompare(String(b.order_date||'9999')) || String(a.order_no).localeCompare(String(b.order_no)));
         if(notYet.length) addSheet('아직안온주문', notYet.map(toRow));
-        const cs = Object.keys(st).sort();
-        if(sel.value || cs.length===1) addSheet('주문목록', data.map(toRow));
-        else cs.forEach(c=> addSheet(c, data.filter(r=>r.company===c).map(toRow)));
+        const cs = Object.keys(st).sort(); const listNames = [];
+        if(sel.value || cs.length===1){ addSheet('주문목록', data.map(toRow)); listNames.push('주문목록'); }
+        else cs.forEach(c=>{ addSheet(c, data.filter(r=>r.company===c).map(toRow)); listNames.push(c.slice(0,31)); });
+        // 배송완료만 / 날짜 범위로 뽑을 때는 목록 시트를 맨 앞에 둠
+        if(ssel.value==='done' || dfrom.value || dto.value) wb.SheetNames = listNames.concat(wb.SheetNames.filter(n=>!listNames.includes(n)));
         X.writeFile(wb, 'online_orders_'+(sel.value||'all')+(ssel.value==='done'?'_배송완료':ssel.value==='notyet'?'_안온것':'')+(dfrom.value||dto.value?'_'+(dfrom.value||'')+'~'+(dto.value||''):'')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
       }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; if(e.goTab) err.appendChild(h('div',{},[h('button',{class:'btn-primary',style:'margin-top:8px',text:e.goLabel,onclick:()=>{ onlineTab=e.goTab; drawDashboard(); }})])); }
     };
@@ -2060,8 +2062,8 @@ function renderAdminView(){
       err.className='err hidden';
       const data = pick(); if(!data.length){ err.textContent='내보낼 내역이 없습니다'; err.className='err'; return; }
       const st = onlineStats(data);
-      const th = '<tr>'+['회사','주문번호','운송장번호','상태','수량','배송지','주문일','수령일시','수령자','수령방식'].map(x=>'<th>'+x+'</th>').join('')+'</tr>';
-      const tr = data.map(r=>'<tr>'+[r.company,r.order_no,r.tracking||'',stageLabel(r.stage),r.qty,r.ship_to||'',r.order_date||'',onlineTime(r.received_at),r.received_by||'',r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':srcLabel(r.receipt_source)+(r.no_order_record?' (주문 기록 없음)':'')):''].map(x=>'<td>'+onlineEsc(x)+'</td>').join('')+'</tr>').join('');
+      const th = '<tr>'+['회사','주문번호','운송장번호','상태','모델','용량','색상','수량','배송지','주문일','수령일시','수령자','수령방식'].map(x=>'<th>'+x+'</th>').join('')+'</tr>';
+      const tr = data.map(r=>'<tr>'+[r.company,r.order_no,r.tracking||'',stageLabel(r.stage),onlineModelParts(r.model_raw||'').model||'',onlineModelParts(r.model_raw||'').cap||'',onlineModelParts(r.model_raw||'').color||'',r.qty,r.ship_to||'',r.order_date||'',onlineTime(r.received_at),r.received_by||'',r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':srcLabel(r.receipt_source)+(r.no_order_record?' (주문 기록 없음)':'')):''].map(x=>'<td>'+onlineEsc(x)+'</td>').join('')+'</tr>').join('');
       const sm = Object.keys(st).sort().map(c=>'<tr><td>'+onlineEsc(c)+'</td><td>'+st[c].total+'건 / '+st[c].tu+'대</td><td>'+st[c].done+'건 / '+st[c].du+'대</td><td>'+st[c].wait+'건</td><td>'+st[c].nt+'건</td></tr>').join('');
       const w = window.open('','_blank');
       if(!w){ err.textContent='팝업이 차단되었습니다. 팝업을 허용해 주세요.'; err.className='err'; return; }
@@ -3591,7 +3593,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-113542';
+const BUILD = 'b20261125-113802';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
