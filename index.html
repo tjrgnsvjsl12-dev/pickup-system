@@ -885,6 +885,7 @@ function renderAdminView(){
     }
 
   function drawOnlineSection(){
+    pk.reload = null; pk.ding = null;
     const defs = [];
     if(onlineHas('view')) defs.push(['sum','집계']);
     if(onlineHas('receive')) defs.push(['recv','수령']);
@@ -892,7 +893,7 @@ function renderAdminView(){
     if(onlineHas('admin')) defs.push(['track','운송장 등록']);
     if(onlineHas('admin')) defs.push(['ding','딩톡 가져오기']);
     if(onlineHas('receive')) defs.push(['dingout','딩톡에 올리기']);
-    if(onlineHas('view')) defs.push(['pickup','픽업']);
+    if(onlineHas('view')) defs.push(['pickup','픽업 목록']);
     if(onlineHas('view')) defs.push(['export','내보내기']);
     if(!defs.length){ app.appendChild(h('div',{class:'lockmsg',text:'온라인 주문 권한이 없습니다.'})); return; }
     document.body.style.maxWidth = '980px';
@@ -1375,6 +1376,8 @@ function renderAdminView(){
 
   // ---- 딩톡에 올리기 (수령한 운송장번호를 200개씩 복사 → 딩톡 빠른 입력에 붙여넣기 → 올렸어요 기록) ----
   function drawOnlineDingOut(body){
+    body.appendChild(kindBar('무엇을 딩톡에 올립니까?', [['box','📦 박스 수령 (운송장번호)'],['pickup','🏬 매장 픽업 (주문번호)']], onlineDingKind, v=>{ onlineDingKind=v; }));
+    if(onlineDingKind==='pickup'){ drawPickupDing(body); return; }
     const CHUNK = 200;
     let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
     body.appendChild(h('div',{class:'card'},[
@@ -1430,21 +1433,27 @@ function renderAdminView(){
   }
 
   // ================= 픽업 (애플스토어 매장 수령) =================
+  const pk = {};
+  let onlineOrderKind = 'ship', onlineRecvKind = 'box', onlineDingKind = 'box';
+  // 배송/픽업 선택 막대 (주문 등록 · 수령 · 딩톡에 올리기 공통)
+  function kindBar(title, opts, cur, set){
+    const w = h('div',{class:'card'}); w.appendChild(h('div',{style:'font-weight:700;margin-bottom:6px',text:title}));
+    const row = h('div',{class:'chiprow'});
+    opts.forEach(([v,t])=> row.appendChild(h('button',{type:'button',class:'chip-btn'+(cur===v?' selected':''),text:t,onclick:()=>{ if(cur!==v){ set(v); drawDashboard(); } }})));
+    w.appendChild(row); return w;
+  }
   function drawOnlinePickup(body){
-    const canWrite = onlineHas('receive') || onlineHas('admin');
-    const canDone = onlineHas('receive');
-    let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
     let fStatus = 'wait', fCompany = '';
     body.appendChild(h('div',{class:'card'},[
       h('div',{style:'font-weight:800;font-size:18px;margin-bottom:4px',text:'픽업 주문'}),
-      h('div',{class:'muted',text:'애플스토어에서 배송이 아니라 "매장 픽업"으로 주문한 건입니다. 배송 주문과 섞이지 않게 따로 관리합니다. ① 픽업 주문 등록 → ② 매장에서 수령 후 주문번호로 "픽업 완료" 처리 → ③ 딩톡에 주문번호 올리기 순서입니다.'})
+      h('div',{class:'muted',text:'애플스토어에서 배송이 아니라 "매장 픽업"으로 주문한 건의 목록입니다. 배송 주문과 섞이지 않게 따로 보여줍니다. 등록은 [주문 등록]에서 "픽업"을 선택, 수령은 [수령]에서 "픽업"을 선택, 딩톡 제출은 [딩톡에 올리기]에서 "픽업"을 선택하세요.'})
     ]));
 
     // ---- 현황 + 목록 ----
     const listCard = h('div',{class:'card'}); body.appendChild(listCard);
     const sumBox = h('div',{}); listCard.appendChild(sumBox);
     const chipRow = (opts, get, set)=>{ const row = h('div',{class:'chiprow',style:'margin:6px 0'}); const bs = {};
-      opts.forEach(([v,t])=>{ const b = h('button',{type:'button',class:'chip-btn'+(get()===v?' selected':''),text:t,onclick:()=>{ set(v); Object.keys(bs).forEach(k=>bs[k].classList.toggle('selected',k===v)); reloadList(); }}); bs[v]=b; row.appendChild(b); }); return row; };
+      opts.forEach(([v,t])=>{ const b = h('button',{type:'button',class:'chip-btn'+(get()===v?' selected':''),text:t,onclick:()=>{ set(v); Object.keys(bs).forEach(k=>bs[k].classList.toggle('selected',k===v)); (pk.reload&&pk.reload()); }}); bs[v]=b; row.appendChild(b); }); return row; };
     listCard.appendChild(chipRow([['wait','픽업 대기'],['done','픽업 완료'],['','전체']], ()=>fStatus, v=>{ fStatus=v; }));
     listCard.appendChild(chipRow([['','전체 회사'],['CH','CH'],['부강','부강']], ()=>fCompany, v=>{ fCompany=v; }));
     const q = h('input',{type:'search',placeholder:'주문번호 검색',autocomplete:'off'}); listCard.appendChild(q);
@@ -1474,7 +1483,7 @@ function renderAdminView(){
       if(!why.trim()){ alert('사유를 입력해 주세요.'); return; }
       const { error } = await sb.rpc('online_pickup_undo',{ p_order_no:no, p_reason:why.trim(), p_void:isVoid });
       if(error){ alert(error.message); return; }
-      reloadList(); loadDing();
+      (pk.reload&&pk.reload()); (pk.ding&&pk.ding());
     }
     async function loadSummary(){
       const { data, error } = await sb.rpc('online_pickup_summary');
@@ -1514,8 +1523,12 @@ function renderAdminView(){
         X.writeFile(wb, 'pickup_orders_'+(fStatus==='wait'?'대기':fStatus==='done'?'완료':'전체')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
       }catch(e){ cnt.className='err'; cnt.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); }
     };
+    pk.reload = reloadList;
+    reloadList();
+  }
 
-    if(canWrite){
+  function drawPickupRegister(body){
+    let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
       // ---- ① 픽업 주문 등록 ----
       const reg = h('div',{class:'card'}); body.appendChild(reg);
       reg.appendChild(h('div',{style:'font-weight:800;font-size:16px;margin-bottom:4px',text:'① 픽업 주문 등록'}));
@@ -1572,16 +1585,16 @@ function renderAdminView(){
             const ok = h('button',{class:'btn-primary',style:'margin-top:10px',text:'신규 '+n+'건 저장'});
             ok.onclick = async ()=>{ ok.disabled=true; const { data:d2, error:e2 } = await sb.rpc('online_pickup_import',{ p_rows:rows, p_apply:true });
               if(e2){ rerr.textContent=e2.message; rerr.className='err'; ok.disabled=false; return; }
-              rout.innerHTML=''; rout.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ 픽업 주문 '+(d2||[]).filter(r=>r.status==='new').length+'건을 저장했습니다. 위 "픽업 대기"에 나타납니다.'})); ta.value=''; reloadList(); };
+              rout.innerHTML=''; rout.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ 픽업 주문 '+(d2||[]).filter(r=>r.status==='new').length+'건을 저장했습니다. 위 "픽업 대기"에 나타납니다.'})); ta.value=''; (pk.reload&&pk.reload()); };
             const cancel = h('button',{type:'button',class:'btn-ghost',style:'width:100%;margin-top:8px',text:'취소 (저장하지 않음)',onclick:()=>{ rout.innerHTML=''; rout.className='hidden'; }});
             rout.append(ok, cancel);
           }
         }catch(e){ rerr.textContent=e.message||String(e); rerr.className='err'; }
         rprev.disabled=false;
       };
-    }
+  }
 
-    if(canDone){
+  function drawPickupDone(body){
       // ---- ② 픽업 완료 처리 ----
       const dc = h('div',{class:'card'}); body.appendChild(dc);
       dc.appendChild(h('div',{style:'font-weight:800;font-size:16px;margin-bottom:4px',text:'② 픽업 완료 처리'}));
@@ -1607,21 +1620,24 @@ function renderAdminView(){
           const go = h('button',{class:'btn-primary',style:'margin-top:10px',text:ok.length+'건 픽업 완료 처리'});
           go.onclick = async ()=>{ go.disabled=true; const { data:d2, error:e2 } = await sb.rpc('online_pickup_complete',{ p_order_nos:ok.map(r=>r.order_no), p_apply:true });
             if(e2){ derr.textContent=e2.message; derr.className='err'; go.disabled=false; return; }
-            dout.innerHTML=''; dout.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+(d2||[]).filter(r=>r.status==='ok').length+'건을 픽업 완료로 처리했습니다. 아래 ③에서 딩톡에 올릴 수 있습니다.'})); dta.value=''; reloadList(); loadDing(); };
+            dout.innerHTML=''; dout.appendChild(h('div',{class:'ok',style:'font-weight:700',text:'✓ '+(d2||[]).filter(r=>r.status==='ok').length+'건을 픽업 완료로 처리했습니다. 아래 ③에서 딩톡에 올릴 수 있습니다.'})); dta.value=''; (pk.reload&&pk.reload()); (pk.ding&&pk.ding()); };
           dout.append(go, h('button',{type:'button',class:'btn-ghost',style:'width:100%;margin-top:8px',text:'취소 (저장하지 않음)',onclick:()=>{ dout.innerHTML=''; dout.className='hidden'; }}));
         }
       };
 
+  }
+
+  function drawPickupDing(body){
+    let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
       // ---- ③ 딩톡에 올리기 ----
       const gc = h('div',{class:'card'}); body.appendChild(gc);
       gc.appendChild(h('div',{style:'font-weight:800;font-size:16px;margin-bottom:4px',text:'③ 딩톡에 올리기 (提货单 · 线上取货 온라인픽업)'}));
       gc.appendChild(h('div',{class:'muted',style:'margin-bottom:8px',text:'딩톡 [提货单 delivery/送货单 pickup 表单]에서 날짜, 유형 "线上取货 온라인픽업", 창고(사무실)를 고른 뒤 "快速填报"을 누르고 첫 칸에 붙여넣으면 됩니다. 딩톡은 주문번호로 픽업 주문을 맞춥니다. 한 번에 200개까지입니다.'}));
       const ow = h('div',{}); ow.appendChild(h('label',{text:'어느 사무실 픽업분입니까?'})); const orow = h('div',{class:'chiprow',style:'margin-bottom:8px'}); const ob={};
-      ['서울','부산'].forEach(n=>{ const b = h('button',{type:'button',class:'chip-btn'+(office===n?' selected':''),text:n+' 사무실',onclick:()=>{ office=n; try{ localStorage.setItem('pm_online_office',n); }catch(e){} Object.keys(ob).forEach(k=>ob[k].classList.toggle('selected',k===n)); loadDing(); }}); ob[n]=b; orow.appendChild(b); });
+      ['서울','부산'].forEach(n=>{ const b = h('button',{type:'button',class:'chip-btn'+(office===n?' selected':''),text:n+' 사무실',onclick:()=>{ office=n; try{ localStorage.setItem('pm_online_office',n); }catch(e){} Object.keys(ob).forEach(k=>ob[k].classList.toggle('selected',k===n)); loadDingImpl(); }}); ob[n]=b; orow.appendChild(b); });
       ow.appendChild(orow); gc.appendChild(ow);
       const gsum = h('div',{style:'font-weight:800;margin:4px 0 8px'}); const glist = h('div',{}); const gmsg = h('div',{class:'muted',style:'margin-top:6px'}); gc.append(gsum, glist, gmsg);
-      window.loadDingRef = null;
-      async function loadDingImpl(){
+            async function loadDingImpl(){
         gsum.textContent='불러오는 중…'; glist.innerHTML=''; gmsg.textContent='';
         const { data, error } = await sb.rpc('online_pickup_ding_pending',{ p_office: office });
         if(error){ gsum.textContent=''; glist.appendChild(h('div',{class:'err',text:error.message})); return; }
@@ -1640,20 +1656,19 @@ function renderAdminView(){
           done.onclick = async ()=>{ if(!confirm(part.length+'건을 딩톡에 제출 완료로 기록할까요? 기록하면 이 목록에서 사라집니다.')) return; done.disabled=true;
             const { data:n, error:e } = await sb.rpc('online_pickup_ding_mark',{ p_order_nos: part.map(r=>r.order_no) });
             if(e){ gmsg.style.color='var(--danger)'; gmsg.textContent=e.message; done.disabled=false; return; }
-            gmsg.style.color='var(--success)'; gmsg.textContent='✓ '+n+'건을 딩톡 제출 완료로 기록했습니다.'; loadDingImpl(); reloadList(); };
+            gmsg.style.color='var(--success)'; gmsg.textContent='✓ '+n+'건을 딩톡 제출 완료로 기록했습니다.'; loadDingImpl(); (pk.reload&&pk.reload()); };
           box.append(b1, b2, h('div',{class:'muted',style:'margin:8px 0 0',text:'② 딩톡 "快速填报" 표의 첫 칸을 클릭하고 Ctrl+V로 붙여넣은 뒤 제출하세요. 5칸 복사는 모델명·수량이 필수로 표시된 경우에 쓰세요.'}), done);
           glist.appendChild(box);
         }
       }
-      window.loadDingRef = loadDingImpl;
+      pk.ding = loadDingImpl;
       loadDingImpl();
-    }
-    function loadDing(){ if(window.loadDingRef) window.loadDingRef(); }
-    reloadList();
   }
 
   function drawOnlineOrders(body){
     body.appendChild(flowGuide('orders'));
+    body.appendChild(kindBar('어떤 주문을 등록합니까?', [['ship','📦 배송으로 오는 주문'],['pickup','🏬 매장 픽업 주문']], onlineOrderKind, v=>{ onlineOrderKind=v; }));
+    if(onlineOrderKind==='pickup'){ drawPickupRegister(body); return; }
     const card = h('div',{class:'card'});
     card.appendChild(h('div',{style:'font-weight:700;font-size:16px;margin-bottom:4px',text:'주문 등록'}));
     card.appendChild(h('div',{class:'muted',style:'margin-bottom:10px',text:'자동주문 프로그램이 내려준 주문 엑셀(总单 시트)을 그대로 올립니다. 이미 등록된 주문번호는 건너뛰고 새 주문만 저장합니다. 이름·전화·주소·이메일·카드 전체번호는 읽지도, 저장하지도 않습니다.'}));
@@ -1996,6 +2011,8 @@ function renderAdminView(){
   function drawOnlineReceive(body){
     body.appendChild(flowGuide('recv'));
     document.body.style.maxWidth = '980px';
+    body.appendChild(kindBar('어떤 수령입니까?', [['box','📦 박스 수령 (운송장번호 스캔)'],['pickup','🏬 매장 픽업 수령 (주문번호)']], onlineRecvKind, v=>{ onlineRecvKind=v; }));
+    if(onlineRecvKind==='pickup'){ drawPickupDone(body); return; }
     let qty = 2, sound = true;
     let office = '부산'; try{ office = localStorage.getItem('pm_online_office') || '부산'; }catch(e){}
     const rows = []; let seq = 0;
@@ -3892,7 +3909,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-150911';
+const BUILD = 'b20261125-152549';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
