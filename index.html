@@ -2000,6 +2000,13 @@ function renderAdminView(){
     card.appendChild(h('label',{text:'주문한 달'}));
     const msel = h('select',{}); msel.appendChild(h('option',{value:'',text:'전체 기간'}));
     card.appendChild(msel);
+    card.appendChild(h('label',{text:'상태'}));
+    const ssel = h('select',{}); [['','전체 (배송 전 + 배송중 + 배송완료)'],['done','배송완료만'],['notyet','아직 안 온 것만 (배송 전 + 배송중)']].forEach(([v,l])=>ssel.appendChild(h('option',{value:v,text:l})));
+    card.appendChild(ssel);
+    card.appendChild(h('label',{text:'도착(수령)한 날짜 범위 — 비워 두면 전체'}));
+    const dfrom = h('input',{type:'date'}), dto = h('input',{type:'date'});
+    card.appendChild(h('div',{style:'display:flex;gap:8px;align-items:center'},[dfrom, h('span',{text:'~'}), dto]));
+    card.appendChild(h('div',{class:'muted',style:'margin-top:4px',text:'날짜를 고르면 그 기간에 도착한 건(배송완료)만 나옵니다.'}));
     card.appendChild(h('div',{class:'muted',style:'margin-top:6px',text:'엑셀에는 "월별정리"(달마다 주문 대비 도착), "품목별"·"월별품목"(모델·용량·색상별 수량)과 "아직안온주문"(아직 도착하지 않은 주문 전체, 주문일 순) 시트가 함께 들어갑니다.'}));
     const err = h('div',{class:'err hidden'});
     const bx = h('button',{class:'btn-primary',text:'엑셀(.xlsx) 내려받기'});
@@ -2016,7 +2023,10 @@ function renderAdminView(){
       Array.from(new Set(rows.map(x=>(x.order_date||'').slice(0,7)||'미상'))).sort().reverse().forEach(m=> msel.appendChild(h('option',{value:m,text:m==='미상'?'주문일 없음':m.replace('-','년 ')+'월'})));
     }).catch(e=>{ err.textContent=e.message||String(e); err.className='err'; });
     const ymOf = r => (r.order_date||'').slice(0,7)||'미상';
-    const pick = ()=> rows.filter(r=>(!sel.value || r.company===sel.value) && (!msel.value || ymOf(r)===msel.value));
+    const rdate = r => r.received_at ? new Date(r.received_at).toLocaleDateString('sv-SE',{timeZone:'Asia/Seoul'}) : '';
+    const pick = ()=> rows.filter(r=>(!sel.value || r.company===sel.value) && (!msel.value || ymOf(r)===msel.value)
+      && (!ssel.value || (ssel.value==='done' ? r.stage==='배송완료' : r.stage!=='배송완료'))
+      && (!dfrom.value || (rdate(r) && rdate(r)>=dfrom.value)) && (!dto.value || (rdate(r) && rdate(r)<=dto.value)));
     const toRow = r=>({'회사':r.company,'주문번호':r.order_no,'운송장번호':r.tracking||'','상태':stageLabel(r.stage),'모델':r.model_raw||'','수량':r.qty,'배송지':r.ship_to||'','주문일':r.order_date||'','도착예정':r.window_text||'','카드끝4자리':r.card_last4||'','수령일시':onlineTime(r.received_at),'수령자':r.received_by||'','수령방식':r.receipt_source?(r.receipt_source==='scan'?'현장 스캔':srcLabel(r.receipt_source)):'','주문기록':r.no_order_record?'없음(딩톡 가져옴)':''});
     bx.onclick = async ()=>{
       err.className='err hidden';
@@ -2043,7 +2053,7 @@ function renderAdminView(){
         const cs = Object.keys(st).sort();
         if(sel.value || cs.length===1) addSheet('주문목록', data.map(toRow));
         else cs.forEach(c=> addSheet(c, data.filter(r=>r.company===c).map(toRow)));
-        X.writeFile(wb, 'online_orders_'+(sel.value||'all')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
+        X.writeFile(wb, 'online_orders_'+(sel.value||'all')+(ssel.value==='done'?'_배송완료':ssel.value==='notyet'?'_안온것':'')+(dfrom.value||dto.value?'_'+(dfrom.value||'')+'~'+(dto.value||''):'')+'_'+new Date().toISOString().slice(0,10)+'.xlsx');
       }catch(e){ err.textContent = e.message==='xlsx' ? t('backupLibFail') : (e.message||String(e)); err.className='err'; if(e.goTab) err.appendChild(h('div',{},[h('button',{class:'btn-primary',style:'margin-top:8px',text:e.goLabel,onclick:()=>{ onlineTab=e.goTab; drawDashboard(); }})])); }
     };
     bp.onclick = ()=>{
@@ -3581,7 +3591,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-113128';
+const BUILD = 'b20261125-113542';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
