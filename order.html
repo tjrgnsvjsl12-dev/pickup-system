@@ -371,13 +371,29 @@ async function uploadFile(id,file){
  const {error}=await sb.storage.from('ord-files').upload(path,file,{contentType:file.type||undefined,upsert:false});
  if(error){flash('파일을 올리지 못했습니다: '+error.message,'err');return null}
  msg=null;return {n:file.name,p:path}}
-async function openFile(path){const {data,error}=await sb.storage.from('ord-files').createSignedUrl(path,300);if(error||!data){flash('파일을 열지 못했습니다'+(error?': '+error.message:''),'err');return}window.open(data.signedUrl,'_blank','noopener')}
-const docChip=d=>typeof d==='string'?`<span class="chip c-done"><span data-nt>${esc(d)}</span></span>`:`<span class="chip c-done" style="cursor:pointer" title="눌러서 열기" onclick="openFile('${esc(d.p)}')">📎 <span data-nt>${esc(d.n)}</span></span>`;
+function closeViewer(){const v=document.getElementById('viewer');if(v){const u=v.dataset.url;if(u)URL.revokeObjectURL(u);v.remove()}}
+document.addEventListener('keydown',e=>{if(e.key==='Escape')closeViewer()});
+async function viewFile(path,name){
+ closeViewer();name=name||path.split('/').pop();
+ const ov=document.createElement('div');ov.id='viewer';ov.style.cssText='position:fixed;inset:0;background:#101828dd;z-index:40;display:flex;flex-direction:column';
+ ov.innerHTML=`<div style="display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff"><b style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(name)}</b><a id="vdl" style="display:none;padding:8px 14px;border:1px solid #d0d5dd;border-radius:10px;text-decoration:none;color:inherit">다운로드 · 下载</a><button onclick="closeViewer()">닫기 ✕</button></div><div id="vbody" style="flex:1;min-height:0;display:flex;align-items:center;justify-content:center;color:#fff">불러오는 중… · 加载中…</div>`;
+ document.body.appendChild(ov);
+ const {data,error}=await sb.storage.from('ord-files').download(path);
+ const vb=document.getElementById('vbody');if(!vb)return;
+ if(error||!data){vb.textContent='파일을 열지 못했습니다'+(error?': '+error.message:'');return}
+ const ext=(name.split('.').pop()||'').toLowerCase();const mime=ext==='pdf'?'application/pdf':(data.type||'');
+ const blob=(data.type===mime)?data:new Blob([data],{type:mime});const url=URL.createObjectURL(blob);ov.dataset.url=url;
+ const dl=document.getElementById('vdl');dl.href=url;dl.download=name;dl.style.display='inline-block';
+ if(mime==='application/pdf')vb.innerHTML=`<iframe src="${url}" style="width:100%;height:100%;border:0;background:#fff"></iframe>`;
+ else if(/^image\//.test(mime))vb.innerHTML=`<img src="${url}" style="max-width:100%;max-height:100%;object-fit:contain;background:#fff">`;
+ else vb.innerHTML=`<div style="text-align:center;padding:20px">이 형식은 미리 볼 수 없습니다. 위의 다운로드를 눌러 주세요.<br>此格式无法预览，请点击上方下载。</div>`}
+const docChip=d=>typeof d==='string'?`<span class="chip c-done" title="이름만 기록된 서류입니다 (파일 없음)"><span data-nt>${esc(d)}</span></span>`:`<span class="chip c-done" style="cursor:pointer" title="눌러서 열기" data-p="${esc(d.p)}" data-n="${esc(d.n)}" onclick="viewFile(this.dataset.p,this.dataset.n)">📎 <span data-nt>${esc(d.n)}</span></span>`;
+const docOpenBtn=o=>{const f=(o.docs||[]).find(d=>typeof d!=='string');return f?`<button class="sm pri" data-p="${esc(f.p)}" data-n="${esc(f.n)}" onclick="viewFile(this.dataset.p,this.dataset.n)">📄 서류 바로 보기</button>`:''};
 function addDoc(id,name){const o=O(id);o.docs.push(name);log(o,'서류 첨부: '+(typeof name==='string'?name:name.n));render()}
 function pickDoc(id){const i=document.createElement('input');i.type='file';i.accept=FILE_ACCEPT;i.onchange=async()=>{if(!i.files[0])return;const f=await uploadFile(id,i.files[0]);if(f)addDoc(id,f)};i.click()}
 function pickReceipt(id){const i=document.createElement('input');i.type='file';i.accept=FILE_ACCEPT;i.onchange=async()=>{if(!i.files[0])return;const f=await uploadFile(id,i.files[0]);if(f){RC[id]=f;render()}};i.click()}
 function clearReceipt(id){delete RC[id];render()}
-const rcLabel=r=>!r?'':typeof r==='string'?`이체증 ${esc(r)}`:`<span style="cursor:pointer;text-decoration:underline" onclick="openFile('${esc(r.p)}')">📎 이체증 ${esc(r.n)}</span>`;
+const rcLabel=r=>!r?'':typeof r==='string'?`이체증 ${esc(r)}`:`<span style="cursor:pointer;text-decoration:underline" data-p="${esc(r.p)}" data-n="${esc(r.n)}" onclick="viewFile(this.dataset.p,this.dataset.n)">📎 이체증 ${esc(r.n)}</span>`;
 function postPay(id){const o=O(id);o.posted=true;log(o,'딩톡에 결제승인 올림');render()}
 function finish(id){
  const o=O(id);if(S.mode==='app'&&(payTotal(o)<=0||!allChecked())){flash('결제 내역을 확인하고 모든 줄을 체크하세요','err');return}
@@ -407,11 +423,12 @@ function render(){
  const m=pvb+(msg?`<div class="box ${msg.type}">${esc(msg.m)}</div>`:'');
  try{sessionStorage.setItem('orderflow_view',JSON.stringify({o:S.openId,f:S.filter,t:S.tab,q:S.q,pv:S.me}))}catch(e){}
  const back=S.tab==='spec'?`<button class="ghost" onclick="S.tab='orders';render()">← 오더 목록</button>`:'';
- const keep=(_lastOpen===S.openId)?{chk:[...document.querySelectorAll('.pchk')].map(x=>x.checked),val:Object.fromEntries([...document.querySelectorAll('#main input[id],#main textarea[id]')].filter(x=>x.type!=='checkbox'&&x.value).map(x=>[x.id,x.value]))}:null;
+ const keep=(_lastOpen===S.openId)?{chk:[...document.querySelectorAll('.pchk')].map(x=>x.checked),val:Object.fromEntries([...document.querySelectorAll('#main input[id],#main textarea[id],#main select[id]')].filter(x=>x.type!=='checkbox'&&x.type!=='radio'&&x.value).map(x=>[x.id,x.value])),rad:[...document.querySelectorAll('#main input[type=radio]:checked')].map(x=>[x.name,x.value])}:null;
  $('#main').innerHTML=m+back+(S.tab==='orders'?(S.openId?detail(O(S.openId)):list()):specTab());
  _lastOpen=S.openId;
  if(keep){const b=[...document.querySelectorAll('.pchk')];if(b.length&&b.length===keep.chk.length){b.forEach((x,i)=>x.checked=keep.chk[i]);chkAll()}
-  Object.keys(keep.val).forEach(id=>{const e=document.getElementById(id);if(e&&!e.value&&e.closest('#main'))e.value=keep.val[id]})}
+  Object.keys(keep.val).forEach(id=>{const e=document.getElementById(id);if(e&&e.closest('#main')&&(e.tagName==='SELECT'||!e.value))e.value=keep.val[id]});
+  keep.rad.forEach(([n,v])=>{const e=document.querySelector('#main input[type=radio][name="'+n+'"][value="'+v+'"]');if(e)e.checked=true});if(keep.rad.length&&typeof dcPick==='function')dcPick()}
  applyI18n();setTimeout(autoTranslate,0);
 }
 function renderMenu(){const stf=isEdit();
@@ -480,7 +497,7 @@ const DICT=[
 ['진행 기록','进度记录','Activity log'],['(지우거나 고칠 수 없고 추가만 됩니다)','（不可删除或修改，只能追加）','(append-only; cannot be edited or deleted)'],['상황이 실제와 다르면 단계를 직접 바꿀 수 있습니다: ','如与实际不符，可手动更改阶段：','If reality differs you can change the stage manually: '],
 ['오더 등록 (Penny 딩톡 메시지)','登记订单（Penny 的钉钉消息）','Order registered (Penny DingTalk message)'],['견적 입력: ','录入报价：','Quote entered: '],['Penny에게 가격 보고함','已向 Penny 汇报价格','Reported price to Penny'],['Penny: 이 가격이면 진행','Penny：按此价格进行','Penny: OK at this price'],['Penny: 가격 다시 조율 요청','Penny：要求重新议价','Penny: asked to renegotiate'],['Penny에게 서류 확인 요청함','已请 Penny 确认单据','Asked Penny to check documents'],['Penny 서류 확정','Penny 已确认单据','Penny confirmed documents'],['Penny 가격 OK','Penny 价格OK','Penny: price OK'],['Penny: 서류 수정 필요','Penny：单据需修改','Penny: documents need revision'],['재무 반려 → 서류 준비','财务退回 → 准备单据','Finance rejected → prepare documents'],['CC 반려 → 재무 재확인','CC退回 → 财务重新确认','CC rejected → Finance recheck'],['이체 완료 (CC 승인) ','转账完成（CC审批） ','Transfer done (CC approved) '],['이체 완료','转账完成','Transfer done'],['다시 진행 (재개)','重新进行（恢复）','Resumed'],['다시 진행','重新进行','Resume'],['상태 직접 변경: ','手动更改阶段：','Stage changed manually: '],['결제 회사 지정: ','指定付款公司：','Paying company set: '],['(재무 확인: ','（财务确认：','(finance: '],['재무 반려','财务退回','Finance rejected'],['CC 반려','CC退回','CC rejected'],['단계로 이동','阶段已更新','stage updated'],['무산 처리: ','已取消：','Dropped: '],['무산 처리','已取消','Dropped'],
 ['무산으로 정리 (가격 안 맞음, 무응답 등)','标记为取消（价格不合适、无回复等）','Mark as dropped (price, no reply, etc.)'],['무산 기록','记录为取消','Log as dropped'],
-['이체증 ','转账凭证 ','Transfer receipt '],['이후 연결','后续关联','Linked to'],['아직 없음','暂无','None yet'],['연결','关联','Link'],['번호','编号','No.'],['온라인 주문','线上订单','Online order'],['오프라인 입고','线下入库','Offline receiving'],['수출','出口','Export'],
+['이체증 ','转账凭证 ','Transfer receipt '],['📎 이체증 올리기 (선택)','📎 上传转账凭证（可选）','📎 Upload transfer receipt (optional)'],['올려도 되고, 안 올려도 됩니다','可上传，也可不上传','Optional — you may skip this'],['✕ 빼기','✕ 移除','✕ Remove'],['📄 서류 바로 보기','📄 直接查看单据','📄 View document'],['파일을 올리는 중입니다…','正在上传文件…','Uploading…'],['파일이 너무 큽니다. 10MB 이하만 올릴 수 있습니다.','文件太大，仅可上传 10MB 以内的文件。','File too large. Max 10MB.'],['다른 분이 먼저 수정했습니다. 최신 내용으로 다시 불러왔습니다. 한 번 더 눌러 주세요.','已有人先修改。已重新载入最新内容，请再点一次。','Someone edited this first. Reloaded the latest — please try again.'],['파일을 올리지 못했습니다: ','文件上传失败：','Upload failed: '],['저장하지 못했습니다: ','保存失败：','Save failed: '],['파일을 열지 못했습니다','无法打开文件','Cannot open file'],['이후 연결','后续关联','Linked to'],['아직 없음','暂无','None yet'],['연결','关联','Link'],['번호','编号','No.'],['온라인 주문','线上订单','Online order'],['오프라인 입고','线下入库','Offline receiving'],['수출','出口','Export'],
 ['Penny 오더 품목','Penny 订单品目',"Penny's order items"],['(수량은 참고용, 매입 확정 수량이 아닙니다)','（数量仅供参考，并非确定采购数量）','(quantity is a reference, not a confirmed purchase qty)'],['현재 최저 견적','当前最低报价','Lowest quote now'],['견적 없음','暂无报价','No quote'],[' 외 ',' 等 ',' +'],['오더 설정','订单设置','Order settings'],['지금 할 일: ','待办：','To do: '],['견적을 받아 입력하고, Penny에게 보고하세요','请录入报价并向 Penny 汇报','enter quotes and report to Penny'],['담당 ','负责人 ','Owners '],['+ 새 오더 내리기','+ 提交新订单','+ Place new order'],['오더 내리기','提交订单','Submit order'],['오더가 접수되었습니다. 조사 담당에게 알림이 갔습니다.','订单已提交，已通知调研负责人。','Order submitted. The research team has been notified.'],['품명이나 메시지를 하나는 입력해 주세요','请至少填写一个品名或消息','Enter at least one item or a message'],
 ['품명, 수량, 희망가만 적으면 됩니다. 수량·희망가는 비워도 됩니다.','只需填写品名、数量和期望价。数量和期望价可以留空。','Just enter item, quantity and target price. Quantity and price may be left blank.'],['품명 (예: iPhone 17 Pro Max 256GB)','品名（例：iPhone 17 Pro Max 256GB）','Item (e.g. iPhone 17 Pro Max 256GB)'],['자주 낸 품목 (눌러서 추가)','常订品目（点击添加）','Frequent items (tap to add)'],['예: 급함, 이번 주 안에 / 尽快','例：加急、本周内 / 尽快','e.g. urgent, within this week'],['딩톡 메시지로 붙여넣기','粘贴钉钉消息','Paste a DingTalk message'],['인식해서 채우기','识别并填入','Detect & fill'],
 ['품명','品名','Item'],['희망가','期望价','Target price'],['내 희망가','我的期望价','My target price'],['현재 견적','当前报价','Current quote'],['견적가','报价','Quote'],['견적 대기','等待报价','Awaiting quote'],['견적 없음','暂无报价','No quote'],['차이','差异','Diff'],['오더 내용','订单内容','Order details'],
@@ -617,7 +634,7 @@ function detail(o){
    <div class="small mut" style="margin-top:4px">견적이 없어도 눌러집니다. 상황 그대로 기록하는 용도입니다.</div>`}
   else if(o.status==='s2')act=`<div class="bold">Penny 답변 대기 중 (${rel(o.lastAt)} 보고) — 딩톡으로 답이 왔다면 아래에서 대신 기록하세요</div><div style="margin-top:10px">${decisionUI(o)}</div>`;
  else if(o.status==='s3')act=`<div class="bold">견적서·거래명세서를 받아 붙이세요</div>
-  <div style="margin:8px 0">${o.docs.length?o.docs.map(docChip).join(' '):'<span class="mut small">아직 첨부 없음</span>'} <button class="sm" onclick="pickDoc(${o.id})">파일 선택</button> <button class="sm" onclick="addDoc(${o.id},'거래명세서_샘플.pdf')">샘플 첨부</button></div>
+  <div style="margin:8px 0">${o.docs.length?o.docs.map(docChip).join(' '):'<span class="mut small">아직 첨부 없음</span>'} <button class="sm" onclick="pickDoc(${o.id})">파일 선택</button></div>
   <div class="bold" style="margin-top:12px">결제 내역 <span class="small mut">(서류 기준 확정 품목·수량·단가. 견적에서 자동으로 채웠습니다)</span></div>${payTable(o,{edit:true})}
   ${memoRow('s4')}<div style="margin-top:8px"><button class="pri" onclick="go(${o.id},'s4','Penny에게 서류 확인 요청함')">Penny에게 서류 확인 요청함</button></div>`;
  else if(o.status==='s4')act=`<div class="bold">Penny가 서류를 확인하는 중입니다</div>${memoRow('s5')}
@@ -639,7 +656,7 @@ function detail(o){
  if(open&&!T.can)act=`<div class="small mut" style="margin-bottom:6px">${rel(o.lastAt)}부터 대기</div>`+(o.status==='s5'?s5head()+payTable(o,{}):'')+(o.status==='s2'?priceReview(o):'')+(S.mode==='app'&&isEdit()?'<div class="small mut">Penny가 딩톡으로 답했다면 위쪽 승인 방식을 "딩톡 병행"으로 바꿔 대신 기록할 수 있습니다.</div>':'');
   else if(open&&S.mode==='app'&&T.role==='approve'){
    if(o.status==='s2')act=decisionUI(o);
-   else act=`<div class="bold" style="font-size:17px">서류를 확인해 주세요</div><div class="small" style="margin:6px 0">${o.docs.length?o.docs.map(docChip).join(' '):'<span class="mut">첨부 없음</span>'}</div>${payTable(o,{})}<input id="memo_s4" placeholder="메모 (선택) — 중국어·영어로 써도 됩니다" style="margin-top:10px"><button class="ok big" onclick="go(${o.id},'s5','Penny 서류 확정')">✅ 서류 확정</button><button class="warnb big" onclick="go(${o.id},'s3','Penny: 서류 수정 필요')">✏️ 수정 필요</button>`}
+   else act=`<div class="bold" style="font-size:17px">서류를 확인해 주세요</div><div class="small" style="margin:6px 0">${o.docs.length?o.docs.map(docChip).join(' '):'<span class="mut">첨부 없음</span>'} ${docOpenBtn(o)}</div>${payTable(o,{})}<input id="memo_s4" placeholder="메모 (선택) — 중국어·영어로 써도 됩니다" style="margin-top:10px"><button class="ok big" onclick="go(${o.id},'s5','Penny 서류 확정')">✅ 서류 확정</button><button class="warnb big" onclick="go(${o.id},'s3','Penny: 서류 수정 필요')">✏️ 수정 필요</button>`}
  else if(open&&S.mode==='app'&&o.status==='s5'){let ctl='';
   if(T.role==='edit')ctl=`<button class="pri" onclick="requestPay(${o.id})">결제승인 요청 (재무팀에 알림)</button>`;
   if(T.role==='fin')ctl=`<input id="memo_fin" placeholder="메모 (선택)"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="ok" onclick="finConfirm(${o.id})">재무 확인 완료 → CC에게</button><button class="bad" onclick="finReject(${o.id})">반려 (서류 수정)</button></div>`;
