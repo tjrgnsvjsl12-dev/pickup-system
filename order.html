@@ -147,7 +147,11 @@ const fxOf=o=>num(o&&o.fx)||FX0;
 const fUSD=n=>'$'+Number(n||0).toLocaleString('en-US',{maximumFractionDigits:2});
 const fKRW=n=>'₩'+Math.round(n||0).toLocaleString('ko-KR');
 const toKRW=(a,c,fx)=>c==='USD'?num(a)*fx:num(a);
-const dual=(a,c,fx)=>c==='USD'?`${fUSD(num(a))} <span class="mut">(≈ ${fKRW(num(a)*fx)})</span>`:`${fKRW(num(a))} <span class="mut">(≈ ${fUSD(num(a)/fx)})</span>`;
+const prefCur=()=>{const R=ROLES[S.me]||[];if(R.some(r=>r.startsWith('fin:')))return 'KRW';if(R.includes('approve')||R.includes('pay'))return 'USD';return null};
+const krwFirst=nat=>{const p=prefCur();return p?p==='KRW':nat==='KRW'};
+const dual=(a,c,fx)=>{const k=c==='USD'?num(a)*fx:num(a),u=c==='USD'?num(a):num(a)/fx;return krwFirst(c)?`${fKRW(k)} <span class="mut">(≈ ${fUSD(u)})</span>`:`${fUSD(u)} <span class="mut">(≈ ${fKRW(k)})</span>`};
+const bigPair=(krw,fx)=>krwFirst('KRW')?`${fKRW(krw)}`:`${fUSD(krw/fx)}`;
+const subPair=(krw,fx)=>krwFirst('KRW')?`${fUSD(krw/fx)}`:`${fKRW(krw)}`;
 const lineKRW=(o,l)=>toKRW(num(l.qty)*num(l.price),l.cur||'KRW',fxOf(o));
 const payTotal=o=>(o.pay||[]).reduce((a,l)=>a+lineKRW(o,l),0);
 const totTxt=o=>fKRW(payTotal(o))+' ('+fUSD(payTotal(o)/fxOf(o))+')';
@@ -175,7 +179,7 @@ function payTable(o,opt={}){
  const empty=!L.length?`<div class="small mut" style="margin-top:6px">${opt.edit?'결제 내역이 비어 있습니다. 줄을 추가하거나 견적에서 가져오세요.':'결제 내역이 없습니다.'}</div>`:'';
  const tools=opt.edit?`<div style="margin-top:6px;display:flex;gap:6px"><button class="sm" onclick="addPay(${o.id})">+ 줄 추가</button><button class="sm" onclick="reloadPay(${o.id})">견적에서 다시 가져오기</button></div>`:'';
  const co=o.company?`${o.company}${FIN[o.company]?' · 재무 확인 '+FIN[o.company]:''}`:'결제 회사 미정';
- return `<div style="overflow:auto"><table>${head}${rows}</table></div>${empty}<div style="text-align:right;margin-top:8px"><span class="small mut">${co} · 환율 1 USD = ${won(fx)} KRW · </span>결제 합계 <span style="font-size:20px;font-weight:700">${fKRW(payTotal(o))}</span> <span class="mut">(≈ ${fUSD(payTotal(o)/fx)})</span></div>${tools}`;
+ return `<div style="overflow:auto"><table>${head}${rows}</table></div>${empty}<div style="text-align:right;margin-top:8px"><span class="small mut">${co} · 환율 1 USD = ${won(fx)} KRW · </span>결제 합계 <span style="font-size:20px;font-weight:700">${bigPair(payTotal(o),fx)}</span> <span class="mut">(≈ ${subPair(payTotal(o),fx)})</span></div>${tools}`;
 }
 function estCell(o,x,k){
  const co=['이하','정도','이상'].map(c=>`<option value="${c}" ${(x.estCond||'정도')===c?'selected':''}>${COND[c]}</option>`).join('');
@@ -497,7 +501,7 @@ const chip=o=>`<span class="chip c-${o.status}">${stName(o.status)}</span>${rtag
 const stale=o=>{if(!['s2','s4','s5'].includes(o.status))return 0;const d=Math.floor((Date.now()-o.lastAt)/DAY);return d>=3?d:0};
 const summary=o=>{const n=o.items.length;return ut(o.items[0]?o.items[0].name:'-')+(n>1?` <span class="mut">+${n-1}</span>`:'')};
 function todo(o){
- if(o.status==='done')return '완료'+(o.final&&o.final.total?' · '+fKRW(o.final.total):'');
+ if(o.status==='done')return '완료'+(o.final&&o.final.total?' · '+bigPair(o.final.total,o.final.fx||fxOf(o)):'');
  if(o.status==='void')return '무산 · '+(o.voidReason||'');
  const T=turn(o);if(!T.can)return '기다리는 중: '+T.lab;
  const m={s1:'견적 받아 입력 → Penny에게 보고',s2:'가격 확인하고 한 번 클릭으로 답하기',s3:'거래명세서 올리고 Penny에게 확인 요청',s4:'서류 확인하고 확정',s5:{edit:'결제승인 요청',fin:'재무 확인',pay:'CC 승인·이체'}[T.role]};
@@ -536,7 +540,7 @@ function decisionRows(o,inter){
   const seg=inter?`<div class="seg"><label><input type="radio" name="dc${k}" value="ok" onchange="dcPick()"><span>✅ 진행</span></label><label><input type="radio" name="dc${k}" value="lower" onchange="dcPick()"><span>🔻 더 낮게</span></label><label><input type="radio" name="dc${k}" value="drop" onchange="dcPick()"><span>❌ 안 함</span></label></div><div class="tgbox" id="tgbox${k}"><span>목표가 (선택)</span><input id="tg${k}" class="fix" style="width:110px" inputmode="decimal" placeholder="1150"><select id="tgc${k}" class="fix" style="width:82px"><option>USD</option><option>KRW</option></select></div>`:'';
   return `<div class="dcrow"><div><div class="nm">${nm(o,x,k)}</div><div class="meta">${meta}</div>${x.st==='lower'?'<span class="stt lower">재조율</span>':''}${prev}</div><div class="dcq">${px}<div class="sub">${sub}</div></div>${seg}</div>`}).join('');
  const dn=done.map(([x,k])=>`<div class="dcdone"><div>${x.st==='ok'?'<span class="stt ok">진행 확정</span>':'<span class="stt drop">제외</span>'} <span style="${x.st==='drop'?'text-decoration:line-through':''}">${nm(o,x,k)}</span>${x.qty?` <span class="small">× ${won(num(x.qty))}</span>`:''}</div><div class="small">${x.st==='ok'&&x.ap?dual(x.ap.price,x.ap.cur||'KRW',fx)+' · '+ut(x.ap.vendor):''}</div></div>`).join('');
- return `${rows}${tot&&pend.length?`<div style="text-align:right;margin:8px 0 0" class="small mut">견적 기준 총액(수량은 참고용) <b style="font-size:16px;color:var(--ink)">${fKRW(tot)}</b> (${fUSD(tot/fx)})</div>`:''}${dn?`<div style="margin-top:14px">${dn}</div>`:''}`}
+ return `${rows}${tot&&pend.length?`<div style="text-align:right;margin:8px 0 0" class="small mut">견적 기준 총액(수량은 참고용) <b style="font-size:16px;color:var(--ink)">${bigPair(tot,fx)}</b> (${subPair(tot,fx)})</div>`:''}${dn?`<div style="margin-top:14px">${dn}</div>`:''}`}
 const priceReview=o=>decisionRows(o,false);
 function decisionUI(o){const n=o.items.filter(isPend).length;
  return `<div class="bold" style="font-size:18px">가격을 확인해 주세요${(o.round||1)>1?` <span class="tag rd">조율 #${o.round}</span>`:''}</div><div class="small mut" style="margin:2px 0 14px">품목마다 하나씩 골라 주세요. 전부 같으면 '${n>1?'전부 진행':'바로 진행'}' 한 번이면 됩니다.</div>${decisionRows(o,true)}
