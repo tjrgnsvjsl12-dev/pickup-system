@@ -362,13 +362,27 @@ function addQuote(id){
  log(o,`견적 입력: ${v} ${cur==='USD'?fUSD(num(p)):fKRW(num(p))}${fv('q_i')?' ('+fv('q_i')+')':''}`);render();
 }
 function addMemo(id){const m=fv('note');if(!m)return;const o=O(id);log(o,'메모',m);render()}
-function addDoc(id,name){const o=O(id);o.docs.push(name);log(o,'서류 첨부: '+name);render()}
-function pickDoc(id){const i=document.createElement('input');i.type='file';i.onchange=()=>{if(i.files[0])addDoc(id,i.files[0].name)};i.click()}
+const FILE_MAX=10*1024*1024,FILE_ACCEPT='image/*,.pdf,.xlsx,.xls,.doc,.docx,.csv';
+const RC={};
+async function uploadFile(id,file){
+ if(file.size>FILE_MAX){flash('파일이 너무 큽니다. 10MB 이하만 올릴 수 있습니다.','err');return null}
+ flash('파일을 올리는 중입니다…','warn');
+ const safe=file.name.replace(/[^A-Za-z0-9._-]/g,'_').slice(-60);const path=id+'/'+Date.now()+'_'+safe;
+ const {error}=await sb.storage.from('ord-files').upload(path,file,{contentType:file.type||undefined,upsert:false});
+ if(error){flash('파일을 올리지 못했습니다: '+error.message,'err');return null}
+ msg=null;return {n:file.name,p:path}}
+async function openFile(path){const {data,error}=await sb.storage.from('ord-files').createSignedUrl(path,300);if(error||!data){flash('파일을 열지 못했습니다'+(error?': '+error.message:''),'err');return}window.open(data.signedUrl,'_blank','noopener')}
+const docChip=d=>typeof d==='string'?`<span class="chip c-done"><span data-nt>${esc(d)}</span></span>`:`<span class="chip c-done" style="cursor:pointer" title="눌러서 열기" onclick="openFile('${esc(d.p)}')">📎 <span data-nt>${esc(d.n)}</span></span>`;
+function addDoc(id,name){const o=O(id);o.docs.push(name);log(o,'서류 첨부: '+(typeof name==='string'?name:name.n));render()}
+function pickDoc(id){const i=document.createElement('input');i.type='file';i.accept=FILE_ACCEPT;i.onchange=async()=>{if(!i.files[0])return;const f=await uploadFile(id,i.files[0]);if(f)addDoc(id,f)};i.click()}
+function pickReceipt(id){const i=document.createElement('input');i.type='file';i.accept=FILE_ACCEPT;i.onchange=async()=>{if(!i.files[0])return;const f=await uploadFile(id,i.files[0]);if(f){RC[id]=f;render()}};i.click()}
+function clearReceipt(id){delete RC[id];render()}
+const rcLabel=r=>!r?'':typeof r==='string'?`이체증 ${esc(r)}`:`<span style="cursor:pointer;text-decoration:underline" onclick="openFile('${esc(r.p)}')">📎 이체증 ${esc(r.n)}</span>`;
 function postPay(id){const o=O(id);o.posted=true;log(o,'딩톡에 결제승인 올림');render()}
 function finish(id){
  const o=O(id);if(S.mode==='app'&&(payTotal(o)<=0||!allChecked())){flash('결제 내역을 확인하고 모든 줄을 체크하세요','err');return}
- o.final={vendor:[...new Set((o.pay||[]).map(l=>l.vendor).filter(Boolean))].join(', '),total:payTotal(o),fx:fxOf(o),receipt:fv('f_r'),at:Date.now()};
- o.status='done';o.posted=true;log(o,`이체 완료 (CC 승인) ${totTxt(o)} · 환율 ${won(fxOf(o))}`);notify(o,o.owners,'이체 완료');render();
+ o.final={vendor:[...new Set((o.pay||[]).map(l=>l.vendor).filter(Boolean))].join(', '),total:payTotal(o),fx:fxOf(o),receipt:RC[id]||fv('f_r'),at:Date.now()};
+ delete RC[id];o.status='done';o.posted=true;log(o,`이체 완료 (CC 승인) ${totTxt(o)} · 환율 ${won(fxOf(o))}`);notify(o,o.owners,'이체 완료');render();
 }
 function voidIt(id){const o=O(id);const r=document.querySelector('input[name=vr]:checked');if(!r){flash('무산 사유를 고르세요','err');return}
  o.voidReason=r.value;const m=fv('v_memo');o.status='void';log(o,`무산 처리 — ${r.value}`,m);render()}
@@ -598,7 +612,7 @@ function detail(o){
    <div class="small mut" style="margin-top:4px">견적이 없어도 눌러집니다. 상황 그대로 기록하는 용도입니다.</div>`}
   else if(o.status==='s2')act=`<div class="bold">Penny 답변 대기 중 (${rel(o.lastAt)} 보고) — 딩톡으로 답이 왔다면 아래에서 대신 기록하세요</div><div style="margin-top:10px">${decisionUI(o)}</div>`;
  else if(o.status==='s3')act=`<div class="bold">견적서·거래명세서를 받아 붙이세요</div>
-  <div style="margin:8px 0">${o.docs.length?o.docs.map(d=>`<span class="chip c-done"><span data-nt>${esc(d)}</span></span>`).join(' '):'<span class="mut small">아직 첨부 없음</span>'} <button class="sm" onclick="pickDoc(${o.id})">파일 선택</button> <button class="sm" onclick="addDoc(${o.id},'거래명세서_샘플.pdf')">샘플 첨부</button></div>
+  <div style="margin:8px 0">${o.docs.length?o.docs.map(docChip).join(' '):'<span class="mut small">아직 첨부 없음</span>'} <button class="sm" onclick="pickDoc(${o.id})">파일 선택</button> <button class="sm" onclick="addDoc(${o.id},'거래명세서_샘플.pdf')">샘플 첨부</button></div>
   <div class="bold" style="margin-top:12px">결제 내역 <span class="small mut">(서류 기준 확정 품목·수량·단가. 견적에서 자동으로 채웠습니다)</span></div>${payTable(o,{edit:true})}
   ${memoRow('s4')}<div style="margin-top:8px"><button class="pri" onclick="go(${o.id},'s4','Penny에게 서류 확인 요청함')">Penny에게 서류 확인 요청함</button></div>`;
  else if(o.status==='s4')act=`<div class="bold">Penny가 서류를 확인하는 중입니다</div>${memoRow('s5')}
@@ -610,24 +624,24 @@ function detail(o){
   <div class="row" style="margin-top:6px"><input id="f_v" placeholder="최종 업체" value="${esc((o.quotes[o.quotes.length-1]||{}).vendor||'')}"><input id="f_q" placeholder="확정 수량"><input id="f_p" placeholder="확정 단가"><input id="f_r" placeholder="이체증 파일명 (선택)"></div>
   <div style="margin-top:8px"><button class="ok" onclick="finish(${o.id})">이체 완료로 마무리</button></div>`;
  else if(o.status==='void')act=`<div class="box warn">무산(${esc(o.voidReason)})으로 기록되어 있습니다. 시작된 오더라서 기록은 그대로 남습니다.</div><button onclick="reopen(${o.id})">다시 진행</button>`;
- else act=`<div class="box okbox">완료된 오더입니다. ${o.final&&o.final.receipt?'이체증 '+esc(o.final.receipt):''}</div>${payTable(o,{})}
+ else act=`<div class="box okbox">완료된 오더입니다. ${o.final&&o.final.receipt?rcLabel(o.final.receipt):''}</div>${payTable(o,{})}
   <div><b>이후 연결</b> ${o.link?`<span class="chip c-done">${esc(o.link.type)} · ${esc(o.link.ref)}</span>`:'<span class="mut small">아직 없음</span>'}</div>
   <div class="row" style="margin-top:6px"><select id="lk_t"><option>온라인 주문</option><option>오프라인 입고</option><option>수출</option></select><input id="lk_r" placeholder="번호"><button class="fix" onclick="setLink(${o.id})">연결</button></div>`;
  ensurePay(o);const T=turn(o);
  const s5head=()=>{const cn0=o.company?`결제 회사 <b>${o.company}</b>${FIN[o.company]?' → 재무 확인 담당 <b>'+FIN[o.company]+'</b>':' (재무 담당 미지정)'}`:'<span style="color:var(--warn)">결제 회사를 먼저 고르세요 (고르면 재무 확인 담당이 정해집니다)</span>';
  const pickCo=(isEdit()&&!o.posted)?`<div style="margin-top:6px;display:flex;gap:6px;flex-wrap:wrap;align-items:center"><span class="small mut">결제 회사:</span>${COMPANIES.map(c=>`<span class="pill ${o.company===c?'on':''}" onclick="setCompany(${o.id},'${o.company===c?'':c}')">${c}${FIN[c]?' · '+FIN[c]:''}</span>`).join('')}</div>`:'';
- const cn=cn0+pickCo;return `<div class="bold">결제승인: 요청 → 재무팀 확인 → CC 승인·이체</div><div class="small" style="margin-top:4px">${cn}</div><div class="small" style="margin-top:6px">첨부 서류: ${o.docs.length?o.docs.map(d=>`<span class="chip c-done"><span data-nt>${esc(d)}</span></span>`).join(' '):'<span class="mut">없음</span>'}</div><div style="margin:8px 0;line-height:2">${o.posted?'✔':'□'} 결제승인 요청 → ${o.finOk?'✔':'□'} 재무 확인${o.finOk&&o.finBy?' ('+uname(o.finBy)+')':''} → □ CC 승인·이체</div>`};
+ const cn=cn0+pickCo;return `<div class="bold">결제승인: 요청 → 재무팀 확인 → CC 승인·이체</div><div class="small" style="margin-top:4px">${cn}</div><div class="small" style="margin-top:6px">첨부 서류: ${o.docs.length?o.docs.map(docChip).join(' '):'<span class="mut">없음</span>'}</div><div style="margin:8px 0;line-height:2">${o.posted?'✔':'□'} 결제승인 요청 → ${o.finOk?'✔':'□'} 재무 확인${o.finOk&&o.finBy?' ('+uname(o.finBy)+')':''} → □ CC 승인·이체</div>`};
  if(open&&!T.can)act=`<div class="small mut" style="margin-bottom:6px">${rel(o.lastAt)}부터 대기</div>`+(o.status==='s5'?s5head()+payTable(o,{}):'')+(o.status==='s2'?priceReview(o):'')+(S.mode==='app'&&isEdit()?'<div class="small mut">Penny가 딩톡으로 답했다면 위쪽 승인 방식을 "딩톡 병행"으로 바꿔 대신 기록할 수 있습니다.</div>':'');
   else if(open&&S.mode==='app'&&T.role==='approve'){
    if(o.status==='s2')act=decisionUI(o);
-   else act=`<div class="bold" style="font-size:17px">서류를 확인해 주세요</div><div class="small" style="margin:6px 0">${o.docs.length?o.docs.map(d=>`<span class="chip c-done"><span data-nt>${esc(d)}</span></span>`).join(' '):'<span class="mut">첨부 없음</span>'}</div>${payTable(o,{})}<input id="memo_s4" placeholder="메모 (선택) — 중국어·영어로 써도 됩니다" style="margin-top:10px"><button class="ok big" onclick="go(${o.id},'s5','Penny 서류 확정')">✅ 서류 확정</button><button class="warnb big" onclick="go(${o.id},'s3','Penny: 서류 수정 필요')">✏️ 수정 필요</button>`}
+   else act=`<div class="bold" style="font-size:17px">서류를 확인해 주세요</div><div class="small" style="margin:6px 0">${o.docs.length?o.docs.map(docChip).join(' '):'<span class="mut">첨부 없음</span>'}</div>${payTable(o,{})}<input id="memo_s4" placeholder="메모 (선택) — 중국어·영어로 써도 됩니다" style="margin-top:10px"><button class="ok big" onclick="go(${o.id},'s5','Penny 서류 확정')">✅ 서류 확정</button><button class="warnb big" onclick="go(${o.id},'s3','Penny: 서류 수정 필요')">✏️ 수정 필요</button>`}
  else if(open&&S.mode==='app'&&o.status==='s5'){let ctl='';
   if(T.role==='edit')ctl=`<button class="pri" onclick="requestPay(${o.id})">결제승인 요청 (재무팀에 알림)</button>`;
   if(T.role==='fin')ctl=`<input id="memo_fin" placeholder="메모 (선택)"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="ok" onclick="finConfirm(${o.id})">재무 확인 완료 → CC에게</button><button class="bad" onclick="finReject(${o.id})">반려 (서류 수정)</button></div>`;
   if(T.role==='pay')ctl=`<div class="row"><input id="f_v" placeholder="최종 업체" value="${esc((o.quotes[o.quotes.length-1]||{}).vendor||'')}"><input id="f_q" placeholder="확정 수량"><input id="f_p" placeholder="확정 단가"><input id="f_r" placeholder="이체증 파일명 (선택)"></div><input id="memo_fin" placeholder="메모 (선택)" style="margin-top:6px"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="ok" onclick="finish(${o.id})">승인·이체 완료</button><button class="bad" onclick="payReject(${o.id})">반려 (재무 재확인)</button></div>`;
   if(T.role==='edit')ctl=`${payTable(o,{edit:true})}<div style="margin-top:8px"><button class="pri" onclick="requestPay(${o.id})">결제승인 요청 (재무팀에 알림)</button></div>`;
   if(T.role==='fin')ctl=`${payTable(o,{check:true})}<input id="memo_fin" placeholder="메모 (선택)" style="margin-top:8px"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button id="okbtn" class="ok" disabled onclick="finConfirm(${o.id})">결제 내역 확인 완료 → CC에게</button><button class="bad" onclick="finReject(${o.id})">반려 (서류 수정)</button></div><div class="small mut" style="margin-top:4px">모든 줄의 확인 칸을 체크하면 버튼이 눌립니다.</div>`;
-  if(T.role==='pay')ctl=`${payTable(o,{check:true})}<div class="row" style="margin-top:8px"><input id="f_r" placeholder="이체증 파일명 (선택)"></div><input id="memo_fin" placeholder="메모 (선택)" style="margin-top:6px"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button id="okbtn" class="ok" disabled onclick="finish(${o.id})">승인·이체 완료</button><button class="bad" onclick="payReject(${o.id})">반려 (재무 재확인)</button></div><div class="small mut" style="margin-top:4px">모든 줄의 확인 칸을 체크하면 버튼이 눌립니다.</div>`;
+  if(T.role==='pay')ctl=`${payTable(o,{check:true})}<div style="margin-top:8px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><button class="sm" onclick="pickReceipt(${o.id})">📎 이체증 올리기 (선택)</button>${RC[o.id]?`<span class="chip c-done">${esc(RC[o.id].n)}</span><button class="sm" onclick="clearReceipt(${o.id})">✕ 빼기</button>`:'<span class="small mut">올려도 되고, 안 올려도 됩니다</span>'}</div><input id="memo_fin" placeholder="메모 (선택)" style="margin-top:6px"><div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button id="okbtn" class="ok" disabled onclick="finish(${o.id})">승인·이체 완료</button><button class="bad" onclick="payReject(${o.id})">반려 (재무 재확인)</button></div><div class="small mut" style="margin-top:4px">모든 줄의 확인 칸을 체크하면 버튼이 눌립니다.</div>`;
   act=s5head()+ctl}
  else if(open&&S.mode==='ding'&&o.status==='s5')act=`${s5head()}${payTable(o,{edit:true})}<div style="margin:8px 0">${o.posted?'<span class="chip c-done">딩톡에 올림</span>':`<button class="pri" onclick="postPay(${o.id})">딩톡에 결제승인 올림</button>`}</div><div class="row"><input id="f_r" placeholder="이체증 파일명 (선택)"></div><div style="margin-top:8px"><button class="ok" onclick="finish(${o.id})">이체 완료로 마무리</button></div>`;
  const voidBox=(open&&(isEdit()||(S.mode==='app'&&T.role==='approve')))?`<details style="margin-top:12px"><summary class="mut" style="cursor:pointer">무산으로 정리 (가격 안 맞음, 무응답 등)</summary><div style="margin-top:8px">${VOID_REASONS.map((r,k)=>`<label style="display:inline-block;margin-right:12px"><input type="radio" name="vr" value="${r}" style="width:auto"> ${r}</label>`).join('')}</div><input id="v_memo" placeholder="메모 (선택)" style="margin-top:6px"><div style="margin-top:8px"><button class="bad" onclick="voidIt(${o.id})">무산 기록</button></div></details>`:'';
