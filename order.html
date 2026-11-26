@@ -397,6 +397,7 @@ function addItem(id){const o=O(id);const n=fv('ni_n');if(!n)return;const it={nam
 function toggleOwner(id,u){const o=O(id);o.owners=o.owners.includes(u)?o.owners.filter(x=>x!==u):[...o.owners,u];save();render()}
 
 // ===== 화면 =====
+let _lastOpen=null;
 function render(){
  if(!S.me)return;
  $('#who').textContent=uname(S.me);
@@ -406,7 +407,11 @@ function render(){
  const m=pvb+(msg?`<div class="box ${msg.type}">${esc(msg.m)}</div>`:'');
  try{sessionStorage.setItem('orderflow_view',JSON.stringify({o:S.openId,f:S.filter,t:S.tab,q:S.q,pv:S.me}))}catch(e){}
  const back=S.tab==='spec'?`<button class="ghost" onclick="S.tab='orders';render()">← 오더 목록</button>`:'';
+ const keep=(_lastOpen===S.openId)?{chk:[...document.querySelectorAll('.pchk')].map(x=>x.checked),val:Object.fromEntries([...document.querySelectorAll('#main input[id],#main textarea[id]')].filter(x=>x.type!=='checkbox'&&x.value).map(x=>[x.id,x.value]))}:null;
  $('#main').innerHTML=m+back+(S.tab==='orders'?(S.openId?detail(O(S.openId)):list()):specTab());
+ _lastOpen=S.openId;
+ if(keep){const b=[...document.querySelectorAll('.pchk')];if(b.length&&b.length===keep.chk.length){b.forEach((x,i)=>x.checked=keep.chk[i]);chkAll()}
+  Object.keys(keep.val).forEach(id=>{const e=document.getElementById(id);if(e&&!e.value&&e.closest('#main'))e.value=keep.val[id]})}
  applyI18n();setTimeout(autoTranslate,0);
 }
 function renderMenu(){const stf=isEdit();
@@ -776,8 +781,8 @@ async function pollNow(){
  try{
   const [a,b]=await Promise.all([sb.rpc('ord_list'),sb.rpc('ord_notif_list')]);
   if(a.error)throw a.error;if(b.error)throw b.error;
-  syncState='ok';applyOrders(a.data||[]);applyNotifs(b.data||[]);
-  softRender();
+  syncState='ok';const before=stable([S.orders,S.notifs]);applyOrders(a.data||[]);applyNotifs(b.data||[]);
+  if(stable([S.orders,S.notifs])!==before)softRender();
  }catch(e){syncState='err'}finally{polling=false}
 }
 function applyOrders(rows){
