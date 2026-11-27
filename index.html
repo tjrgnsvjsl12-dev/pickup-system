@@ -2821,9 +2821,10 @@ function renderAdminView(){
     loadMyList();
   }
 
+  function localISO(d){ return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
   function drawAllPurchaseTab(body){
     const ctrl = h('div',{class:'card'});
-    const today = new Date().toISOString().slice(0,10);
+    const today = localISO(new Date());
     ctrl.appendChild(h('div',{class:'row'},[
       (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('fromDate')})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })(),
       (()=>{ const d=h('div',{}); d.appendChild(h('label',{text:t('toDate')})); const i=h('input',{type:'date',value:today}); d.appendChild(i); d._input=i; return d; })()
@@ -2839,6 +2840,60 @@ function renderAdminView(){
     const loadBtn = h('button',{class:'btn-primary',text:t('query')});
     ctrl.appendChild(loadBtn);
     body.appendChild(ctrl);
+
+    // ---- 월간 달력: 날짜별 구매 대수만 간단히 표시, 날짜를 누르면 그날 상세 조회 ----
+    const calCard = h('div',{class:'card'});
+    body.appendChild(calCard);
+    const nowD = new Date();
+    let calY = nowD.getFullYear(), calM = nowD.getMonth();   // 0~11
+    let calToken = 0;
+    const pad2 = n=>String(n).padStart(2,'0');
+    const calIso = (y,m,d)=> y+'-'+pad2(m+1)+'-'+pad2(d);
+    async function loadCal(){
+      const tok = ++calToken;
+      const last = new Date(calY, calM+1, 0).getDate();
+      calCard.innerHTML = '';
+      const title = lang==='zh' ? calY+'年'+(calM+1)+'月' : calY+'년 '+(calM+1)+'월';
+      const prev = h('button',{type:'button',class:'btn-ghost btn-sm',text:'‹',onclick:()=>{ calM--; if(calM<0){ calM=11; calY--; } loadCal(); }});
+      const next = h('button',{type:'button',class:'btn-ghost btn-sm',text:'›',onclick:()=>{ calM++; if(calM>11){ calM=0; calY++; } loadCal(); }});
+      const thisMonth = h('button',{type:'button',class:'btn-ghost btn-sm',text:lang==='zh'?'本月':'이번 달',onclick:()=>{ const n=new Date(); calY=n.getFullYear(); calM=n.getMonth(); loadCal(); }});
+      calCard.appendChild(h('div',{class:'flexbetween',style:'margin-bottom:10px;gap:6px'},[
+        prev, h('div',{style:'font-weight:800;font-size:16px',text:title}), h('div',{class:'row',style:'gap:6px'},[thisMonth, next])
+      ]));
+      const msg = h('div',{class:'muted',text:t('loading')});
+      calCard.appendChild(msg);
+      const { data, error } = await sb.rpc('admin_list_purchases', { p_date_from: calIso(calY,calM,1), p_date_to: calIso(calY,calM,last), p_store_id: storeSel.value || null });
+      if(tok !== calToken) return;   // 그 사이 다른 달/매장으로 바뀌었으면 무시
+      msg.remove();
+      if(error){ calCard.appendChild(h('div',{class:'err',text:error.message})); return; }
+      const qtyBy = {}; let monthQty = 0;
+      (data||[]).forEach(r=>{ qtyBy[r.purchase_date] = (qtyBy[r.purchase_date]||0) + r.qty; monthQty += r.qty; });
+      const buyDays = Object.keys(qtyBy).length;
+      const WD = lang==='zh' ? ['日','一','二','三','四','五','六'] : ['일','월','화','수','목','금','토'];
+      const grid = h('div',{style:'display:grid;grid-template-columns:repeat(7,1fr);gap:4px'});
+      WD.forEach((w,i)=>grid.appendChild(h('div',{style:'text-align:center;font-size:12px;font-weight:700;padding:2px 0;color:'+(i===0?'var(--danger)':'var(--muted)'),text:w})));
+      const first = new Date(calY, calM, 1).getDay();
+      for(let i=0;i<first;i++) grid.appendChild(h('div'));
+      const todayIso = localISO(new Date());
+      for(let d=1; d<=last; d++){
+        const iso = calIso(calY,calM,d), q = qtyBy[iso]||0, sel = (fromInput.value===iso && toInput.value===iso), isToday = (iso===todayIso);
+        const cell = h('button',{type:'button',
+          style:'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:54px;padding:4px 0;border-radius:9px;'
+            +'border:'+(sel?'2px solid var(--accent)':(isToday?'1px solid var(--accent)':'1px solid var(--border)'))+';'
+            +'background:'+(q>0?'var(--chip)':'var(--surface-2)')+';color:var(--fg);width:100%'},[
+          h('span',{style:'font-size:11.5px;color:'+(new Date(calY,calM,d).getDay()===0?'var(--danger)':'var(--muted)'),text:String(d)}),
+          h('span',{style:'font-size:16px;font-weight:800;'+(q>0?'':'color:var(--border);font-weight:600'),text:q>0?String(q):'·'})
+        ]);
+        cell.onclick = ()=>{ fromInput.value = iso; toInput.value = iso; load(); loadCal(); resultWrap.scrollIntoView({behavior:'smooth',block:'start'}); };
+        grid.appendChild(cell);
+      }
+      calCard.appendChild(grid);
+      calCard.appendChild(h('div',{class:'muted',style:'margin-top:10px;font-size:12.5px',
+        text: lang==='zh' ? ('本月合计 '+monthQty+t('unit')+' · 购买 '+buyDays+' 天 · 点击日期查看详情（数字为购买台数）')
+                          : ('이번 달 합계 '+monthQty+t('unit')+' · 구매한 날 '+buyDays+'일 · 날짜를 누르면 상세 조회 (숫자는 구매 대수)')}));
+    }
+    storeSel.addEventListener('change', loadCal);
+    loadCal();
 
     const resultWrap = h('div');
     body.appendChild(resultWrap);
@@ -3032,7 +3087,7 @@ function renderAdminView(){
       modelCard.appendChild(allCopyBtn);
       resultWrap.appendChild(modelCard);
     }
-    loadBtn.onclick = load;
+    loadBtn.onclick = ()=>{ load(); loadCal(); };
     load();
   }
 
@@ -3969,7 +4024,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261125-155747';
+const BUILD = 'b20261127-152046';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
