@@ -2862,13 +2862,20 @@ function renderAdminView(){
       ]));
       const msg = h('div',{class:'muted',text:t('loading')});
       calCard.appendChild(msg);
-      const { data, error } = await sb.rpc('admin_list_purchases', { p_date_from: calIso(calY,calM,1), p_date_to: calIso(calY,calM,last), p_store_id: storeSel.value || null });
+      const [{ data, error }, inRes] = await Promise.all([
+        sb.rpc('admin_list_purchases', { p_date_from: calIso(calY,calM,1), p_date_to: calIso(calY,calM,last), p_store_id: storeSel.value || null }),
+        sb.rpc('online_inbound_range', { p_from: calIso(calY,calM,1), p_to: calIso(calY,calM,last) })
+      ]);
       if(tok !== calToken) return;   // 그 사이 다른 달/매장으로 바뀌었으면 무시
       msg.remove();
       if(error){ calCard.appendChild(h('div',{class:'err',text:error.message})); return; }
       const qtyBy = {}; let monthQty = 0;
       (data||[]).forEach(r=>{ qtyBy[r.purchase_date] = (qtyBy[r.purchase_date]||0) + r.qty; monthQty += r.qty; });
       const buyDays = Object.keys(qtyBy).length;
+      // 온라인 입고(배송 도착 + 픽업 완료): 매장 필터와 무관하게 전체 표시, 권한 없으면 빈 값
+      const inBy = {}; let monthIn = 0;
+      ((inRes && !inRes.error && inRes.data) || []).forEach(r=>{ inBy[r.d] = (inBy[r.d]||0) + r.qty; monthIn += r.qty; });
+      const hasIn = monthIn > 0;
       const WD = lang==='zh' ? ['日','一','二','三','四','五','六'] : ['일','월','화','수','목','금','토'];
       const grid = h('div',{style:'display:grid;grid-template-columns:repeat(7,1fr);gap:4px'});
       WD.forEach((w,i)=>grid.appendChild(h('div',{style:'text-align:center;font-size:12px;font-weight:700;padding:2px 0;color:'+(i===0?'var(--danger)':'var(--muted)'),text:w})));
@@ -2876,27 +2883,63 @@ function renderAdminView(){
       for(let i=0;i<first;i++) grid.appendChild(h('div'));
       const todayIso = localISO(new Date());
       for(let d=1; d<=last; d++){
-        const iso = calIso(calY,calM,d), q = qtyBy[iso]||0, sel = (fromInput.value===iso && toInput.value===iso), isToday = (iso===todayIso);
+        const iso = calIso(calY,calM,d), q = qtyBy[iso]||0, qi = inBy[iso]||0, sel = (fromInput.value===iso && toInput.value===iso), isToday = (iso===todayIso);
         const cell = h('button',{type:'button',
           style:'display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;min-height:54px;padding:4px 0;border-radius:9px;'
             +'border:'+(sel?'2px solid var(--accent)':(isToday?'1px solid var(--accent)':'1px solid var(--border)'))+';'
-            +'background:'+(q>0?'var(--chip)':'var(--surface-2)')+';color:var(--fg);width:100%'},[
+            +'background:'+((q>0||qi>0)?'var(--chip)':'var(--surface-2)')+';color:var(--fg);width:100%'},[
           h('span',{style:'font-size:11.5px;color:'+(new Date(calY,calM,d).getDay()===0?'var(--danger)':'var(--muted)'),text:String(d)}),
-          h('span',{style:'font-size:16px;font-weight:800;'+(q>0?'':'color:var(--border);font-weight:600'),text:q>0?String(q):'·'})
+          h('span',{style:'font-size:16px;font-weight:800;'+(q>0?'':'color:var(--border);font-weight:600'),text:q>0?String(q):'·'}),
+          ...(hasIn ? [h('span',{style:'font-size:12.5px;font-weight:800;min-height:16px;color:var(--success)',text:qi>0?'+'+qi:''})] : [])
         ]);
-        cell.onclick = ()=>{ fromInput.value = iso; toInput.value = iso; load(); loadCal(); resultWrap.scrollIntoView({behavior:'smooth',block:'start'}); };
+        cell.onclick = ()=>{ fromInput.value = iso; toInput.value = iso; load(); loadIn(); loadCal(); inWrap.scrollIntoView({behavior:'smooth',block:'start'}); };
         grid.appendChild(cell);
       }
       calCard.appendChild(grid);
-      calCard.appendChild(h('div',{class:'muted',style:'margin-top:10px;font-size:12.5px',
-        text: lang==='zh' ? ('本月合计 '+monthQty+t('unit')+' · 购买 '+buyDays+' 天 · 点击日期查看详情（数字为购买台数）')
-                          : ('이번 달 합계 '+monthQty+t('unit')+' · 구매한 날 '+buyDays+'일 · 날짜를 누르면 상세 조회 (숫자는 구매 대수)')}));
+      calCard.appendChild(h('div',{class:'muted',style:'margin-top:10px;font-size:12.5px;line-height:1.6'},[
+        h('div',{text: lang==='zh' ? ('本月 现场购买 '+monthQty+t('unit')+' · 购买 '+buyDays+' 天') : ('이번 달 현장구매 '+monthQty+t('unit')+' · 구매한 날 '+buyDays+'일')}),
+        ...(hasIn ? [h('div',{style:'color:var(--success);font-weight:700',text: lang==='zh' ? ('本月 线上入库 '+monthIn+t('unit')+'（配送到货·自提）') : ('이번 달 온라인 입고 '+monthIn+t('unit')+' (배송 도착·픽업)')})] : []),
+        h('div',{text: lang==='zh' ? '点击日期查看详情。黑色数字=现场购买，绿色 +数字=线上入库' : '날짜를 누르면 상세 조회. 검정 숫자=현장구매, 초록 +숫자=온라인 입고(배송 도착·픽업)'})
+      ]));
     }
     storeSel.addEventListener('change', loadCal);
     loadCal();
 
+    const inWrap = h('div');
+    body.appendChild(inWrap);
     const resultWrap = h('div');
     body.appendChild(resultWrap);
+
+    // 선택한 기간의 온라인 입고(배송 도착·픽업) 상세
+    async function loadIn(){
+      const tok = ++loadIn._t;
+      const { data, error } = await sb.rpc('online_inbound_range', { p_from: fromInput.value, p_to: toInput.value });
+      if(tok !== loadIn._t) return;
+      inWrap.innerHTML = '';
+      if(error || !data || !data.length) return;
+      const total = data.reduce((a,r)=>a+r.qty,0);
+      const nmodel = r=> r.model_raw ? itemName(r.model_raw) : (lang==='zh' ? '（无订单记录）' : '(주문 기록 없음)');
+      const byModel = new Map();
+      data.forEach(r=>{ const k = nmodel(r); byModel.set(k, (byModel.get(k)||0) + r.qty); });
+      const card = h('div',{class:'card'});
+      const range = fromInput.value===toInput.value ? fromInput.value : fromInput.value+' ~ '+toInput.value;
+      card.appendChild(h('div',{class:'flexbetween'},[
+        h('div',{style:'font-weight:700;color:var(--success)',text:(lang==='zh'?'线上入库（配送到货·自提） · ':'온라인 입고 (배송 도착·픽업) · ')+range}),
+        h('span',{class:'pill',text:total+t('unit')})
+      ]));
+      [...byModel.entries()].sort((a,b)=>b[1]-a[1]).forEach(([k,q])=>card.appendChild(h('div',{class:'itemline'},[h('span',{text:k}),h('span',{class:'pill',text:q+t('unit')})])));
+      const det = h('details',{style:'margin-top:8px'});
+      det.appendChild(h('summary',{style:'cursor:pointer;font-size:12.5px;color:var(--muted)',text:lang==='zh'?'查看订单号·运单号':'주문번호·운송장 보기'}));
+      data.slice().sort((a,b)=>(a.d<b.d?1:a.d>b.d?-1:0)).forEach(r=>{
+        det.appendChild(h('div',{class:'itemline',style:'font-size:12.5px'},[
+          h('span',{style:'min-width:0;word-break:break-all',text:[r.d.slice(5), r.kind==='pickup'?(lang==='zh'?'自提':'픽업'):(lang==='zh'?'配送':'배송'), r.company, r.order_no, r.tracking, r.office].filter(Boolean).join(' · ')}),
+          h('span',{class:'pill',text:r.qty+t('unit')})
+        ]));
+      });
+      card.appendChild(det);
+      inWrap.appendChild(card);
+    }
+    loadIn._t = 0;
 
     async function load(){
       resultWrap.innerHTML = '';
@@ -3087,8 +3130,8 @@ function renderAdminView(){
       modelCard.appendChild(allCopyBtn);
       resultWrap.appendChild(modelCard);
     }
-    loadBtn.onclick = ()=>{ load(); loadCal(); };
-    load();
+    loadBtn.onclick = ()=>{ load(); loadCal(); loadIn(); };
+    load(); loadIn();
   }
 
 
@@ -4024,7 +4067,7 @@ ${orderLines}
 
 
 // ===== 새 버전 알림: 배포가 되면 화면 위에 알림을 띄우고 한 번 눌러 새로고침 =====
-const BUILD = 'b20261127-152046';
+const BUILD = 'b20261127-155111';
 function startUpdateWatcher(){
   let shown = false;
   const showBanner = ()=>{
